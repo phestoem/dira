@@ -1,0 +1,266 @@
+// DIRA life graph
+//
+// Four layers:
+//   operations    — Event
+//   visions       — Vision
+//   relationships — Entity + Relationship
+//   inner life    — DiaryEntry (sealed; Altimetrix reads it only when shared)
+//
+// Four spaces: personal | family | professional | vision
+//
+// Hard structure stays small. Typed edges and flexible JSON carry the rest.
+// AI proposes meaning; a person confirms it.
+// Category fields are strings on purpose — new kinds can appear without a migration.
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["postgresqlExtensions"]
+  engineType      = "binary"
+}
+
+datasource db {
+  provider   = "postgresql"
+  url        = env("DATABASE_URL")
+  extensions = [pgvector(map: "vector")]
+}
+
+/// The person whose life graph DIRA holds.
+model User {
+  id               String   @id @default(uuid())
+  email            String   @unique
+  handle           String   @unique
+  name             String
+  createdAt        DateTime @default(now())
+  lastActiveAt     DateTime @default(now())
+  altimetrixUserId String?  @unique
+  settings         Json     @default("{}")
+
+  entities      Entity[]
+  events        Event[]
+  visions       Vision[]
+  diaryEntries  DiaryEntry[]
+  relationships Relationship[]
+  lifeEvents    LifeEvent[]
+  inputQueue    InputQueue[]
+
+  @@map("users")
+}
+
+/// Universal node in the life graph.
+/// A person, place, project, organisation, property — or something not named yet.
+model Entity {
+  id          String                       @id @default(uuid())
+  userId      String
+  // person | place | project | organisation | property | other
+  entityType  String
+  name        String
+  aliases     String[]                     @default([])
+  description String?
+  attributes  Json                         @default("{}")
+  // personal | family | professional | vision
+  space       String                       @default("personal")
+  // active | dormant | archived
+  status      String                       @default("active")
+  embedding   Unsupported("vector(1536)")?
+  createdAt   DateTime                     @default(now())
+  updatedAt   DateTime                     @updatedAt
+
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  relationshipsFrom Relationship[] @relation("RelationshipFrom")
+  relationshipsTo   Relationship[] @relation("RelationshipTo")
+  inputResults      InputQueue[]   @relation("InputResultEntity")
+
+  @@index([userId, space, status])
+  @@index([userId, entityType])
+  @@map("entities")
+}
+
+/// Something that happened, is happening, or needs to happen.
+/// Primary unit of the operations layer.
+model Event {
+  id                  String    @id @default(uuid())
+  userId              String
+  title               String
+  rawInput            String?
+  understoodMeaning   String?
+  // project_update | financial | personal | family | commitment |
+  // milestone | setback | social | health
+  eventType           String
+  space               String    @default("personal")
+  // active | completed | cancelled | dormant
+  status              String    @default("active")
+  urgency             Float     @default(0.5)
+  emotionalWeight     Float     @default(0.5)
+  occurredAt          DateTime?
+  dueAt               DateTime?
+  completedAt         DateTime?
+  // whatsapp | email | voice | manual | file
+  source              String?
+  rawSourceRef        String?
+  // { amount, currency, direction, parties, transfers }
+  financials          Json      @default("{}")
+  // [{ entityId, role }]
+  people              Json      @default("[]")
+  // [{ entityId, role }]
+  places              Json      @default("[]")
+  tags                String[]  @default([])
+  // [{ type, path, understoodContent }]
+  attachments         Json      @default("[]")
+  sentToAltimetrix    Boolean   @default(false)
+  altimetrixEventType String?
+  notes               String?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lifeEvents   LifeEvent[]
+  inputResults InputQueue[] @relation("InputResultEvent")
+
+  @@index([userId, space, status])
+  @@index([userId, eventType])
+  @@index([userId, dueAt])
+  @@index([sentToAltimetrix])
+  @@map("events")
+}
+
+/// Something imagined, planned, or held for the future.
+/// A direction, not a project.
+model Vision {
+  id                 String                       @id @default(uuid())
+  userId             String
+  title              String
+  summary            String?
+  // seed | forming | held | active | released | archived
+  status             String                       @default("seed")
+  rawContent         String?
+  tags               String[]                     @default([])
+  embedding          Unsupported("vector(1536)")?
+  // [{ type, path, understoodContent }]
+  inspirations       Json                         @default("[]")
+  // [{ entityId, relationship }]
+  connectedEntities  Json                         @default("[]")
+  // [{ eventId, relationship }]
+  connectedEvents    Json                         @default("[]")
+  // [{ visionId, relationship }]
+  connectedVisions   Json                         @default("[]")
+  lastTouchedAt      DateTime                     @default(now())
+  nudgeAfter         DateTime?
+  nudgeCount         Int                          @default(0)
+  altimetrixNotified Boolean                      @default(false)
+  space              String                       @default("personal")
+  createdAt          DateTime                     @default(now())
+  updatedAt          DateTime                     @updatedAt
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inputResults InputQueue[] @relation("InputResultVision")
+
+  @@index([userId, space, status])
+  @@index([userId, nudgeAfter])
+  @@map("visions")
+}
+
+/// The personal, sensitive inner-life layer.
+/// Sealed from operations. Altimetrix may read a row only when
+/// sharedWithAltimetrix is true. rawContent is stored encrypted.
+model DiaryEntry {
+  id                   String   @id @default(uuid())
+  userId               String
+  rawContent           String
+  // health | relationship | emotion | finance | social
+  understoodThemes     String[] @default([])
+  // people mentioned: [{ entityId, role }]
+  people               Json     @default("[]")
+  // positive | neutral | heavy | mixed
+  emotionalTone        String?
+  isPrivate            Boolean  @default(true)
+  sharedWithAltimetrix Boolean  @default(false)
+  occurredAt           DateTime @default(now())
+  createdAt            DateTime @default(now())
+
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inputResults InputQueue[] @relation("InputResultDiary")
+
+  @@index([userId, occurredAt])
+  @@index([userId, sharedWithAltimetrix])
+  @@map("diary_entries")
+}
+
+/// A typed, weighted, directional edge between two entities.
+model Relationship {
+  id               String   @id @default(uuid())
+  userId           String
+  fromEntityId     String
+  toEntityId       String
+  // supervises | funds | manages | knows | family | owns | works_at | contributes_to
+  relationshipType String
+  strength         Float    @default(0.5)
+  notes            String?
+  createdAt        DateTime @default(now())
+
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  fromEntity Entity @relation("RelationshipFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  toEntity   Entity @relation("RelationshipTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+
+  @@index([userId, relationshipType])
+  @@index([fromEntityId])
+  @@index([toEntityId])
+  @@map("relationships")
+}
+
+/// A significant moment sent across the bridge to Altimetrix.
+model LifeEvent {
+  id                    String   @id @default(uuid())
+  userId                String
+  eventId               String?
+  // milestone | stuck | decision | commitment |
+  // pattern | achievement | setback | relationship_shift
+  eventType             String
+  title                 String
+  context               String?
+  linkedGoal            String?
+  people                Json     @default("[]")
+  space                 String
+  reflectionHint        String?
+  processedByAltimetrix Boolean  @default(false)
+  sentAt                DateTime @default(now())
+
+  user  User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  event Event? @relation(fields: [eventId], references: [id], onDelete: SetNull)
+
+  @@index([userId, processedByAltimetrix])
+  @@index([eventId])
+  @@map("life_events")
+}
+
+/// Every raw input, in any format, before it is understood.
+model InputQueue {
+  id               String    @id @default(uuid())
+  userId           String
+  rawContent       String
+  // text | file | voice | image | url | forward
+  contentType      String
+  // whatsapp | email | manual | upload | voice
+  source           String
+  mimeType         String?
+  filePath         String?
+  // pending | processing | understood | failed | dismissed
+  processingStatus String    @default("pending")
+  understoodAs     String?
+  resultEntityId   String?
+  resultEventId    String?
+  resultVisionId   String?
+  resultDiaryId    String?
+  error            String?
+  createdAt        DateTime  @default(now())
+  processedAt      DateTime?
+
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  resultEntity Entity?     @relation("InputResultEntity", fields: [resultEntityId], references: [id], onDelete: SetNull)
+  resultEvent  Event?      @relation("InputResultEvent", fields: [resultEventId], references: [id], onDelete: SetNull)
+  resultVision Vision?     @relation("InputResultVision", fields: [resultVisionId], references: [id], onDelete: SetNull)
+  resultDiary  DiaryEntry? @relation("InputResultDiary", fields: [resultDiaryId], references: [id], onDelete: SetNull)
+
+  @@index([userId, processingStatus])
+  @@index([createdAt])
+  @@map("input_queue")
+}

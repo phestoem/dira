@@ -1,0 +1,15 @@
+services:
+  dira-dev-db:
+    image: pgvector/pgvector:pg15
+    container_name: dira-dev-db
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_USER: dira_user
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: dira
+    volumes:
+      - dira-postgres-data:/var/lib/postgresql/data
+
+volumes:
+  dira-postgres-data:
