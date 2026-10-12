@@ -483,6 +483,68 @@ export async function updateVision(
   return res.json() as Promise<Vision>;
 }
 
+export type CommandRecord = {
+  type: "event" | "entity" | "vision";
+  id: string;
+  title: string;
+  subtitle: string | null;
+  href: string;
+  status?: string;
+  location?: string | null;
+  when?: string | null;
+  amount?: number | null;
+  currency?: string | null;
+};
+
+export type CommandPreview = {
+  type: string;
+  id: string;
+  title: string;
+  change: string;
+};
+
+export type CommandResult = {
+  commandId: string | null;
+  intentType: string;
+  confidence: number;
+  needsClarification: string | null;
+  confirmationRequired: boolean;
+  answer?: string;
+  summary?: string;
+  count?: number;
+  results?: CommandRecord[];
+  preview?: CommandPreview[];
+};
+
+export async function interpretCommand(input: string): Promise<CommandResult> {
+  const res = await apiFetch("/commands/interpret", {
+    method: "POST",
+    body: JSON.stringify({ input }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<CommandResult>;
+}
+
+export async function confirmCommand(
+  commandId: string,
+  affectedIds: string[] = [],
+  confirmed = true,
+): Promise<{ success: boolean; changes: string[] }> {
+  const res = await apiFetch("/commands/confirm", {
+    method: "POST",
+    body: JSON.stringify({ commandId, confirmed, affectedIds }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ success: boolean; changes: string[] }>;
+}
+
+export async function askCommand(input: string): Promise<string> {
+  const params = new URLSearchParams({ input });
+  const res = await apiFetch(`/commands/ask?${params.toString()}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.text();
+}
+
 export async function saveJournal(content: string, occurredAt?: string): Promise<JournalEntry> {
   const res = await apiFetch("/journal", {
     method: "POST",
