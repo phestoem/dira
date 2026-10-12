@@ -3,8 +3,6 @@ import jwt from "jsonwebtoken";
 import { Resend } from "resend";
 import { prisma } from "../prisma.js";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 /** Access JWT lifetime (refresh still 30d). */
 const ACCESS_TOKEN_EXPIRES_IN = "7d";
 const REFRESH_EXPIRES_MS = 30 * 24 * 60 * 60 * 1000;
@@ -29,32 +27,38 @@ export async function sendOTP(email, otp) {
     return { success: true };
   }
 
-  const { error } = await resend.emails.send({
-    from: "DIRA <onboarding@resend.dev>",
-    to: email,
-    subject: "Your DIRA code",
-    html: `
-      <div style="background:#0E0E0F;padding:40px;
-                  font-family:Georgia,serif;">
-        <p style="color:#F5F3EE;font-size:16px;
-                  margin-bottom:24px;">
-          Your DIRA sign-in code:
-        </p>
-        <p style="color:#F5F3EE;font-size:48px;
-                  letter-spacing:12px;font-weight:bold;
-                  margin:0;">
-          ${otp}
-        </p>
-        <p style="color:#6B6963;font-size:13px;
-                  margin-top:24px;">
-          Expires in 10 minutes.
-        </p>
-      </div>
-    `,
-  });
+  try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
+    const { error } = await resend.emails.send({
+      from: "DIRA <onboarding@resend.dev>",
+      to: email,
+      subject: "Your DIRA code",
+      html: `
+        <div style="background:#0E0E0F;padding:40px;
+                    font-family:Georgia,serif;">
+          <p style="color:#F5F3EE;font-size:16px;
+                    margin-bottom:24px;">
+            Your DIRA sign-in code:
+          </p>
+          <p style="color:#F5F3EE;font-size:48px;
+                    letter-spacing:12px;font-weight:bold;
+                    margin:0;">
+            ${otp}
+          </p>
+          <p style="color:#6B6963;font-size:13px;
+                    margin-top:24px;">
+            Expires in 10 minutes.
+          </p>
+        </div>
+      `,
+    });
 
-  if (error) {
-    console.error("[OTP] Email failed:", error);
+    if (error) {
+      console.error("[OTP] Email failed:", error);
+      console.log(`[OTP] FALLBACK Email: ${email} | Code: ${otp}`);
+    }
+  } catch (err) {
+    console.error("[OTP] Email failed:", err);
     console.log(`[OTP] FALLBACK Email: ${email} | Code: ${otp}`);
   }
 

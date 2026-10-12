@@ -83,6 +83,24 @@ export async function understandFile(filePath, mimeType, userId) {
   };
 }
 
+export async function understandText(content, userId) {
+  const understood = await interpretContent(content);
+  const matchingEntities = await findMatchingEntities(userId, understood);
+  const suggestedSpace = suggestSpace(understood);
+  const suggestedEventType = suggestEventType(understood);
+
+  console.log("[intake] understood as:", understood.contentType);
+  console.log("[intake] confidence:", understood.confidence);
+  console.log("[intake] matched entity:", matchingEntities[0]?.name ?? "none");
+
+  return {
+    understood,
+    matchingEntities,
+    suggestedSpace,
+    suggestedEventType,
+  };
+}
+
 export async function createEventFromUnderstanding(userId, understoodInput, entityId, confirmed, queueId) {
   if (confirmed !== true) {
     throw intakeError("Understanding was not confirmed", 400);
@@ -124,7 +142,7 @@ export async function createEventFromUnderstanding(userId, understoodInput, enti
         understoodMeaning: understood.summary,
         eventType,
         space,
-        source: "file",
+        source: queue?.contentType === "text" ? "manual" : "file",
         rawSourceRef: queue?.filePath || null,
         financials,
         people,

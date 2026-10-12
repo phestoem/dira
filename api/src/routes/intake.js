@@ -6,6 +6,7 @@ import {
   applyCorrections,
   createEventFromUnderstanding,
   understandFile,
+  understandText,
 } from "../services/contextEngine.js";
 
 const UPLOAD_DIR = "/tmp/dira-uploads";
@@ -52,51 +53,39 @@ export default async function intakeRoutes(fastify) {
 
       try {
         const result = await understandFile(filePath, mimeType, request.userId);
-        await prisma.inputQueue.update({
-          where: { id: queue.id },
-          data: {
-            understoodAs: JSON.stringify({
-              understood: result.understood,
-              suggestedSpace: result.suggestedSpace,
-              suggestedEventType: result.suggestedEventType,
-            }),
-          },
-        });
-
-        return {
-          queueId: queue.id,
-          understood: {
-            title: result.understood.title,
-            summary: result.understood.summary,
-            contentType: result.understood.contentType,
-            project: result.understood.project,
-            location: result.understood.location,
-            people: result.understood.people,
-            financial: result.understood.financial,
-            confidence: result.understood.confidence,
-          },
-          matchingEntities: result.matchingEntities.map((entity) => ({
-            id: entity.id,
-            name: entity.name,
-            entityType: entity.entityType,
-          })),
-          needsClarification: result.understood.needsClarification,
-        };
+        return await rememberUnderstanding(queue.id, result);
       } catch (error) {
-        request.log.error(error);
-        await prisma.inputQueue.update({
-          where: { id: queue.id },
-          data: {
-            processingStatus: "failed",
-            error: error.message?.slice(0, 500) || "Understanding failed",
-            processedAt: new Date(),
-          },
-        });
-        const statusCode = error.statusCode || 502;
-        return reply.code(statusCode).send({
-          error: statusCode === 415 ? error.message : "Could not understand this file",
-          queueId: queue.id,
-        });
+        return failUnderstanding(request, reply, queue.id, error, "Could not understand this file");
+      }
+    },
+  );
+
+  fastify.post(
+    "/intake/text",
+    { preHandler: [fastify.authenticate] },
+    async (request, reply) => {
+      const content = typeof request.body?.content === "string" ? request.body.content.trim() : "";
+      if (content.length < 10) {
+        return reply.code(400).send({ error: "Content must be at least 10 characters" });
+      }
+
+      console.log("[intake] text received:", content.length, "characters");
+
+      const queue = await prisma.inputQueue.create({
+        data: {
+          userId: request.userId,
+          rawContent: content,
+          contentType: "text",
+          source: "manual",
+          processingStatus: "processing",
+        },
+      });
+
+      try {
+        const result = await understandText(content, request.userId);
+        return await rememberUnderstanding(queue.id, result);
+      } catch (error) {
+        return failUnderstanding(request, reply, queue.id, error, "Could not understand this text");
       }
     },
   );
@@ -190,6 +179,56 @@ export default async function intakeRoutes(fastify) {
       return { success: true };
     },
   );
+}
+
+async function rememberUnderstanding(queueId, result) {
+  await prisma.inputQueue.update({
+    where: { id: queueId },
+    data: {
+      understoodAs: JSON.stringify({
+        understood: result.understood,
+        suggestedSpace: result.suggestedSpace,
+        suggestedEventType: result.suggestedEventType,
+      }),
+    },
+  });
+
+  return {
+    queueId,
+    understood: {
+      title: result.understood.title,
+      summary: result.understood.summary,
+      contentType: result.understood.contentType,
+      project: result.understood.project,
+      location: result.understood.location,
+      people: result.understood.people,
+      financial: result.understood.financial,
+      confidence: result.understood.confidence,
+    },
+    matchingEntities: result.matchingEntities.map((entity) => ({
+      id: entity.id,
+      name: entity.name,
+      entityType: entity.entityType,
+    })),
+    needsClarification: result.understood.needsClarification,
+  };
+}
+
+async function failUnderstanding(request, reply, queueId, error, fallback) {
+  request.log.error(error);
+  await prisma.inputQueue.update({
+    where: { id: queueId },
+    data: {
+      processingStatus: "failed",
+      error: error.message?.slice(0, 500) || "Understanding failed",
+      processedAt: new Date(),
+    },
+  });
+  const statusCode = error.statusCode || 502;
+  return reply.code(statusCode).send({
+    error: statusCode === 415 ? error.message : fallback,
+    queueId,
+  });
 }
 
 function safeExtension(filename) {

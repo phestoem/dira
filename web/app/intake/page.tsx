@@ -1,9 +1,11 @@
 "use client";
 
+import Link from "next/link";
 import { useRef, useState } from "react";
 import {
   confirmIntake,
   dismissIntake,
+  submitText,
   uploadFile,
   type IntakeResult,
   type IntakeSpace,
@@ -29,9 +31,12 @@ export default function IntakePage() {
   const [answer, setAnswer] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [tab, setTab] = useState<"file" | "text">("file");
+  const [text, setText] = useState("");
 
   function reset() {
     setFileName(null);
+    setText("");
     setResult(null);
     setSpace("personal");
     setAnswer("");
@@ -61,6 +66,25 @@ export default function IntakePage() {
     } catch (err) {
       setFileName(null);
       setError(err instanceof Error ? err.message : "Could not read this file.");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function onText() {
+    const content = text.trim();
+    if (content.length < 10 || loading || saving) return;
+    setError(null);
+    setSaved(false);
+    setResult(null);
+    setAnswer("");
+    setSpace("personal");
+    setFileName(null);
+    setLoading(true);
+    try {
+      setResult(await submitText(content));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not read this.");
     } finally {
       setLoading(false);
     }
@@ -105,12 +129,53 @@ export default function IntakePage() {
 
   return (
     <div className="min-h-[100dvh]">
-      <header className="border-b border-[#2A2A28] px-6 py-4">
+      <header className="flex items-center justify-between border-b border-[#2A2A28] px-6 py-4">
         <p className="text-sm tracking-[0.22em] text-[#F5F3EE]">DIRA</p>
+        <nav className="flex gap-4 text-sm text-[#6B6963]">
+          <Link href="/events" className="hover:text-[#F5F3EE]">Events</Link>
+          <Link href="/journal" className="hover:text-[#F5F3EE]">Journal</Link>
+        </nav>
       </header>
 
       <main className="mx-auto grid max-w-5xl gap-8 px-6 py-10 lg:grid-cols-2">
         <section>
+          <div className="mb-4 flex gap-2">
+            {(["file", "text"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setTab(item)}
+                className={`rounded-full px-3 py-1 text-sm ${
+                  tab === item ? "bg-[#3C3489] text-[#F5F3EE]" : "border border-[#2A2A28] text-[#6B6963]"
+                }`}
+              >
+                {item === "file" ? "File" : "Text / Message"}
+              </button>
+            ))}
+          </div>
+
+          {tab === "text" ? (
+            <div>
+              <textarea
+                value={text}
+                onChange={(event) => setText(event.target.value)}
+                disabled={loading || saving}
+                placeholder={"Paste a WhatsApp message, write a note, describe what happened..."}
+                className="min-h-72 w-full resize-y rounded-lg border border-[#2A2A28] bg-transparent p-4 text-[15px] leading-relaxed text-[#F5F3EE] outline-none placeholder:text-[#6B6963]"
+              />
+              <p className="mt-2 text-sm text-[#6B6963]">Swahili or English, any format</p>
+              <button
+                type="button"
+                onClick={() => void onText()}
+                disabled={loading || saving || text.trim().length < 10}
+                className="mt-4 rounded bg-[#3C3489] px-4 py-2 text-sm text-[#F5F3EE] disabled:opacity-60"
+              >
+                {loading ? "Reading…" : "Understand this"}
+              </button>
+              {error ? <p className="mt-4 text-sm text-red-300/85">{error}</p> : null}
+            </div>
+          ) : (
+          <>
           <button
             type="button"
             disabled={loading || saving}
@@ -144,6 +209,8 @@ export default function IntakePage() {
             onChange={(event) => void onFile(event.target.files?.[0])}
           />
           {error ? <p className="mt-4 text-sm text-red-300/85">{error}</p> : null}
+          </>
+          )}
         </section>
 
         <section className="min-h-72">

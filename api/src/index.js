@@ -6,6 +6,8 @@ import corsPlugin from "./plugins/cors.js";
 import authPlugin from "./plugins/auth.js";
 import authRoutes from "./routes/auth.js";
 import intakeRoutes from "./routes/intake.js";
+import eventRoutes from "./routes/events.js";
+import journalRoutes from "./routes/journal.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
 
@@ -20,6 +22,8 @@ await app.register(multipart, {
 });
 await app.register(authRoutes);
 await app.register(intakeRoutes);
+await app.register(eventRoutes);
+await app.register(journalRoutes);
 
 app.get("/health", async () => ({
   status: "ok",

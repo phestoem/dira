@@ -162,3 +162,96 @@ export async function dismissIntake(queueId: string): Promise<{ success: boolean
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{ success: boolean }>;
 }
+
+export async function submitText(content: string): Promise<IntakeResult> {
+  const res = await apiFetch("/intake/text", {
+    method: "POST",
+    body: JSON.stringify({ content }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<IntakeResult>;
+}
+
+export type LifeEvent = {
+  id: string;
+  title: string;
+  understoodMeaning: string | null;
+  eventType: string;
+  space: IntakeSpace;
+  status: string;
+  source: string | null;
+  financials: {
+    amount?: number | null;
+    currency?: string | null;
+    direction?: string | null;
+    items?: Array<{
+      description: string;
+      amount: number | null;
+      currency: string | null;
+    }>;
+  };
+  people: Array<{ name?: string; entityId?: string; role?: string }>;
+  places: Array<{ name?: string; entityId?: string; role?: string }>;
+  notes: string | null;
+  createdAt: string;
+  location: string | null;
+};
+
+export async function listEvents(space?: IntakeSpace | "", cursor?: string | null): Promise<{
+  events: LifeEvent[];
+  nextCursor: string | null;
+}> {
+  const params = new URLSearchParams();
+  if (space) params.set("space", space);
+  if (cursor) params.set("cursor", cursor);
+  const query = params.toString();
+  const res = await apiFetch(`/events${query ? `?${query}` : ""}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ events: LifeEvent[]; nextCursor: string | null }>;
+}
+
+export async function getEvent(id: string): Promise<LifeEvent> {
+  const res = await apiFetch(`/events/${id}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<LifeEvent>;
+}
+
+export async function updateEvent(
+  id: string,
+  patch: { title?: string; notes?: string | null; space?: IntakeSpace; status?: string },
+): Promise<LifeEvent> {
+  const res = await apiFetch(`/events/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(patch),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<LifeEvent>;
+}
+
+export async function archiveEvent(id: string): Promise<{ success: boolean }> {
+  const res = await apiFetch(`/events/${id}`, { method: "DELETE" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ success: boolean }>;
+}
+
+export type JournalEntry = {
+  id: string;
+  content: string;
+  occurredAt: string;
+  createdAt: string;
+};
+
+export async function listJournal(): Promise<{ entries: JournalEntry[] }> {
+  const res = await apiFetch("/journal");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ entries: JournalEntry[] }>;
+}
+
+export async function saveJournal(content: string, occurredAt?: string): Promise<JournalEntry> {
+  const res = await apiFetch("/journal", {
+    method: "POST",
+    body: JSON.stringify({ content, occurredAt }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<JournalEntry>;
+}
