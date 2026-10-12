@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { extname } from "path";
 import { writeFile } from "fs/promises";
 import { prisma } from "../prisma.js";
+import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
 import { extractAndLinkEntities } from "./entities.js";
 import {
   applyCorrections,
@@ -147,6 +148,15 @@ export default async function intakeRoutes(fastify) {
             await extractAndLinkEntities(event, userId, understood);
           } catch (err) {
             console.error("[entity-extract] failed:", err.message);
+          }
+        });
+        setImmediate(async () => {
+          try {
+            if (!isSignificantEvent(event)) return;
+            const user = await prisma.user.findUnique({ where: { id: userId } });
+            await sendLifeEvent(event, userId, user);
+          } catch (err) {
+            console.error("[bridge] error:", err.message);
           }
         });
         return event;

@@ -6,6 +6,7 @@ export type DiraUser = {
   name: string;
   email: string;
   createdAt?: string;
+  altimetrixUserId?: string | null;
 };
 
 export type IntakeSpace = "personal" | "family" | "professional" | "vision";
@@ -93,6 +94,27 @@ async function parseError(res: Response): Promise<string> {
     /* response was not JSON */
   }
   return "Request failed";
+}
+
+export async function getMe(): Promise<DiraUser> {
+  const res = await apiFetch("/users/me");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<DiraUser>;
+}
+
+export async function linkAltimetrix(altimetrixUserId: string): Promise<DiraUser> {
+  const res = await apiFetch("/users/me/altimetrix", {
+    method: "PATCH",
+    body: JSON.stringify({ altimetrixUserId }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<DiraUser>;
+}
+
+export async function syncAltimetrix(): Promise<{ sent: number }> {
+  const res = await apiFetch("/users/me/altimetrix/sync", { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ sent: number }>;
 }
 
 export async function logout(): Promise<{ success: boolean }> {
