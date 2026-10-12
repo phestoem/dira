@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { getVisions, type Vision, type VisionStatus } from "@/lib/api";
+import { getPendingNudges, getVisions, type Nudge, type Vision, type VisionStatus } from "@/lib/api";
 
 const FILTERS: Array<{ id: "" | VisionStatus; label: string }> = [
   { id: "", label: "All" },
@@ -25,6 +25,8 @@ export default function VisionsPage() {
   const [visions, setVisions] = useState<Vision[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nudge, setNudge] = useState<Nudge | null>(null);
+  const [nudgeHidden, setNudgeHidden] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -45,11 +47,42 @@ export default function VisionsPage() {
     };
   }, [status]);
 
+  useEffect(() => {
+    let cancelled = false;
+    getPendingNudges()
+      .then((page) => {
+        if (!cancelled && page.nudges[0]) setNudge(page.nudges[0]);
+      })
+      .catch(() => {
+        /* A missing nudge should not block the list. */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   return (
     <div className="min-h-[100dvh]">
       <main className="mx-auto max-w-2xl px-6 py-8">
         <h1 className="text-[15px] text-[#F5F3EE]">Visions</h1>
         <p className="mt-1 text-sm text-[#6B6963]">Things you&apos;re building toward</p>
+
+        {nudge && !nudgeHidden ? (
+          <div
+            className="mt-6 rounded-lg border border-[#3C3489] bg-[#1A1A2E] px-4 py-3"
+            style={{ borderWidth: "0.5px" }}
+          >
+            <p className="text-sm leading-relaxed text-[#F5F3EE]">{nudge.nudgeMessage}</p>
+            <div className="mt-3 flex gap-4 text-xs">
+              <Link href={`/visions/${nudge.visionId}`} className="text-[#7F77DD]">
+                Tell me more
+              </Link>
+              <button type="button" onClick={() => setNudgeHidden(true)} className="text-[#6B6963]">
+                Not yet
+              </button>
+            </div>
+          </div>
+        ) : null}
 
         <div className="mt-8 flex flex-wrap gap-2">
           {FILTERS.map((item) => (
@@ -84,7 +117,11 @@ export default function VisionsPage() {
           {visions.map((vision) => (
             <li key={vision.id} className="rounded-lg border border-[#2A2A28] px-4 py-4">
               <div className="flex items-start justify-between gap-4">
-                <h2 className="text-lg text-[#F5F3EE]">{vision.title}</h2>
+                <h2 className="text-lg text-[#F5F3EE]">
+                  <Link href={`/visions/${vision.id}`} className="hover:underline">
+                    {vision.title}
+                  </Link>
+                </h2>
                 <span className="shrink-0 rounded-full border border-[#2A2A28] px-2 py-0.5 text-xs text-[#6B6963]">
                   {STATUS_LABEL[vision.status] ?? vision.status}
                 </span>

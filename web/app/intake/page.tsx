@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   confirmIntake,
   dismissIntake,
+  getStats,
   submitText,
   uploadFile,
   type IntakeResult,
@@ -33,6 +34,24 @@ export default function IntakePage() {
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<"file" | "text">("file");
   const [text, setText] = useState("");
+  const [savedTitle, setSavedTitle] = useState<string | null>(null);
+  const [savedSpace, setSavedSpace] = useState<IntakeSpace>("personal");
+  const [readyForMore, setReadyForMore] = useState(false);
+  const [stats, setStats] = useState<{ events: number; visions: number; entities: number } | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getStats()
+      .then((counts) => {
+        if (!cancelled) setStats(counts);
+      })
+      .catch(() => {
+        if (!cancelled) setStats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [saved]);
 
   function reset() {
     setFileName(null);
@@ -99,9 +118,19 @@ export default function IntakePage() {
       const corrections = note
         ? { summary: `${result.understood.summary}\n\n${note}` }
         : undefined;
+      const title = result.understood.title;
+      const chosen = space;
       await confirmIntake(result.queueId, space, corrections);
       reset();
       setSaved(true);
+      setSavedTitle(title);
+      setSavedSpace(chosen);
+      setReadyForMore(false);
+      window.setTimeout(() => {
+        setSaved(false);
+        setSavedTitle(null);
+        setReadyForMore(true);
+      }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
     } finally {
@@ -139,6 +168,15 @@ export default function IntakePage() {
 
       <main className="mx-auto grid max-w-5xl gap-8 px-6 py-10 lg:grid-cols-2">
         <section>
+          {stats ? (
+            <p className="mb-4 text-xs text-[#6B6963]">
+              <Link href="/events" className="hover:text-[#F5F3EE]">{stats.events} Events</Link>
+              {" · "}
+              <Link href="/visions" className="hover:text-[#F5F3EE]">{stats.visions} Visions</Link>
+              {" · "}
+              <Link href="/entities" className="hover:text-[#F5F3EE]">{stats.entities} Entities</Link>
+            </p>
+          ) : null}
           <div className="mb-4 flex gap-2">
             {(["file", "text"] as const).map((item) => (
               <button
@@ -196,7 +234,11 @@ export default function IntakePage() {
           >
             <UploadIcon />
             <p className="mt-4 text-[#F5F3EE]">
-              {loading ? "Reading the file…" : "Drop a file or click to upload"}
+              {loading
+                ? "Reading the file…"
+                : readyForMore
+                  ? "Drop another file or write a note"
+                  : "Drop a file or click to upload"}
             </p>
             <p className="mt-2 text-sm text-[#6B6963]">Excel, CSV, PDF, images</p>
             {fileName ? <p className="mt-4 text-sm text-[#F5F3EE]/80">{fileName}</p> : null}
@@ -214,13 +256,15 @@ export default function IntakePage() {
         </section>
 
         <section className="min-h-72">
-          {saved && !result ? (
-            <p className="text-[#F5F3EE]">Saved to your life graph</p>
+          {saved && savedTitle ? (
+            <p className="text-[#F5F3EE]">
+              Saved. {savedTitle} added to your {savedSpace} events.
+            </p>
           ) : null}
 
           {!result && !saved ? (
             <p className="text-sm text-[#6B6963]">
-              What DIRA understands will appear here.
+              {readyForMore ? "Drop another file or write a note" : "What DIRA understands will appear here."}
             </p>
           ) : null}
 
@@ -254,7 +298,23 @@ export default function IntakePage() {
               ) : null}
 
               {understood.people.length > 0 ? (
-                <p className="mt-4 text-sm text-[#F5F3EE]/80">{understood.people.join(", ")}</p>
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {understood.people.map((name) => {
+                    const match = result?.matchingEntities.find(
+                      (entity) => entity.name.toLowerCase() === name.toLowerCase(),
+                    );
+                    const className = "rounded-full border border-[#2A2A28] px-3 py-1 text-xs text-[#F5F3EE]";
+                    return match ? (
+                      <Link key={name} href={`/entities/${match.id}`} className={className}>
+                        {name}
+                      </Link>
+                    ) : (
+                      <span key={name} className={className} title="Becomes an entity when you confirm">
+                        {name}
+                      </span>
+                    );
+                  })}
+                </div>
               ) : null}
 
               <div className="mt-6">

@@ -165,6 +165,8 @@ model Vision {
   lastTouchedAt      DateTime                     @default(now())
   nudgeAfter         DateTime?
   nudgeCount         Int                          @default(0)
+  // { lastNudge: { message, sentAt } }
+  attributes         Json                         @default("{}")
   altimetrixNotified Boolean                      @default(false)
   space              String                       @default("personal")
   createdAt          DateTime                     @default(now())

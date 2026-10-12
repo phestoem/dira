@@ -206,15 +206,21 @@ export type LifeEvent = {
   notes: string | null;
   createdAt: string;
   location: string | null;
+  altimetrixEventType?: string | null;
 };
 
-export async function listEvents(space?: IntakeSpace | "", cursor?: string | null): Promise<{
+export async function listEvents(
+  space?: IntakeSpace | "",
+  cursor?: string | null,
+  search?: string,
+): Promise<{
   events: LifeEvent[];
   nextCursor: string | null;
 }> {
   const params = new URLSearchParams();
   if (space) params.set("space", space);
   if (cursor) params.set("cursor", cursor);
+  if (search) params.set("search", search);
   const query = params.toString();
   const res = await apiFetch(`/events${query ? `?${query}` : ""}`);
   if (!res.ok) throw new Error(await parseError(res));
@@ -229,7 +235,13 @@ export async function getEvent(id: string): Promise<LifeEvent> {
 
 export async function updateEvent(
   id: string,
-  patch: { title?: string; notes?: string | null; space?: IntakeSpace; status?: string },
+  patch: {
+    title?: string;
+    notes?: string | null;
+    space?: IntakeSpace;
+    status?: string;
+    altimetrixEventType?: string | null;
+  },
 ): Promise<LifeEvent> {
   const res = await apiFetch(`/events/${id}`, {
     method: "PATCH",
@@ -272,7 +284,139 @@ export type Vision = {
   detectedFromJournal: boolean;
   lastTouchedAt: string;
   createdAt: string;
+  rawContent?: string | null;
+  nudgeAfter?: string | null;
+  connectedEvents?: Array<{ eventId: string; relationship?: string; title?: string }>;
+  connectedEntities?: Array<{ entityId: string | null; name: string | null; relationship: string | null }>;
 };
+
+export type EntityType = "person" | "place" | "project" | "organisation" | "property" | "other";
+
+export type EntityRecord = {
+  id: string;
+  name: string;
+  entityType: EntityType | string;
+  description: string | null;
+  space: string;
+  status: string;
+  attributes: Record<string, unknown>;
+  aliases: string[];
+  eventCount?: number;
+  visionCount?: number;
+  events?: Array<{ id: string; title: string }>;
+  visions?: Array<{ id: string; title: string }>;
+  merged?: boolean;
+};
+
+export type EntityGraph = {
+  entity: EntityRecord;
+  relationships: Array<{
+    type: string;
+    relationship: string;
+    target: { id: string; name: string; entityType?: string };
+  }>;
+};
+
+export type Nudge = {
+  visionId: string;
+  title: string;
+  nudgeMessage: string;
+};
+
+export async function getStats(): Promise<{ events: number; visions: number; entities: number }> {
+  const res = await apiFetch("/stats");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ events: number; visions: number; entities: number }>;
+}
+
+export async function listEntities(params: {
+  entityType?: string;
+  space?: string;
+  search?: string;
+} = {}): Promise<{ entities: EntityRecord[] }> {
+  const query = new URLSearchParams();
+  if (params.entityType) query.set("entityType", params.entityType);
+  if (params.space) query.set("space", params.space);
+  if (params.search) query.set("search", params.search);
+  const text = query.toString();
+  const res = await apiFetch(`/entities${text ? `?${text}` : ""}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ entities: EntityRecord[] }>;
+}
+
+export async function getEntity(id: string): Promise<EntityRecord> {
+  const res = await apiFetch(`/entities/${id}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<EntityRecord>;
+}
+
+export async function getEntityGraph(id: string): Promise<EntityGraph> {
+  const res = await apiFetch(`/entities/${id}/graph`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<EntityGraph>;
+}
+
+export async function createEntity(body: {
+  name: string;
+  entityType: EntityType;
+  description?: string;
+  space?: IntakeSpace;
+  attributes?: Record<string, unknown>;
+  aliases?: string[];
+}): Promise<EntityRecord> {
+  const res = await apiFetch("/entities", { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<EntityRecord>;
+}
+
+export async function updateEntity(
+  id: string,
+  patch: {
+    name?: string;
+    description?: string | null;
+    status?: string;
+    attributes?: Record<string, unknown>;
+    aliases?: string[];
+  },
+): Promise<EntityRecord> {
+  const res = await apiFetch(`/entities/${id}`, { method: "PATCH", body: JSON.stringify(patch) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<EntityRecord>;
+}
+
+export async function linkEntity(
+  id: string,
+  body: { targetId: string; targetType: "event" | "vision" | "entity"; relationship: string },
+): Promise<{ success: boolean }> {
+  const res = await apiFetch(`/entities/${id}/link`, { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ success: boolean }>;
+}
+
+export async function getPendingNudges(): Promise<{ nudges: Nudge[] }> {
+  const res = await apiFetch("/visions/pending-nudges");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ nudges: Nudge[] }>;
+}
+
+export async function getVisionSuggestions(id: string): Promise<{
+  suggestions: Array<{ id: string; title: string; location: string | null; tags: string[] }>;
+}> {
+  const res = await apiFetch(`/visions/${id}/suggestions`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{
+    suggestions: Array<{ id: string; title: string; location: string | null; tags: string[] }>;
+  }>;
+}
+
+export async function linkVisionEvent(id: string, eventId: string): Promise<Vision> {
+  const res = await apiFetch(`/visions/${id}/link-event`, {
+    method: "POST",
+    body: JSON.stringify({ eventId }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<Vision>;
+}
 
 export async function getVisions(status?: VisionStatus | ""): Promise<{ visions: Vision[] }> {
   const params = new URLSearchParams();
@@ -297,6 +441,7 @@ export async function updateVision(
     status?: string;
     tags?: string[];
     notes?: string | null;
+    nudgeAfter?: string;
   },
 ): Promise<Vision> {
   const res = await apiFetch(`/visions/${id}`, {

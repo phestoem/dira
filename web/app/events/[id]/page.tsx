@@ -5,8 +5,13 @@ import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   archiveEvent,
+  createEntity,
   getEvent,
+  linkEntity,
+  listEntities,
   updateEvent,
+  type EntityRecord,
+  type EntityType,
   type IntakeSpace,
   type LifeEvent,
 } from "@/lib/api";
@@ -27,6 +32,10 @@ export default function EventDetailPage() {
   const [notes, setNotes] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [linking, setLinking] = useState(false);
+  const [entityQuery, setEntityQuery] = useState("");
+  const [entityHits, setEntityHits] = useState<EntityRecord[]>([]);
+  const [newType, setNewType] = useState<EntityType>("person");
 
   useEffect(() => {
     let cancelled = false;
@@ -88,6 +97,66 @@ export default function EventDetailPage() {
     }
   }
 
+  useEffect(() => {
+    const needle = entityQuery.trim();
+    if (!linking || needle.length < 2) {
+      setEntityHits([]);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      listEntities({ search: needle })
+        .then((page) => {
+          if (!cancelled) setEntityHits(page.entities.slice(0, 6));
+        })
+        .catch(() => {
+          if (!cancelled) setEntityHits([]);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [entityQuery, linking]);
+
+  async function attachEntity(entity: EntityRecord) {
+    if (!event) return;
+    try {
+      await linkEntity(entity.id, {
+        targetId: event.id,
+        targetType: "event",
+        relationship: entity.entityType,
+      });
+      setEvent(await getEvent(event.id));
+      setLinking(false);
+      setEntityQuery("");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not link that entity.");
+    }
+  }
+
+  async function createAndLink() {
+    if (!event) return;
+    const name = entityQuery.trim();
+    if (!name) return;
+    try {
+      const entity = await createEntity({ name, entityType: newType, space: event.space });
+      await attachEntity(entity);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not create that entity.");
+    }
+  }
+
+  async function toggleMilestone() {
+    if (!event) return;
+    const next = event.altimetrixEventType === "milestone" ? null : "milestone";
+    try {
+      setEvent(await updateEvent(event.id, { altimetrixEventType: next }));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not update this event.");
+    }
+  }
+
   async function archive() {
     if (!event) return;
     try {
@@ -100,9 +169,8 @@ export default function EventDetailPage() {
 
   const items = event?.financials?.items ?? [];
   const amount = event?.financials?.amount;
-  const people = (event?.people ?? [])
-    .map((person) => person.name)
-    .filter((name): name is string => Boolean(name));
+  const people = (event?.people ?? []).filter((person) => person.name);
+  const places = (event?.places ?? []).filter((place) => place.name || place.entityId);
 
   return (
     <div className="min-h-[100dvh]">
@@ -184,8 +252,91 @@ export default function EventDetailPage() {
               </section>
             ) : null}
 
-            {people.length > 0 ? (
-              <p className="mt-6 text-sm text-[#F5F3EE]/80">{people.join(", ")}</p>
+            {people.length > 0 || places.length > 0 ? (
+              <div className="mt-6 flex flex-wrap gap-2">
+                {people.map((person, index) =>
+                  person.entityId ? (
+                    <Link
+                      key={person.entityId}
+                      href={`/entities/${person.entityId}`}
+                      className="rounded-full border border-[#2A2A28] px-3 py-1 text-xs text-[#F5F3EE]"
+                    >
+                      {person.name}
+                    </Link>
+                  ) : (
+                    <span key={`${person.name}-${index}`} className="rounded-full border border-[#2A2A28] px-3 py-1 text-xs text-[#F5F3EE]">
+                      {person.name}
+                    </span>
+                  ),
+                )}
+                {places.map((place, index) =>
+                  place.entityId ? (
+                    <Link
+                      key={place.entityId}
+                      href={`/entities/${place.entityId}`}
+                      className="rounded-full border border-[#2A2A28] px-3 py-1 text-xs text-[#7F77DD]"
+                    >
+                      {place.name || "Place"}
+                    </Link>
+                  ) : (
+                    <span key={`${place.name}-${index}`} className="text-xs text-[#6B6963]">
+                      {place.name}
+                    </span>
+                  ),
+                )}
+              </div>
+            ) : null}
+
+            <div className="mt-6 flex flex-wrap items-center gap-4">
+              <button type="button" onClick={() => setLinking(true)} className="text-sm text-[#6B6963]">
+                Link to entity
+              </button>
+              <button type="button" onClick={() => void toggleMilestone()} className="text-sm text-[#6B6963]">
+                {event.altimetrixEventType === "milestone" ? "Milestone" : "Mark as milestone"}
+              </button>
+            </div>
+
+            {linking ? (
+              <div className="mt-4 rounded-lg border border-[#2A2A28] p-4">
+                <input
+                  value={entityQuery}
+                  onChange={(input) => setEntityQuery(input.target.value)}
+                  placeholder="Find or create an entity"
+                  className="w-full border-x-0 border-t-0 border-b border-[#2A2A28] bg-transparent pb-2 text-sm text-[#F5F3EE] outline-none"
+                />
+                <ul className="mt-3 space-y-2">
+                  {entityHits.map((entity) => (
+                    <li key={entity.id}>
+                      <button type="button" onClick={() => void attachEntity(entity)} className="text-sm text-[#F5F3EE]">
+                        {entity.name}
+                        <span className="text-[#6B6963]"> · {entity.entityType}</span>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+                <div className="mt-4 flex flex-wrap items-center gap-2">
+                  {(["person", "place", "project", "property", "organisation", "other"] as EntityType[]).map((item) => (
+                    <button
+                      key={item}
+                      type="button"
+                      onClick={() => setNewType(item)}
+                      className={`rounded-full px-2 py-0.5 text-xs capitalize ${
+                        newType === item ? "bg-[#3C3489] text-[#F5F3EE]" : "text-[#6B6963]"
+                      }`}
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 flex gap-4">
+                  <button type="button" onClick={() => void createAndLink()} className="text-sm text-[#F5F3EE]">
+                    Create and link
+                  </button>
+                  <button type="button" onClick={() => setLinking(false)} className="text-sm text-[#6B6963]">
+                    Close
+                  </button>
+                </div>
+              </div>
             ) : null}
 
             <label className="mt-8 block">

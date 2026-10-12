@@ -1,0 +1,1 @@
+ALTER TABLE "visions" ADD COLUMN "attributes" JSONB NOT NULL DEFAULT '{}';

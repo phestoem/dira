@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { extname } from "path";
 import { writeFile } from "fs/promises";
 import { prisma } from "../prisma.js";
+import { extractAndLinkEntities } from "./entities.js";
 import {
   applyCorrections,
   createEventFromUnderstanding,
@@ -133,13 +134,21 @@ export default async function intakeRoutes(fastify) {
       }
 
       try {
+        const userId = request.userId;
         const event = await createEventFromUnderstanding(
-          request.userId,
+          userId,
           understood,
           body.entityId || null,
           true,
           queue.id,
         );
+        setImmediate(async () => {
+          try {
+            await extractAndLinkEntities(event, userId, understood);
+          } catch (err) {
+            console.error("[entity-extract] failed:", err.message);
+          }
+        });
         return event;
       } catch (error) {
         request.log.error(error);

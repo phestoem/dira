@@ -7,6 +7,7 @@ const PAGE_SIZE = 50;
 export default async function eventRoutes(fastify) {
   fastify.get("/events", { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const space = typeof request.query?.space === "string" ? request.query.space : "";
+    const search = typeof request.query?.search === "string" ? request.query.search.trim() : "";
     if (space && !SPACES.has(space)) {
       return reply.code(400).send({ error: "Unknown space" });
     }
@@ -19,19 +20,31 @@ export default async function eventRoutes(fastify) {
         })
       : null;
 
+    const filters = [];
+    if (search) {
+      const needle = search.replace(/[%_]/g, "");
+      filters.push({
+        OR: [
+          { title: { contains: needle, mode: "insensitive" } },
+          { understoodMeaning: { contains: needle, mode: "insensitive" } },
+        ],
+      });
+    }
+    if (cursorEvent) {
+      filters.push({
+        OR: [
+          { createdAt: { lt: cursorEvent.createdAt } },
+          { createdAt: cursorEvent.createdAt, id: { lt: cursorEvent.id } },
+        ],
+      });
+    }
+
     const events = await prisma.event.findMany({
       where: {
         userId: request.userId,
         status: { not: "archived" },
         ...(space ? { space } : {}),
-        ...(cursorEvent
-          ? {
-              OR: [
-                { createdAt: { lt: cursorEvent.createdAt } },
-                { createdAt: cursorEvent.createdAt, id: { lt: cursorEvent.id } },
-              ],
-            }
-          : {}),
+        ...(filters.length ? { AND: filters } : {}),
       },
       orderBy: [{ createdAt: "desc" }, { id: "desc" }],
       take: PAGE_SIZE + 1,
@@ -85,6 +98,15 @@ export default async function eventRoutes(fastify) {
         return reply.code(400).send({ error: "Unknown status" });
       }
       data.status = body.status;
+    }
+    if (body.altimetrixEventType !== undefined) {
+      if (body.altimetrixEventType === null || body.altimetrixEventType === "") {
+        data.altimetrixEventType = null;
+      } else if (body.altimetrixEventType === "milestone") {
+        data.altimetrixEventType = "milestone";
+      } else {
+        return reply.code(400).send({ error: "Unknown Altimetrix type" });
+      }
     }
 
     const updated = await prisma.event.update({

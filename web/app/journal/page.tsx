@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { listJournal, saveJournal, type JournalEntry } from "@/lib/api";
+import { getVisions, listJournal, saveJournal, type JournalEntry } from "@/lib/api";
 
 export default function JournalPage() {
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -10,6 +11,9 @@ export default function JournalPage() {
   const [entries, setEntries] = useState<JournalEntry[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ kind: "saved" } | { kind: "vision"; id: string; title: string } | null>(
+    null,
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -30,11 +34,25 @@ export default function JournalPage() {
     if (!text || saving) return;
     setSaving(true);
     setError(null);
+    const started = Date.now();
     try {
       const entry = await saveJournal(text, new Date(when).toISOString());
       setEntries((current) => [entry, ...current].sort(byNewest));
       setContent("");
       setWhen(toDatetimeLocal(new Date()));
+      setNotice({ kind: "saved" });
+      const look = () => {
+        getVisions()
+          .then((page) => {
+            const fresh = page.visions.find((vision) => new Date(vision.lastTouchedAt).getTime() >= started - 1000);
+            if (fresh) setNotice({ kind: "vision", id: fresh.id, title: fresh.title });
+          })
+          .catch(() => {
+            /* Saved still stands if the vision check cannot run. */
+          });
+      };
+      window.setTimeout(look, 2000);
+      window.setTimeout(look, 6000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
     } finally {
@@ -81,6 +99,14 @@ export default function JournalPage() {
           </button>
         </div>
         {error ? <p className="mt-4 text-sm text-red-300/85">{error}</p> : null}
+        {notice?.kind === "saved" ? <p className="mt-4 text-sm text-[#6B6963]">Saved ✓</p> : null}
+        {notice?.kind === "vision" ? (
+          <p className="mt-4 text-sm text-[#6B6963]">
+            <Link href={`/visions/${notice.id}`} className="text-[#F5F3EE] hover:underline">
+              Vision detected — see Visions
+            </Link>
+          </p>
+        ) : null}
 
         <ul className="mt-12">
           {entries.map((entry) => (

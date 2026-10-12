@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { listEvents, type IntakeSpace, type LifeEvent } from "@/lib/api";
+import { listEntities, listEvents, type EntityRecord, type IntakeSpace, type LifeEvent } from "@/lib/api";
 
 const FILTERS: Array<{ id: "" | IntakeSpace; label: string }> = [
   { id: "", label: "All" },
@@ -25,12 +25,14 @@ export default function EventsPage() {
   const [cursor, setCursor] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [entities, setEntities] = useState<EntityRecord[]>([]);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    listEvents(space)
+    listEvents(space, null, search.trim())
       .then((page) => {
         if (cancelled) return;
         setEvents(page.events);
@@ -46,13 +48,35 @@ export default function EventsPage() {
     return () => {
       cancelled = true;
     };
-  }, [space]);
+  }, [space, search]);
+
+  useEffect(() => {
+    const needle = search.trim();
+    if (needle.length < 2) {
+      setEntities([]);
+      return;
+    }
+    let cancelled = false;
+    const handle = setTimeout(() => {
+      listEntities({ search: needle })
+        .then((page) => {
+          if (!cancelled) setEntities(page.entities.slice(0, 5));
+        })
+        .catch(() => {
+          if (!cancelled) setEntities([]);
+        });
+    }, 200);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [search]);
 
   async function loadMore() {
     if (!cursor || loading) return;
     setLoading(true);
     try {
-      const page = await listEvents(space, cursor);
+      const page = await listEvents(space, cursor, search.trim());
       setEvents((current) => [...current, ...page.events]);
       setCursor(page.nextCursor);
     } catch (err) {
@@ -68,12 +92,30 @@ export default function EventsPage() {
         <Link href="/intake" className="text-sm tracking-[0.22em] text-[#F5F3EE]">
           DIRA
         </Link>
-        <Link href="/intake" className="text-sm text-[#F5F3EE]">
+        <input
+          value={search}
+          onChange={(event) => setSearch(event.target.value)}
+          placeholder="Search events and entities"
+          className="mx-4 w-full max-w-xs border-x-0 border-t-0 border-b border-[#2A2A28] bg-transparent pb-1 text-sm text-[#F5F3EE] outline-none placeholder:text-[#6B6963]"
+        />
+        <Link href="/intake" className="shrink-0 text-sm text-[#F5F3EE]">
           New +
         </Link>
       </header>
 
       <main className="mx-auto max-w-2xl px-6 py-8">
+        {search.trim().length >= 2 && entities.length > 0 ? (
+          <ul className="mb-6 space-y-2">
+            {entities.map((entity) => (
+              <li key={entity.id}>
+                <Link href={`/entities/${entity.id}`} className="text-sm text-[#7F77DD]">
+                  {entity.name}
+                  <span className="text-[#6B6963]"> · {entity.entityType}</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        ) : null}
         <div className="flex flex-wrap gap-2">
           {FILTERS.map((item) => (
             <button
@@ -128,7 +170,11 @@ export default function EventsPage() {
                     <span className="rounded-full border border-[#2A2A28] px-2 py-0.5">
                       {SPACE_LABEL[event.space] ?? event.space}
                     </span>
-                    {event.location ? <span>{event.location}</span> : null}
+                    {event.location ? (
+                      <Link href={`/entities?search=${encodeURIComponent(event.location)}`} className="hover:text-[#F5F3EE]">
+                        {event.location}
+                      </Link>
+                    ) : null}
                     <span>{formatWhen(event.createdAt)}</span>
                   </div>
                 </Link>

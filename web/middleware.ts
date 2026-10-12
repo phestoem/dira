@@ -20,6 +20,8 @@ export function middleware(request: NextRequest) {
       pathname === "/journal" ||
       pathname === "/visions" ||
       pathname.startsWith("/visions/") ||
+      pathname === "/entities" ||
+      pathname.startsWith("/entities/") ||
       pathname === "/account")
   ) {
     return NextResponse.redirect(new URL("/login", request.url));
@@ -29,5 +31,16 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/intake", "/login", "/events", "/events/:path*", "/journal", "/visions", "/visions/:path*", "/account"],
+  matcher: [
+    "/intake",
+    "/login",
+    "/events",
+    "/events/:path*",
+    "/journal",
+    "/visions",
+    "/visions/:path*",
+    "/entities",
+    "/entities/:path*",
+    "/account",
+  ],
 };
