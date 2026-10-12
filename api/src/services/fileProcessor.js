@@ -78,19 +78,102 @@ export function extractFromCsv(filePath) {
 
 export async function extractFromPdf(filePath) {
   const buffer = await readFile(filePath);
-  const parser = new PDFParse({ data: new Uint8Array(buffer) });
+  let text = "";
+  let pageCount = null;
   try {
-    const parsed = await parser.getText();
-    const text = (parsed.text || "").replace(/\n*-- \d+ of \d+ --\n*/g, "\n").trim();
+    const parser = new PDFParse({ data: new Uint8Array(buffer) });
+    try {
+      const parsed = await parser.getText();
+      text = (parsed.text || "").replace(/\n*-- \d+ of \d+ --\n*/g, "\n").trim();
+      pageCount = parsed.total ?? null;
+    } finally {
+      await parser.destroy();
+    }
+  } catch (err) {
+    console.error("[pdf] text extraction failed:", err.message);
+  }
+
+  const words = text.split(/\s+/).filter(Boolean);
+  const hasRealContent = text.length > 100 && words.length > 20;
+  if (hasRealContent) {
     return {
       text,
-      pageCount: parsed.total ?? null,
+      pageCount,
       rawText: text,
       summary: text.slice(0, 600),
     };
-  } finally {
-    await parser.destroy();
   }
+
+  console.log("[pdf] no text layer, using vision", pageCount ?? "unknown", "pages");
+  return extractPdfWithVision(buffer, pageCount);
+}
+
+async function extractPdfWithVision(buffer, pageCount) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || apiKey.startsWith("your_")) {
+    throw new Error("OPENAI_API_KEY is required");
+  }
+
+  const base64 = buffer.toString("base64");
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "gpt-4o-mini",
+      max_tokens: 1500,
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "file",
+              file: {
+                filename: "document.pdf",
+                file_data: `data:application/pdf;base64,${base64}`,
+              },
+            },
+            {
+              type: "text",
+              text: "Extract all text, numbers, names, dates, and key information from this document. Return as structured JSON.",
+            },
+          ],
+        },
+      ],
+    }),
+    signal: AbortSignal.timeout(60000),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text();
+    throw new Error(`OpenAI vision failed (${response.status}): ${detail.slice(0, 300)}`);
+  }
+
+  const payload = await response.json();
+  const modelText = payload?.choices?.[0]?.message?.content?.trim() || "";
+  const parsed = parseJsonContent(modelText);
+  const structured =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : { notes: modelText };
+  const text = visionToText(structured, modelText);
+
+  return {
+    ...structured,
+    text,
+    pageCount,
+    rawText: text,
+    summary: text.slice(0, 600),
+    scanned: true,
+  };
+}
+
+function visionToText(structured, fallback) {
+  const keys = Object.keys(structured);
+  if (keys.length === 1 && typeof structured.notes === "string" && structured.notes.trim()) return structured.notes.trim();
+  if (keys.length === 1 && typeof structured.text === "string" && structured.text.trim()) return structured.text.trim();
+  const rendered = JSON.stringify(structured);
+  return rendered && rendered !== "{}" ? rendered : fallback;
 }
 
 export async function extractFromImage(filePath) {
