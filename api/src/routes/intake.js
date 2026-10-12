@@ -12,6 +12,17 @@ import {
 } from "../services/contextEngine.js";
 
 const UPLOAD_DIR = "/tmp/dira-uploads";
+const EVENT_TYPES = new Set([
+  "project_update",
+  "financial",
+  "personal",
+  "family",
+  "commitment",
+  "milestone",
+  "setback",
+  "social",
+  "health",
+]);
 
 export default async function intakeRoutes(fastify) {
   fastify.get("/intake/test", async () => ({
@@ -130,7 +141,10 @@ export default async function intakeRoutes(fastify) {
         body.corrections.contentType !== stored.understood?.contentType;
       if (body.space) understood.space = body.space;
       else if (!contentChanged) understood.space = stored.suggestedSpace;
-      if (!(contentChanged && !body.corrections?.eventType)) {
+      const explicitType = body.corrections?.eventType;
+      if (typeof explicitType === "string" && EVENT_TYPES.has(explicitType)) {
+        understood.eventType = explicitType;
+      } else if (!(contentChanged && !explicitType)) {
         understood.eventType = stored.suggestedEventType;
       }
 

@@ -1,6 +1,9 @@
+import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 
 const MODEL = "qwen/qwen3.8-27b";
+const FACT_MODEL = "gpt-4o-mini";
+const FACT_TYPES = new Set(["financial", "person", "place", "decision", "date", "asset", "other"]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 const ADVISOR_ROLE = `You are DIRA's life advisor — an intelligent assistant
@@ -53,6 +56,60 @@ export async function chat(messages, userId) {
       entitiesCount: context.entities.length,
     },
   };
+}
+
+const FACT_PROMPT = `You are a fact detector for a personal intelligence
+system. Read this message and extract any significant
+facts the person has shared about their life.
+
+A significant fact is:
+- A financial amount with context
+  (cost, payment, debt, income)
+- A date or timeframe tied to an event
+- A person mentioned with their role or relationship
+- A decision made or planned
+- A property, place, or asset described
+- A quantity or measurement
+
+Return JSON array (empty if nothing significant):
+[{
+  factType: 'financial' | 'person' | 'place' |
+            'decision' | 'date' | 'asset' | 'other',
+  content: string,  // the fact in plain English, max 100 chars
+  confidence: number, // 0-1
+  suggestedEventTitle: string | null
+}]
+
+Only return facts the PERSON stated — not things
+the advisor said. Return [] if nothing significant.
+Keep confidence below 0.7 for vague mentions.
+For a person, suggestedEventTitle is their name.
+For any other fact, suggestedEventTitle is a short event title, or null.
+Never extract journal entries or private reflections.
+The journal is sealed and is not a source of facts.`;
+
+export async function detectSignificantFacts(userMessage, userId) {
+  const text = typeof userMessage === "string" ? userMessage.trim() : "";
+  if (text.length < 8) return [];
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey || apiKey.startsWith("your_")) return [];
+
+  const client = new OpenAI({ apiKey, timeout: 12000 });
+  const response = await client.chat.completions.create({
+    model: FACT_MODEL,
+    temperature: 0,
+    max_tokens: 400,
+    messages: [
+      { role: "system", content: FACT_PROMPT },
+      { role: "user", content: text.slice(0, 4000) },
+    ],
+  });
+  const facts = parseFacts(response.choices?.[0]?.message?.content || "")
+    .filter((fact) => fact.confidence >= 0.7)
+    .sort((left, right) => right.confidence - left.confidence)
+    .slice(0, 3);
+  console.log("[advisor] facts", userId, facts.length);
+  return facts;
 }
 
 export async function suggest(userId) {
@@ -351,11 +408,55 @@ function dayIndex(length) {
   return hash;
 }
 
+function bound(value, max) {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim().replace(/\s+/g, " ");
+  if (!trimmed) return null;
+  return trimmed.length > max ? trimmed.slice(0, max).trim() : trimmed;
+}
+
 function clip(value, max) {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   if (!trimmed) return null;
   return trimmed.length > max ? `${trimmed.slice(0, max)}…` : trimmed;
+}
+
+function parseFacts(raw) {
+  const text = stripThink(raw);
+  const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
+  const source = (fenced ? fenced[1] : text).trim();
+  let data = parseJson(source);
+  if (!data) {
+    const start = source.indexOf("[");
+    const end = source.lastIndexOf("]");
+    if (start !== -1 && end > start) data = parseJson(source.slice(start, end + 1));
+  }
+  const list = Array.isArray(data) ? data : Array.isArray(data?.facts) ? data.facts : [];
+  return list.map(normalizeFact).filter(Boolean);
+}
+
+function parseJson(source) {
+  try {
+    return JSON.parse(source);
+  } catch {
+    return null;
+  }
+}
+
+function normalizeFact(item) {
+  if (!item || typeof item !== "object") return null;
+  const factType = FACT_TYPES.has(item.factType) ? item.factType : null;
+  const content = bound(item.content, 100);
+  const confidence = numberOrNull(item.confidence);
+  if (!factType || !content || confidence == null) return null;
+  const title = bound(item.suggestedEventTitle, 80);
+  return {
+    factType,
+    content,
+    confidence: Math.min(1, Math.max(0, confidence)),
+    suggestedEventTitle: title,
+  };
 }
 
 function stripThink(text) {

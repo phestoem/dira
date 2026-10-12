@@ -540,9 +540,28 @@ export async function confirmCommand(
 
 export type AdvisorMessage = { role: "user" | "assistant"; content: string };
 
+export type FactType = "financial" | "person" | "place" | "decision" | "date" | "asset" | "other";
+
+export type FactItem = {
+  factType: FactType;
+  content: string;
+  confidence: number;
+  suggestedEventTitle: string | null;
+};
+
 export type AdvisorReply = {
   reply: string;
   contextUsed: { eventsCount: number; visionsCount: number; entitiesCount: number };
+  detectedFacts: FactItem[];
+};
+
+const FACT_EVENT_TYPES: Partial<Record<FactType, string>> = {
+  financial: "financial",
+  decision: "commitment",
+  date: "commitment",
+  place: "personal",
+  asset: "personal",
+  other: "personal",
 };
 
 export async function advisorChat(messages: AdvisorMessage[]): Promise<AdvisorReply> {
@@ -551,7 +570,38 @@ export async function advisorChat(messages: AdvisorMessage[]): Promise<AdvisorRe
     body: JSON.stringify({ messages }),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<AdvisorReply>;
+  const data = (await res.json()) as AdvisorReply;
+  return { ...data, detectedFacts: Array.isArray(data.detectedFacts) ? data.detectedFacts : [] };
+}
+
+export async function saveFactFromAdvisor(
+  content: string,
+  factType: FactType,
+  suggestedEventTitle?: string | null,
+): Promise<unknown> {
+  const text = content.trim();
+  if (factType === "person") {
+    const name = personName(suggestedEventTitle || text);
+    return createEntity({
+      name,
+      entityType: "person",
+      description: text,
+      space: "personal",
+    });
+  }
+  const intake = await submitText(text.length >= 10 ? text : `${text}. Recorded.`);
+  const eventType = FACT_EVENT_TYPES[factType] || "personal";
+  return confirmIntake(intake.queueId, "personal", {
+    eventType,
+    ...(suggestedEventTitle ? { title: suggestedEventTitle } : {}),
+  });
+}
+
+function personName(value: string) {
+  const titled = value.match(/^([A-Z][A-Za-z'’.-]+(?:\s+[A-Z][A-Za-z'’.-]+){0,3})\b/);
+  if (titled && titled[1].length >= 2 && titled[1].length <= 80) return titled[1];
+  const cleaned = value.replace(/\s+/g, " ").trim();
+  return cleaned.length > 80 ? cleaned.slice(0, 80).trim() : cleaned;
 }
 
 export async function getAdvisorSuggestions(): Promise<string[]> {
