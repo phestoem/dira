@@ -223,6 +223,12 @@ async function rememberUnderstanding(queueId, result) {
       people: result.understood.people,
       financial: result.understood.financial,
       confidence: result.understood.confidence,
+      ...(result.understood.altimetrixContext
+        ? { altimetrixContext: result.understood.altimetrixContext }
+        : {}),
+      ...(result.understood.emotionalSignificance
+        ? { emotionalSignificance: result.understood.emotionalSignificance }
+        : {}),
     },
     matchingEntities: result.matchingEntities.map((entity) => ({
       id: entity.id,

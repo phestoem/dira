@@ -1,6 +1,7 @@
 import { extname } from "path";
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
+import { getAltimetrixContext } from "./altimetrixBridge.js";
 import {
   extractFromCsv,
   extractFromExcel,
@@ -66,7 +67,7 @@ Rules:
 
 export async function understandFile(filePath, mimeType, userId) {
   const extracted = await extractContent(filePath, mimeType);
-  const understood = await interpretContent(extracted.rawText || "");
+  const understood = await understandWithContext(extracted.rawText || "", userId, "financial");
   const matchingEntities = await findMatchingEntities(userId, understood);
   const suggestedSpace = suggestSpace(understood);
   const suggestedEventType = suggestEventType(understood);
@@ -84,7 +85,7 @@ export async function understandFile(filePath, mimeType, userId) {
 }
 
 export async function understandText(content, userId) {
-  const understood = await interpretContent(content);
+  const understood = await understandWithContext(content, userId, "personal");
   const matchingEntities = await findMatchingEntities(userId, understood);
   const suggestedSpace = suggestSpace(understood);
   const suggestedEventType = suggestEventType(understood);
@@ -550,7 +551,7 @@ export async function detectVisionInJournalEntry(entry, userId) {
     return result;
   }
 
-  await prisma.vision.create({
+  const vision = await prisma.vision.create({
     data: {
       userId,
       title: result.title,
@@ -565,7 +566,87 @@ export async function detectVisionInJournalEntry(entry, userId) {
     },
   });
   console.log("[vision-detect] created vision:", result.title, "from journal entry:", entry.id);
+  setImmediate(() => {
+    enrichVision(vision, userId, result.location).catch((err) => {
+      console.error("[bridge] vision enrichment failed:", err.message);
+    });
+  });
   return result;
+}
+
+async function understandWithContext(rawText, userId, eventType) {
+  const topics = extractQuickTopics(rawText);
+  const entityNames = extractEntityNames(rawText);
+  const [understood, altimetrixContext] = await Promise.all([
+    interpretContent(rawText),
+    prisma.user
+      .findUnique({ where: { id: userId } })
+      .then((user) => getAltimetrixContext(topics, entityNames, eventType, user)),
+  ]);
+  return applyAltimetrix(understood, altimetrixContext);
+}
+
+function applyAltimetrix(understood, altimetrixContext) {
+  if (!altimetrixContext?.context) return understood;
+  return {
+    ...understood,
+    altimetrixContext: altimetrixContext.context,
+    emotionalSignificance: altimetrixContext.hasSignificantHistory ? "high" : "normal",
+  };
+}
+
+async function enrichVision(vision, userId, location) {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.altimetrixUserId) return;
+  const context = await getAltimetrixContext(
+    vision.tags || [],
+    location ? [location] : [],
+    "vision",
+    user,
+  );
+  if (!context?.context) return;
+  const current = vision.attributes && typeof vision.attributes === "object" && !Array.isArray(vision.attributes)
+    ? vision.attributes
+    : {};
+  await prisma.vision.update({
+    where: { id: vision.id },
+    data: {
+      attributes: {
+        ...current,
+        altimetrixContext: context.context,
+        altimetrixEnrichedAt: new Date().toISOString(),
+      },
+    },
+  });
+  console.log("[bridge] vision enriched from Altimetrix:", vision.title);
+}
+
+function extractQuickTopics(text) {
+  const source = String(text || "");
+  const locationWords = source.match(
+    /\b(Tanzania|Zanzibar|Mbeya|Dar|Helsinki|Finland|Jambiani|Arusha|Nairobi)\b/gi,
+  ) || [];
+  const activityWords = source.match(
+    /\b(farming|electrical|construction|fence|property|house|land|investment|business|family|health|travel|retirement|project)\b/gi,
+  ) || [];
+  return [...new Set([
+    ...locationWords.map((word) => word.toLowerCase()),
+    ...activityWords.map((word) => word.toLowerCase()),
+  ])].slice(0, 5);
+}
+
+function extractEntityNames(text) {
+  const matches = String(text || "").match(/\b[A-Z][a-z]+\b/g) || [];
+  const skip = new Set(["The", "This", "That", "From", "With", "And", "For", "Your", "What", "When", "Where"]);
+  const counts = {};
+  for (const word of matches) {
+    if (skip.has(word)) continue;
+    counts[word] = (counts[word] || 0) + 1;
+  }
+  return Object.entries(counts)
+    .filter(([, count]) => count > 1)
+    .map(([word]) => word)
+    .slice(0, 5);
 }
 
 async function classifyJournalVision(content) {

@@ -340,6 +340,15 @@ export default function IntakePage() {
                 </label>
               ) : null}
 
+              {understood.altimetrixContext ? (
+                <div className="mt-8 border-l-2 border-[#3C3489] bg-[#1A1A2E] px-4 py-3">
+                  <p className="text-xs text-[#7F77DD]">From Altimetrix</p>
+                  <p className="mt-2 text-[13px] italic leading-relaxed text-[#F5F3EE]/80">
+                    {understood.altimetrixContext}
+                  </p>
+                </div>
+              ) : null}
+
               <div className="mt-8 flex flex-wrap gap-2">
                 {SPACES.map((item) => {
                   const selected = space === item.id;

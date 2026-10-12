@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { getVisions, listJournal, saveJournal, type JournalEntry } from "@/lib/api";
+import { getAltimetrixNudge, getVisions, listJournal, saveJournal, type JournalEntry } from "@/lib/api";
 
 export default function JournalPage() {
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -14,6 +14,7 @@ export default function JournalPage() {
   const [notice, setNotice] = useState<{ kind: "saved" } | { kind: "vision"; id: string; title: string } | null>(
     null,
   );
+  const [nudge, setNudge] = useState<{ message: string; href: string } | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -23,6 +24,13 @@ export default function JournalPage() {
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not open the journal.");
+      });
+    getAltimetrixNudge()
+      .then((page) => {
+        if (!cancelled && page.nudge) setNudge(page.nudge);
+      })
+      .catch(() => {
+        /* Journal still opens when Altimetrix has nothing to add. */
       });
     return () => {
       cancelled = true;
@@ -75,6 +83,20 @@ export default function JournalPage() {
       </header>
 
       <main className="mx-auto max-w-xl px-6 pb-16">
+        {nudge ? (
+          <div className="mb-8 border-l-2 border-[#3C3489] bg-[#1A1A2E] px-4 py-3">
+            <p className="text-xs text-[#7F77DD]">Altimetrix is thinking about...</p>
+            <p className="mt-2 text-[13px] italic leading-relaxed text-[#F5F3EE]/80">{nudge.message}</p>
+            <a
+              href={nudge.href}
+              target="_blank"
+              rel="noreferrer"
+              className="mt-3 inline-block text-xs text-[#F5F3EE]"
+            >
+              Explore this
+            </a>
+          </div>
+        ) : null}
         <textarea
           ref={composer}
           value={content}

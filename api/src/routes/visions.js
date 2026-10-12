@@ -196,6 +196,8 @@ function presentVision(vision, { detail = false } = {}) {
   if (detail) {
     payload.rawContent = vision.rawContent || null;
     payload.nudgeAfter = vision.nudgeAfter;
+    const attributes = vision.attributes && typeof vision.attributes === "object" ? vision.attributes : {};
+    payload.altimetrixContext = typeof attributes.altimetrixContext === "string" ? attributes.altimetrixContext : null;
   }
   return payload;
 }

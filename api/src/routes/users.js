@@ -1,5 +1,5 @@
 import { prisma } from "../prisma.js";
-import { syncPendingEvents } from "../services/altimetrixBridge.js";
+import { fetchAltimetrixNudge, syncPendingEvents } from "../services/altimetrixBridge.js";
 
 export default async function userRoutes(fastify) {
   fastify.get("/users/me", { preHandler: [fastify.authenticate] }, async (request, reply) => {
@@ -33,6 +33,13 @@ export default async function userRoutes(fastify) {
       request.log.error(err);
       return reply.code(500).send({ error: "Could not link Altimetrix" });
     }
+  });
+
+  fastify.get("/users/me/altimetrix-nudge", { preHandler: [fastify.authenticate] }, async (request) => {
+    const user = await prisma.user.findUnique({ where: { id: request.userId } });
+    if (!user?.altimetrixUserId) return { nudge: null };
+    const nudge = await fetchAltimetrixNudge(user);
+    return { nudge };
   });
 
   fastify.post("/users/me/altimetrix/sync", { preHandler: [fastify.authenticate] }, async (request, reply) => {

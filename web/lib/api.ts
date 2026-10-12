@@ -34,6 +34,8 @@ export type IntakeResult = {
     people: string[];
     financial: IntakeFinancial;
     confidence: number;
+    altimetrixContext?: string;
+    emotionalSignificance?: string;
   };
   matchingEntities: Array<{ id: string; name: string; entityType: string }>;
   needsClarification: string | null;
@@ -109,6 +111,12 @@ export async function linkAltimetrix(altimetrixUserId: string): Promise<DiraUser
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<DiraUser>;
+}
+
+export async function getAltimetrixNudge(): Promise<{ nudge: { message: string; href: string } | null }> {
+  const res = await apiFetch("/users/me/altimetrix-nudge");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ nudge: { message: string; href: string } | null }>;
 }
 
 export async function syncAltimetrix(): Promise<{ sent: number }> {
@@ -310,6 +318,7 @@ export type Vision = {
   nudgeAfter?: string | null;
   connectedEvents?: Array<{ eventId: string; relationship?: string; title?: string }>;
   connectedEntities?: Array<{ entityId: string | null; name: string | null; relationship: string | null }>;
+  altimetrixContext?: string | null;
 };
 
 export type EntityType = "person" | "place" | "project" | "organisation" | "property" | "other";

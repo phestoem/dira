@@ -69,6 +69,81 @@ export async function sendLifeEvent(event, userId, diraUser) {
   }
 }
 
+export async function getAltimetrixContext(topics, entityNames, eventType, diraUser) {
+  try {
+    if (!diraUser?.altimetrixUserId) return null;
+    const topicList = cleanList(topics);
+    const names = cleanList(entityNames);
+    if (topicList.length === 0 && names.length === 0) return null;
+
+    const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
+    const base = bridgeBase();
+    if (!secret) return null;
+
+    const response = await fetch(`${base}/bridge/context`, {
+      method: "POST",
+      headers: {
+        "X-Bridge-Secret": secret,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId: diraUser.altimetrixUserId,
+        query: `What does this person think/feel about: ${topicList.join(", ")}?`,
+        topics: topicList,
+        entityNames: names,
+        eventType: eventType || "personal",
+      }),
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    console.log(
+      "[bridge] got context from Altimetrix:",
+      data.memoriesFound,
+      "memories,",
+      data.threadsFound,
+      "threads",
+    );
+    return data;
+  } catch (err) {
+    console.error("[bridge] context failed:", err.message);
+    return null;
+  }
+}
+
+export async function fetchAltimetrixNudge(diraUser) {
+  try {
+    if (!diraUser?.altimetrixUserId) return null;
+    const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
+    if (!secret) return null;
+    const url = new URL("/bridge/pending-nudges", bridgeBase());
+    url.searchParams.set("userId", diraUser.altimetrixUserId);
+    const response = await fetch(url, {
+      headers: { "X-Bridge-Secret": secret },
+      signal: AbortSignal.timeout(8000),
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (!data?.nudge?.message) return null;
+    return {
+      message: String(data.nudge.message),
+      href: process.env.ALTIMETRIX_WEB_URL || "http://localhost:3000",
+    };
+  } catch (err) {
+    console.error("[bridge] nudge failed:", err.message);
+    return null;
+  }
+}
+
+function bridgeBase() {
+  return (process.env.ALTIMETRIX_URL || process.env.ALTIMETRIX_API_URL || "http://localhost:4700").replace(/\/$/, "");
+}
+
+function cleanList(value) {
+  if (!Array.isArray(value)) return [];
+  return [...new Set(value.map((item) => String(item).trim()).filter((item) => item.length >= 2))].slice(0, 8);
+}
+
 export async function syncPendingEvents(userId, diraUser) {
   const events = await prisma.event.findMany({
     where: { userId, sentToAltimetrix: false, status: { not: "archived" } },

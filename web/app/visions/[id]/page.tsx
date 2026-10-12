@@ -229,6 +229,14 @@ export default function VisionDetailPage() {
             {vision.detectedFromJournal ? (
               <p className="mt-2 text-xs text-[#6B6963]">Detected from journal</p>
             ) : null}
+            {vision.altimetrixContext ? (
+              <div className="mt-6 border-l-2 border-[#3C3489] bg-[#1A1A2E] px-4 py-3">
+                <p className="text-xs text-[#7F77DD]">From Altimetrix</p>
+                <p className="mt-2 text-[13px] italic leading-relaxed text-[#F5F3EE]/80">
+                  {vision.altimetrixContext}
+                </p>
+              </div>
+            ) : null}
 
             <label className="mt-8 block">
               <span className="text-sm text-[#6B6963]">Summary</span>
