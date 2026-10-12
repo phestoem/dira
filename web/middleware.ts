@@ -14,7 +14,11 @@ export function middleware(request: NextRequest) {
 
   if (
     !accessToken &&
-    (pathname === "/intake" || pathname === "/events" || pathname.startsWith("/events/") || pathname === "/journal")
+    (pathname === "/intake" ||
+      pathname === "/events" ||
+      pathname.startsWith("/events/") ||
+      pathname === "/journal" ||
+      pathname === "/account")
   ) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
@@ -23,5 +27,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/intake", "/login", "/events", "/events/:path*", "/journal"],
+  matcher: ["/intake", "/login", "/events", "/events/:path*", "/journal", "/account"],
 };

@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import BottomNav from "@/components/BottomNav";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -13,7 +14,10 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className="min-h-[100dvh] bg-[#0E0E0F] text-[#F5F3EE] antialiased">{children}</body>
+      <body className="min-h-[100dvh] bg-[#0E0E0F] text-[#F5F3EE] antialiased">
+        <div className="pb-16">{children}</div>
+        <BottomNav />
+      </body>
     </html>
   );
 }

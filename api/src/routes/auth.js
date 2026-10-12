@@ -128,6 +128,7 @@ export default async function authRoutes(fastify) {
           handle: fresh.handle,
           name: fresh.name,
           email: fresh.email,
+          createdAt: fresh.createdAt,
         },
       };
     } catch (err) {

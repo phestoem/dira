@@ -30,9 +30,30 @@ export function saveTokens(tokens: AuthTokens): void {
   setAccessCookie(tokens.accessToken);
 }
 
+export type StoredUser = {
+  id: string;
+  handle: string;
+  name: string;
+  email: string;
+  createdAt?: string;
+};
+
 export function saveUser(user: object): void {
   if (typeof window === "undefined") return;
   localStorage.setItem(STORAGE_KEYS.user, JSON.stringify(user));
+}
+
+export function getUser(): StoredUser | null {
+  if (typeof window === "undefined") return null;
+  const raw = localStorage.getItem(STORAGE_KEYS.user);
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw) as StoredUser;
+    if (!parsed || typeof parsed !== "object") return null;
+    return parsed;
+  } catch {
+    return null;
+  }
 }
 
 export function getAccessToken(): string | null {
@@ -47,9 +68,12 @@ export function getRefreshToken(): string | null {
 
 export function clearTokens(): void {
   if (typeof window === "undefined") return;
-  localStorage.removeItem(STORAGE_KEYS.accessToken);
-  localStorage.removeItem(STORAGE_KEYS.refreshToken);
-  localStorage.removeItem(STORAGE_KEYS.user);
+  const keys: string[] = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key?.startsWith("dira_")) keys.push(key);
+  }
+  for (const key of keys) localStorage.removeItem(key);
   clearAccessCookie();
 }
 

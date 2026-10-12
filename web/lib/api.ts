@@ -1,10 +1,11 @@
-import { clearTokens, getAccessToken } from "./auth";
+import { clearTokens, getAccessToken, getRefreshToken } from "./auth";
 
 export type DiraUser = {
   id: string;
   handle: string;
   name: string;
   email: string;
+  createdAt?: string;
 };
 
 export type IntakeSpace = "personal" | "family" | "professional" | "vision";
@@ -92,6 +93,16 @@ async function parseError(res: Response): Promise<string> {
     /* response was not JSON */
   }
   return "Request failed";
+}
+
+export async function logout(): Promise<{ success: boolean }> {
+  const refreshToken = getRefreshToken();
+  const res = await apiFetch("/auth/logout", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ success: boolean }>;
 }
 
 export async function requestOTP(email: string): Promise<{
