@@ -148,6 +148,7 @@ model Vision {
   userId             String
   title              String
   summary            String?
+  notes              String?
   // seed | forming | held | active | released | archived
   status             String                       @default("seed")
   rawContent         String?

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 const ITEMS = [
   { href: "/intake", label: "Intake", icon: UploadIcon },
   { href: "/events", label: "Events", icon: ListIcon },
+  { href: "/visions", label: "Visions", icon: CompassIcon },
   { href: "/journal", label: "Journal", icon: JournalIcon },
   { href: "/account", label: "Account", icon: PersonIcon },
 ] as const;
@@ -15,7 +16,7 @@ export default function BottomNav() {
 
   return (
     <nav
-      className="fixed bottom-0 z-50 flex h-14 w-full border-t border-[#2A2A28] bg-[#161614]"
+      className="fixed bottom-0 z-50 flex h-14 w-full overflow-x-auto border-t border-[#2A2A28] bg-[#161614]"
       style={{ borderTopWidth: "0.5px" }}
     >
       {ITEMS.map((item) => {
@@ -26,12 +27,12 @@ export default function BottomNav() {
             key={item.href}
             href={item.href}
             aria-current={active ? "page" : undefined}
-            className={`flex flex-1 flex-col items-center justify-center gap-1 ${
+            className={`flex min-w-[4.25rem] flex-1 flex-col items-center justify-center gap-1 ${
               active ? "text-[#7F77DD]" : "text-[#6B6963]"
             }`}
           >
             <Icon />
-            <span className="text-[10px] leading-none">{item.label}</span>
+            <span className="text-[9px] leading-none">{item.label}</span>
           </Link>
         );
       })}
@@ -54,6 +55,15 @@ function ListIcon() {
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M9 7h11M9 12h11M9 17h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
       <path d="M4.5 7h.01M4.5 12h.01M4.5 17h.01" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function CompassIcon() {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" />
+      <path d="m14.8 9.2-1.6 4.2-4.2 1.6 1.6-4.2 4.2-1.6Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   );
 }

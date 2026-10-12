@@ -478,3 +478,148 @@ function intakeError(message, statusCode) {
   error.statusCode = statusCode;
   return error;
 }
+
+const VISION_PROMPT = `You are analysing a personal journal entry to detect whether it contains a vision, plan, or idea worth capturing separately.
+
+A vision is: future-oriented, describes something the person wants to create, build, achieve, or experience. It may be specific (location, size, cost, requirements) or general (a feeling, a way of life).
+
+A plan is: a vision with some concrete steps, requirements, or constraints already defined.
+
+Return JSON:
+{
+  isVision: boolean,
+  confidence: number (0-1),
+  title: string | null,
+  summary: string | null,
+  tags: string[],
+  location: string | null,
+  reasoning: string
+}
+
+If isVision is false, return isVision: false and null for everything else. Keep reasoning brief.`;
+
+const VISION_CONFIDENCE = 0.65;
+
+function decrypt(rawContent) {
+  return typeof rawContent === "string" ? rawContent : "";
+}
+
+export async function detectVisionInJournalEntry(entry, userId) {
+  const content = decrypt(entry?.rawContent);
+  if (!content.trim()) {
+    return emptyVisionResult("empty entry");
+  }
+
+  const result = await classifyJournalVision(content);
+  console.log(
+    "[vision-detect] entry:",
+    entry.id,
+    "isVision:",
+    result.isVision,
+    "confidence:",
+    result.confidence,
+    "title:",
+    result.title,
+  );
+
+  if (!result.isVision || result.confidence < VISION_CONFIDENCE || !result.title) {
+    return result;
+  }
+
+  const token = result.title
+    .split(/\s+/)
+    .map((word) => word.replace(/[%_]/g, "").trim())
+    .find((word) => word.length >= 3);
+
+  const existing = token
+    ? await prisma.vision.findFirst({
+        where: {
+          userId,
+          status: { not: "archived" },
+          title: { contains: token, mode: "insensitive" },
+        },
+      })
+    : null;
+
+  if (existing) {
+    await prisma.vision.update({
+      where: { id: existing.id },
+      data: { lastTouchedAt: new Date() },
+    });
+    console.log("[vision-detect] updated existing vision:", existing.title);
+    return result;
+  }
+
+  await prisma.vision.create({
+    data: {
+      userId,
+      title: result.title,
+      summary: result.summary,
+      status: "seed",
+      tags: result.tags,
+      space: "personal",
+      rawContent: content,
+      connectedEntities: result.location ? [{ name: result.location, role: "location" }] : [],
+      lastTouchedAt: new Date(),
+      nudgeAfter: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000),
+    },
+  });
+  console.log("[vision-detect] created vision:", result.title, "from journal entry:", entry.id);
+  return result;
+}
+
+async function classifyJournalVision(content) {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("OPENAI_API_KEY is required");
+  }
+
+  const client = new OpenAI({ apiKey });
+  const response = await client.chat.completions.create({
+    model: MODEL,
+    temperature: 0.1,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: VISION_PROMPT },
+      { role: "user", content: clip(content) },
+    ],
+  });
+
+  const text = response.choices?.[0]?.message?.content || "";
+  const parsed = parseJsonContent(text);
+  if (!parsed || typeof parsed !== "object") {
+    throw new Error("The model did not return a vision classification");
+  }
+  return normalizeVisionResult(parsed);
+}
+
+function normalizeVisionResult(source) {
+  const isVision = source.isVision === true;
+  if (!isVision) {
+    return emptyVisionResult(textOr(source.reasoning, ""));
+  }
+  const tags = Array.isArray(source.tags)
+    ? source.tags.map((tag) => String(tag).trim()).filter(Boolean).slice(0, 12)
+    : [];
+  return {
+    isVision: true,
+    confidence: clampConfidence(source.confidence),
+    title: textOrNull(source.title),
+    summary: textOrNull(source.summary),
+    tags,
+    location: textOrNull(source.location),
+    reasoning: textOr(source.reasoning, ""),
+  };
+}
+
+function emptyVisionResult(reasoning) {
+  return {
+    isVision: false,
+    confidence: 0,
+    title: null,
+    summary: null,
+    tags: [],
+    location: null,
+    reasoning: reasoning || "",
+  };
+}

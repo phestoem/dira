@@ -258,6 +258,55 @@ export async function listJournal(): Promise<{ entries: JournalEntry[] }> {
   return res.json() as Promise<{ entries: JournalEntry[] }>;
 }
 
+export type VisionStatus = "seed" | "forming" | "held" | "active";
+
+export type Vision = {
+  id: string;
+  title: string;
+  summary: string | null;
+  status: string;
+  tags: string[];
+  location: string | null;
+  notes: string | null;
+  space: string;
+  detectedFromJournal: boolean;
+  lastTouchedAt: string;
+  createdAt: string;
+};
+
+export async function getVisions(status?: VisionStatus | ""): Promise<{ visions: Vision[] }> {
+  const params = new URLSearchParams();
+  if (status) params.set("status", status);
+  const query = params.toString();
+  const res = await apiFetch(`/visions${query ? `?${query}` : ""}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ visions: Vision[] }>;
+}
+
+export async function getVision(id: string): Promise<Vision> {
+  const res = await apiFetch(`/visions/${id}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<Vision>;
+}
+
+export async function updateVision(
+  id: string,
+  data: {
+    title?: string;
+    summary?: string | null;
+    status?: string;
+    tags?: string[];
+    notes?: string | null;
+  },
+): Promise<Vision> {
+  const res = await apiFetch(`/visions/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<Vision>;
+}
+
 export async function saveJournal(content: string, occurredAt?: string): Promise<JournalEntry> {
   const res = await apiFetch("/journal", {
     method: "POST",

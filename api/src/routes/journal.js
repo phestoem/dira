@@ -1,4 +1,5 @@
 import { prisma } from "../prisma.js";
+import { detectVisionInJournalEntry } from "../services/contextEngine.js";
 
 export default async function journalRoutes(fastify) {
   fastify.get("/journal", { preHandler: [fastify.authenticate] }, async (request) => {
@@ -32,14 +33,23 @@ export default async function journalRoutes(fastify) {
       occurredAt = parsed;
     }
 
+    const userId = request.userId;
     const entry = await prisma.diaryEntry.create({
       data: {
-        userId: request.userId,
+        userId,
         rawContent: content,
         occurredAt,
         isPrivate: true,
         sharedWithAltimetrix: false,
       },
+    });
+
+    setImmediate(async () => {
+      try {
+        await detectVisionInJournalEntry(entry, userId);
+      } catch (err) {
+        console.error("[vision-detect] failed:", err.message);
+      }
     });
 
     return {
