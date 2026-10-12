@@ -202,7 +202,7 @@ export default function CommandBar() {
                 <p className="text-sm leading-6 text-[#F5F3EE]">{result.needsClarification}</p>
               ) : null}
 
-              {result?.answer ? (
+              {result?.answer && !(result.confirmationRequired && result.intentType === "system_fix") ? (
                 <div>
                   <p className="text-sm leading-6 text-[#F5F3EE]">{result.answer}</p>
                   {result.results?.length ? (
@@ -227,15 +227,21 @@ export default function CommandBar() {
 
               {result?.confirmationRequired && result.preview?.length ? (
                 <div>
-                  <p className="text-sm text-[#F5F3EE]">I&apos;ll make these changes:</p>
-                  <ul className="mt-2 flex flex-col gap-2">
-                    {result.preview.map((item) => (
-                      <li key={item.id} className="rounded-md border border-[#2A2A28] bg-[#0E0E0F] px-3 py-2 text-sm">
-                        <span className="text-[#F5F3EE]">{item.title}</span>
-                        <span className="mt-1 block text-[#6B6963]">{item.change}</span>
-                      </li>
-                    ))}
-                  </ul>
+                  {result.intentType === "system_fix" && result.answer ? (
+                    <p className="whitespace-pre-wrap text-sm leading-6 text-[#F5F3EE]">{result.answer}</p>
+                  ) : (
+                    <>
+                      <p className="text-sm text-[#F5F3EE]">I&apos;ll make these changes:</p>
+                      <ul className="mt-2 flex flex-col gap-2">
+                        {result.preview.map((item) => (
+                          <li key={item.id} className="rounded-md border border-[#2A2A28] bg-[#0E0E0F] px-3 py-2 text-sm">
+                            <span className="text-[#F5F3EE]">{item.title}</span>
+                            <span className="mt-1 block text-[#6B6963]">{item.change}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </>
+                  )}
                   <div className="mt-3 flex gap-2">
                     <button
                       type="button"

@@ -12,7 +12,7 @@ language command or question. Classify what they want.
 Return JSON:
 {
   intentType: 'query' | 'correction' | 'action' |
-              'link' | 'search' | 'clarify',
+              'link' | 'search' | 'clarify' | 'system_fix',
 
   query: {
     entities: string[],
@@ -66,7 +66,18 @@ Examples:
 'Mark Tuliza Nafsi landscaping as complete' →
   intentType: action
   action: { verb: 'mark', target: 'Tuliza Nafsi landscaping',
-            value: 'completed' }`;
+            value: 'completed' }
+'Fix the dates' →
+  intentType: system_fix
+'Update all events' →
+  intentType: system_fix
+'Use real dates from documents' →
+  intentType: system_fix
+
+system_fix is for fixing the same data problem across records,
+not for changing one named record. Use it when the user wants
+stored event dates replaced with the dates written in the
+documents.`;
 
 const STOP = new Set([
   "the", "a", "an", "in", "on", "of", "for", "and", "or", "to", "from", "with",
@@ -163,6 +174,10 @@ export async function interpretCommand(input, userId) {
     };
   }
 
+  if (classified.intentType === "system_fix") {
+    return previewSystemDateFix(classified, userId);
+  }
+
   if (classified.intentType === "correction") {
     const correction = normalizeCorrection(classified.correction);
     if (!correction) {
@@ -233,6 +248,11 @@ export async function confirmCommand(commandId, confirmed, affectedIds, userId) 
   if (payload.kind === "correction") {
     const result = await executeCorrection_confirm(payload.correction, ids, userId);
     console.log("[command] confirmed correction:", result.changes.length);
+    return result;
+  }
+  if (payload.kind === "system_fix") {
+    const result = await confirmSystemDateFix(payload.updates, ids, userId);
+    console.log("[command] confirmed system_fix:", result.changes.length);
     return result;
   }
   const result = await applyActionPlan(payload.plan, ids, userId);
@@ -464,11 +484,176 @@ async function applyActionPlan(plan, affectedIds, userId) {
   return { success: true, changes };
 }
 
+const DATE_HINT = new RegExp(
+  [
+    String.raw`\b\d{1,2}[/.\\-]\d{1,2}[/.\\-]\d{2,4}\b`,
+    String.raw`\b\d{4}-\d{2}-\d{2}\b`,
+    String.raw`\b\d{1,2}[/.\\-](?:jan|feb|mar|apr|may|jun|jul|aug|sep|sept|oct|nov|dec)[a-z]*[/.\\-]\d{2,4}\b`,
+    String.raw`\b\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.?\s+\d{4}\b`,
+    String.raw`\b(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\.?\s+\d{1,2},?\s+\d{4}\b`,
+  ].join("|"),
+  "i",
+);
+
+async function previewSystemDateFix(classified, userId) {
+  const events = await prisma.event.findMany({
+    where: {
+      userId,
+      occurredAt: null,
+      status: { not: "archived" },
+      OR: [{ understoodMeaning: { not: null } }, { fullText: { not: null } }],
+    },
+    select: { id: true, title: true, understoodMeaning: true, fullText: true },
+    orderBy: { createdAt: "desc" },
+  });
+  const candidates = events.filter((event) => DATE_HINT.test(`${event.understoodMeaning || ""}\n${event.fullText || ""}`));
+  const extracted = await mapPool(candidates, 4, extractEventDate);
+  const updates = extracted.filter(Boolean);
+  if (!updates.length) {
+    return {
+      commandId: null,
+      intentType: "system_fix",
+      confidence: classified.confidence,
+      needsClarification: null,
+      confirmationRequired: false,
+      answer: "I didn't find events that still need a date from their document.",
+      preview: [],
+    };
+  }
+  const preview = updates.map((item) => ({
+    type: "event",
+    id: item.id,
+    title: item.title,
+    change: item.occurredAt,
+  }));
+  const commandId = remember(userId, {
+    kind: "system_fix",
+    updates,
+    ids: preview.map((item) => item.id),
+  });
+  const noun = updates.length === 1 ? "event" : "events";
+  const lines = updates.map((item) => `- ${item.title}: ${item.occurredAt}`).join("\n");
+  return {
+    commandId,
+    intentType: "system_fix",
+    confidence: classified.confidence,
+    needsClarification: null,
+    confirmationRequired: true,
+    answer: `I found dates in ${updates.length} ${noun} that need updating:\n${lines}\nShall I update them all?`,
+    preview,
+  };
+}
+
+async function confirmSystemDateFix(updates, affectedIds, userId) {
+  const wanted = new Set((affectedIds || []).filter((id) => typeof id === "string"));
+  const selected = (updates || []).filter((item) => !wanted.size || wanted.has(item.id));
+  const changes = [];
+  await prisma.$transaction(async (tx) => {
+    for (const item of selected) {
+      const occurredAt = dateFromIsoDay(item.occurredAt);
+      if (!occurredAt) continue;
+      const updated = await tx.event.updateMany({
+        where: { id: item.id, userId, occurredAt: null },
+        data: { occurredAt },
+      });
+      if (updated.count) changes.push(`${item.title}: ${item.occurredAt}`);
+    }
+  });
+  return { success: true, changes };
+}
+
+async function extractEventDate(event) {
+  const text = dateSnippet(event.understoodMeaning, event.fullText);
+  if (!text) return null;
+  const prompt = `Extract the most relevant date from this text.
+Return only: YYYY-MM-DD or null
+
+${text}`;
+  try {
+    const raw = await completeRaw(prompt, "", { temperature: 0, max_tokens: 20 });
+    const occurredAt = parseExtractedDay(raw);
+    if (!occurredAt) return null;
+    return { id: event.id, title: event.title || "Untitled", occurredAt };
+  } catch (err) {
+    console.error("[command] date extract failed:", event.id, err.message);
+    return null;
+  }
+}
+
+function dateSnippet(meaning, fullText) {
+  const combined = [meaning, fullText].filter((part) => typeof part === "string" && part.trim()).join("\n\n");
+  if (!combined) return "";
+  const match = combined.match(DATE_HINT);
+  if (!match || combined.length <= 3500) return combined.slice(0, 3500);
+  const start = Math.max(0, match.index - 500);
+  return combined.slice(start, start + 3500);
+}
+
+function parseExtractedDay(raw) {
+  const text = String(raw || "").trim();
+  if (!text || /^null\b/i.test(text)) return null;
+  const match = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  if (!match) return null;
+  return isoDay(`${match[1]}-${match[2]}-${match[3]}`);
+}
+
+function isoDay(value) {
+  const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return `${match[1]}-${match[2]}-${match[3]}`;
+}
+
+function dateFromIsoDay(value) {
+  const iso = isoDay(value);
+  if (!iso) return null;
+  const [year, month, day] = iso.split("-").map(Number);
+  return new Date(year, month - 1, day);
+}
+
+async function mapPool(items, limit, worker) {
+  const results = new Array(items.length);
+  let next = 0;
+  async function run() {
+    while (next < items.length) {
+      const index = next;
+      next += 1;
+      results[index] = await worker(items[index]);
+    }
+  }
+  const workers = Math.min(limit, items.length);
+  await Promise.all(Array.from({ length: workers }, () => run()));
+  return results;
+}
+
+function preferSystemDateFix(classified, input) {
+  if (classified.intentType === "system_fix" || !looksLikeSystemDateFix(input)) return classified;
+  return {
+    ...classified,
+    intentType: "system_fix",
+    needsClarification: null,
+    confidence: Math.max(classified.confidence, 0.8),
+  };
+}
+
+function looksLikeSystemDateFix(input) {
+  const text = String(input || "").toLowerCase().replace(/\s+/g, " ").trim();
+  if (/\bfix\b.*\bdates\b/.test(text)) return true;
+  if (/\bupdate\b.*\ball\b.*\bevents?\b/.test(text)) return true;
+  if (/\buse\b.*\b(actual|real|document)\b.*\bdates\b/.test(text)) return true;
+  if (/\b(upload dates|real dates from documents|document dates)\b/.test(text)) return true;
+  return false;
+}
+
 async function classifyIntent(input) {
   const hints = hintFilters(input);
   try {
     const parsed = await classifyWithModel(input);
-    return enrichClassification(parsed, hints);
+    return enrichClassification(preferSystemDateFix(parsed, input), hints);
   } catch (err) {
     console.error("[command] classifier fallback:", err.message);
     return heuristicClassify(input, hints);
@@ -515,6 +700,16 @@ function enrichClassification(classified, hints) {
 
 function heuristicClassify(input, hints) {
   const trimmed = input.trim();
+  if (looksLikeSystemDateFix(trimmed)) {
+    return {
+      intentType: "system_fix",
+      query: null,
+      correction: null,
+      action: null,
+      confidence: 0.8,
+      needsClarification: null,
+    };
+  }
   const change = trimmed.match(/^change\s+(.+?)\s+to\s+(.+?)(?:\s+in\s+(.+))?$/i);
   if (change) {
     return {
@@ -1200,7 +1395,7 @@ function totalsByCurrency(events) {
 }
 
 function normalizeClassification(parsed) {
-  const allowed = new Set(["query", "correction", "action", "link", "search", "clarify"]);
+  const allowed = new Set(["query", "correction", "action", "link", "search", "clarify", "system_fix"]);
   const intentType = allowed.has(parsed.intentType) ? parsed.intentType : "query";
   return {
     intentType,

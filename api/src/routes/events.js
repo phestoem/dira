@@ -135,9 +135,14 @@ function presentEvent(event, { detail = false } = {}) {
   const places = Array.isArray(event.places) ? event.places : [];
   const named = places.find((place) => place && typeof place.name === "string" && place.name.trim());
   const { fullText, ...rest } = event;
+  const occurredAt = event.occurredAt ? new Date(event.occurredAt) : null;
+  const hasOccurred = occurredAt && !Number.isNaN(occurredAt.getTime());
   return {
     ...rest,
     ...(detail ? { fullText: typeof fullText === "string" && fullText.trim() ? fullText : null } : {}),
+    occurredAt: hasOccurred ? event.occurredAt : null,
+    whenLabel: hasOccurred ? "Date" : "Added",
+    displayDate: hasOccurred ? event.occurredAt : event.createdAt,
     location: named ? named.name : null,
   };
 }

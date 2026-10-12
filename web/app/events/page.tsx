@@ -175,7 +175,9 @@ export default function EventsPage() {
                         {event.location}
                       </Link>
                     ) : null}
-                    <span>{formatWhen(event.createdAt)}</span>
+                    <span>
+                      {event.occurredAt ? "Date" : "Added"}: {formatWhen(event.occurredAt || event.createdAt)}
+                    </span>
                   </div>
                 </Link>
               </li>

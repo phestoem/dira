@@ -53,6 +53,14 @@ Extract the following and return as JSON:
     items: [{ description, amount, currency }]
   },
   timeframe: string | null,  // when this relates to
+  occurredAt: string | null,
+  // The actual date the event occurred,
+  // NOT today's date.
+  // For a vehicle registration: the registration date
+  // For a land purchase: the sale date
+  // For a certificate: the issue date
+  // For a CV: null (it's a profile, not a dated event)
+  // Format: YYYY-MM-DD if found, null if not clear
   summary: string,           // 2-3 sentence plain summary
   confidence: number,        // 0-1 how sure you are
   needsClarification: string | null  // ONE question if needed
@@ -62,6 +70,8 @@ Rules:
 - If the file has a clear title or identifier, use it
 - If financial data is in TSH, say TSH
 - People are proper nouns that look like names
+- occurredAt is the date the event happened, never the date the file was read
+- Use YYYY-MM-DD only when the document states that date. If only a month or year is clear, or the document is a profile, return null
 - Keep needsClarification null if you understand enough
 - Only ask ONE thing if you must ask anything`;
 
@@ -265,7 +275,7 @@ export async function createEventFromUnderstanding(userId, understoodInput, enti
               },
             ]
           : [],
-        occurredAt,
+        occurredAt: document.occurredAt !== undefined ? document.occurredAt : parseTimeframe(understood.occurredAt) || parseTimeframe(understood.timeframe),
         notes: understood.timeframe || null,
         fullText: textOrNull(document.fullText),
         sourceFile: textOrNull(document.sourceFile) || queue?.filePath || null,
@@ -458,6 +468,7 @@ function normalizeUnderstood(value) {
       items,
     },
     timeframe: textOrNull(source.timeframe),
+    occurredAt: isoDay(source.occurredAt),
     summary: textOr(source.summary, ""),
     confidence: clampConfidence(source.confidence),
     needsClarification: clarification,
@@ -529,6 +540,18 @@ function normalizeCurrency(value) {
   const code = value.trim().toUpperCase();
   if (code === "TZS" || code === "TSH") return "TSH";
   return code;
+}
+
+function isoDay(value) {
+  if (typeof value !== "string") return null;
+  const match = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!match) return null;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return null;
+  return `${match[1]}-${match[2]}-${match[3]}`;
 }
 
 function parseTimeframe(timeframe) {

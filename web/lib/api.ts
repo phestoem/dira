@@ -31,6 +31,7 @@ export type IntakeResult = {
     contentType: string;
     project: string | null;
     location: string | null;
+    occurredAt?: string | null;
     people: string[];
     financial: IntakeFinancial;
     confidence: number;
@@ -187,6 +188,7 @@ export async function confirmIntake(
   queueId: string,
   space: IntakeSpace,
   corrections?: Record<string, unknown>,
+  occurredAt?: string | null,
 ): Promise<unknown> {
   const res = await apiFetch("/intake/confirm", {
     method: "POST",
@@ -194,6 +196,7 @@ export async function confirmIntake(
       queueId,
       confirmed: true,
       space,
+      ...(occurredAt !== undefined ? { occurredAt } : {}),
       ...(corrections ? { corrections } : {}),
     }),
   });
@@ -240,6 +243,9 @@ export type LifeEvent = {
   people: Array<{ name?: string; entityId?: string; role?: string }>;
   places: Array<{ name?: string; entityId?: string; role?: string }>;
   notes: string | null;
+  occurredAt?: string | null;
+  whenLabel?: "Date" | "Added";
+  displayDate?: string;
   fullText?: string | null;
   sourceFile?: string | null;
   createdAt: string;

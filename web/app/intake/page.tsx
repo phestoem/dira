@@ -32,6 +32,7 @@ export default function IntakePage() {
   const [result, setResult] = useState<IntakeResult | null>(null);
   const [space, setSpace] = useState<IntakeSpace>("personal");
   const [answer, setAnswer] = useState("");
+  const [occurredAt, setOccurredAt] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
   const [tab, setTab] = useState<"file" | "text">("file");
@@ -61,6 +62,7 @@ export default function IntakePage() {
     setResult(null);
     setSpace("personal");
     setAnswer("");
+    setOccurredAt("");
     setError(null);
     setSaved(false);
     if (inputRef.current) inputRef.current.value = "";
@@ -84,6 +86,7 @@ export default function IntakePage() {
     try {
       const understanding = await uploadFile(file);
       setResult(understanding);
+      setOccurredAt(understanding.understood.occurredAt || "");
     } catch (err) {
       setFileName(null);
       setError(err instanceof Error ? err.message : "Could not read this file.");
@@ -103,7 +106,9 @@ export default function IntakePage() {
     setFileName(null);
     setLoading(true);
     try {
-      setResult(await submitText(content));
+      const understanding = await submitText(content);
+      setResult(understanding);
+      setOccurredAt(understanding.understood.occurredAt || "");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not read this.");
     } finally {
@@ -122,7 +127,7 @@ export default function IntakePage() {
         : undefined;
       const title = result.understood.title;
       const chosen = space;
-      await confirmIntake(result.queueId, space, corrections);
+      await confirmIntake(result.queueId, space, corrections, occurredAt || null);
       reset();
       setSaved(true);
       setSavedTitle(title);
@@ -366,6 +371,18 @@ export default function IntakePage() {
                   </p>
                 </div>
               ) : null}
+
+              <label className="mt-8 block">
+                <span className="text-sm text-[#F5F3EE]/90">When did this happen?</span>
+                <input
+                  type="date"
+                  value={occurredAt}
+                  onChange={(event) => setOccurredAt(event.target.value)}
+                  placeholder="e.g. March 2014"
+                  className="mt-3 w-full border-x-0 border-t-0 border-b border-[#2A2A28] bg-transparent pb-2 text-[#F5F3EE] outline-none [color-scheme:dark]"
+                />
+                <span className="mt-2 block text-xs text-[#6B6963]">e.g. March 2014</span>
+              </label>
 
               <div className="mt-8 flex flex-wrap gap-2">
                 {SPACES.map((item) => {

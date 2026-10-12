@@ -148,6 +148,11 @@ export default async function intakeRoutes(fastify) {
         understood.eventType = stored.suggestedEventType;
       }
 
+      const occurredAt = occurredAtFromConfirm(body, understood);
+      if (occurredAt === INVALID_DATE) {
+        return reply.code(400).send({ error: "occurredAt must be YYYY-MM-DD" });
+      }
+
       try {
         const userId = request.userId;
         const event = await createEventFromUnderstanding(
@@ -159,6 +164,7 @@ export default async function intakeRoutes(fastify) {
           {
             fullText: typeof stored.fullText === "string" ? stored.fullText : null,
             sourceFile: typeof stored.sourceFile === "string" ? stored.sourceFile : queue.filePath,
+            occurredAt,
           },
         );
         setImmediate(async () => {
@@ -240,6 +246,7 @@ async function rememberUnderstanding(queueId, result) {
       contentType: result.understood.contentType,
       project: result.understood.project,
       location: result.understood.location,
+      occurredAt: result.understood.occurredAt || null,
       people: result.understood.people,
       financial: result.understood.financial,
       confidence: result.understood.confidence,
@@ -282,6 +289,24 @@ async function failUnderstanding(request, reply, queueId, error, fallback) {
     error: statusCode === 415 ? error.message : fallback,
     queueId,
   });
+}
+
+const INVALID_DATE = Symbol("invalid-date");
+
+function occurredAtFromConfirm(body, understood) {
+  if (Object.prototype.hasOwnProperty.call(body, "occurredAt")) {
+    return dateFromIsoDay(body.occurredAt);
+  }
+  return dateFromIsoDay(understood?.occurredAt);
+}
+
+function dateFromIsoDay(value) {
+  if (value == null || value === "") return null;
+  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return INVALID_DATE;
+  const [year, month, day] = value.split("-").map(Number);
+  const date = new Date(year, month - 1, day);
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) return INVALID_DATE;
+  return date;
 }
 
 function safeExtension(filename) {
