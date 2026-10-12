@@ -148,7 +148,7 @@ export default function CommandBar() {
       )}
       {open ? (
         <div
-          className="fixed inset-0 z-[80] bg-black/70"
+          className="fixed inset-0 z-[80] bg-[#0E0E0F] px-4 pt-4"
           onClick={close}
           role="presentation"
         >
@@ -156,10 +156,10 @@ export default function CommandBar() {
             role="dialog"
             aria-modal="true"
             aria-label="Command"
-            className="mx-auto mt-16 w-full max-w-2xl px-4"
+            className="mx-auto flex max-h-[calc(100dvh-5.5rem)] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-[#2A2A28] bg-[#161614]"
             onClick={(event) => event.stopPropagation()}
           >
-            <form onSubmit={onSubmit}>
+            <form onSubmit={onSubmit} className="flex items-center gap-2 border-b border-[#2A2A28] p-3">
               <input
                 ref={inputRef}
                 value={input}
@@ -167,103 +167,108 @@ export default function CommandBar() {
                 placeholder="Ask anything or give a command..."
                 aria-label="Ask anything or give a command"
                 autoComplete="off"
-                className="w-full rounded-lg border border-[#2A2A28] bg-[#161614] px-4 py-3 text-[#F5F3EE] outline-none placeholder:text-[#6B6963] focus:border-[#3C3489]"
+                className="min-w-0 flex-1 bg-transparent px-1 py-2 text-[#F5F3EE] outline-none placeholder:text-[#6B6963]"
               />
+              <button type="button" onClick={close} className="shrink-0 px-2 text-xs text-[#6B6963]">
+                Close
+              </button>
             </form>
 
-            {!input.trim() && !result && !done ? (
-              <div className="mt-3 flex flex-col gap-2">
-                {EXAMPLES.map((example) => (
-                  <button
-                    key={example}
-                    type="button"
-                    onClick={() => void run(example)}
-                    className="text-left text-sm text-[#6B6963] hover:text-[#F5F3EE]"
-                  >
-                    {example}
-                  </button>
-                ))}
-              </div>
-            ) : null}
-
-            {loading ? <p className="mt-4 text-sm text-[#6B6963]">Looking through your records...</p> : null}
-            {error ? <p className="mt-4 text-sm text-[#F5F3EE]">{error}</p> : null}
-
-            {result?.needsClarification && !result.confirmationRequired ? (
-              <p className="mt-4 text-sm leading-6 text-[#F5F3EE]">{result.needsClarification}</p>
-            ) : null}
-
-            {result?.answer ? (
-              <div className="mt-4">
-                <p className="text-sm leading-6 text-[#F5F3EE]">{result.answer}</p>
-                {result.results?.length ? (
-                  <div className="mt-3 flex flex-col gap-2">
-                    {result.results.map((record) => (
-                      <Link
-                        key={`${record.type}-${record.id}`}
-                        href={record.href}
-                        onClick={close}
-                        className="rounded-md border border-[#2A2A28] bg-[#161614] px-3 py-2"
-                      >
-                        <div className="text-sm text-[#F5F3EE]">{record.title}</div>
-                        {record.subtitle ? (
-                          <div className="mt-1 text-xs text-[#6B6963]">{record.subtitle}</div>
-                        ) : null}
-                      </Link>
-                    ))}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-
-            {result?.confirmationRequired && result.preview?.length ? (
-              <div className="mt-4">
-                <p className="text-sm text-[#F5F3EE]">I&apos;ll make these changes:</p>
-                <ul className="mt-2 flex flex-col gap-2">
-                  {result.preview.map((item) => (
-                    <li key={item.id} className="rounded-md border border-[#2A2A28] bg-[#161614] px-3 py-2 text-sm">
-                      <span className="text-[#F5F3EE]">{item.title}</span>
-                      <span className="mt-1 block text-[#6B6963]">{item.change}</span>
-                    </li>
+            <div className="overflow-y-auto px-4 py-3">
+              {!input.trim() && !result && !done ? (
+                <div className="flex flex-col gap-2">
+                  {EXAMPLES.map((example) => (
+                    <button
+                      key={example}
+                      type="button"
+                      onClick={() => void run(example)}
+                      className="rounded-md px-2 py-2 text-left text-sm text-[#6B6963] hover:bg-[#0E0E0F] hover:text-[#F5F3EE]"
+                    >
+                      {example}
+                    </button>
                   ))}
-                </ul>
-                <div className="mt-3 flex gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void onConfirm()}
-                    disabled={loading}
-                    className="rounded bg-[#3C3489] px-4 py-2 text-sm text-[#F5F3EE] disabled:opacity-60"
-                  >
-                    Confirm
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void onCancel()}
-                    disabled={loading}
-                    className="rounded border border-[#2A2A28] px-4 py-2 text-sm text-[#6B6963]"
-                  >
-                    Cancel
-                  </button>
                 </div>
-              </div>
-            ) : null}
+              ) : null}
 
-            {done ? (
-              <div className="mt-4">
-                <p className="text-sm text-[#F5F3EE]">Done.</p>
-                {done.length ? (
-                  <ul className="mt-2 flex flex-col gap-1">
-                    {done.map((change) => (
-                      <li key={change} className="text-sm text-[#6B6963]">
-                        {change}
+              {loading ? <p className="text-sm text-[#6B6963]">Looking through your records...</p> : null}
+              {error ? <p className="text-sm text-[#F5F3EE]">{error}</p> : null}
+
+              {result?.needsClarification && !result.confirmationRequired ? (
+                <p className="text-sm leading-6 text-[#F5F3EE]">{result.needsClarification}</p>
+              ) : null}
+
+              {result?.answer ? (
+                <div>
+                  <p className="text-sm leading-6 text-[#F5F3EE]">{result.answer}</p>
+                  {result.results?.length ? (
+                    <div className="mt-3 flex flex-col gap-2">
+                      {result.results.map((record) => (
+                        <Link
+                          key={`${record.type}-${record.id}`}
+                          href={record.href}
+                          onClick={close}
+                          className="rounded-md border border-[#2A2A28] bg-[#0E0E0F] px-3 py-2"
+                        >
+                          <div className="text-sm text-[#F5F3EE]">{record.title}</div>
+                          {record.subtitle ? (
+                            <div className="mt-1 text-xs text-[#6B6963]">{record.subtitle}</div>
+                          ) : null}
+                        </Link>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {result?.confirmationRequired && result.preview?.length ? (
+                <div>
+                  <p className="text-sm text-[#F5F3EE]">I&apos;ll make these changes:</p>
+                  <ul className="mt-2 flex flex-col gap-2">
+                    {result.preview.map((item) => (
+                      <li key={item.id} className="rounded-md border border-[#2A2A28] bg-[#0E0E0F] px-3 py-2 text-sm">
+                        <span className="text-[#F5F3EE]">{item.title}</span>
+                        <span className="mt-1 block text-[#6B6963]">{item.change}</span>
                       </li>
                     ))}
                   </ul>
-                ) : (
-                  <p className="mt-2 text-sm text-[#6B6963]">Nothing needed changing.</p>
-                )}
-              </div>
-            ) : null}
+                  <div className="mt-3 flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => void onConfirm()}
+                      disabled={loading}
+                      className="rounded bg-[#3C3489] px-4 py-2 text-sm text-[#F5F3EE] disabled:opacity-60"
+                    >
+                      Confirm
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onCancel()}
+                      disabled={loading}
+                      className="rounded border border-[#2A2A28] px-4 py-2 text-sm text-[#6B6963]"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {done ? (
+                <div>
+                  <p className="text-sm text-[#F5F3EE]">Done.</p>
+                  {done.length ? (
+                    <ul className="mt-2 flex flex-col gap-1">
+                      {done.map((change) => (
+                        <li key={change} className="text-sm text-[#6B6963]">
+                          {change}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : (
+                    <p className="mt-2 text-sm text-[#6B6963]">Nothing needed changing.</p>
+                  )}
+                </div>
+              ) : null}
+            </div>
           </div>
         </div>
       ) : null}
