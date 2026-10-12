@@ -26,14 +26,18 @@ datasource db {
 
 /// The person whose life graph DIRA holds.
 model User {
-  id               String   @id @default(uuid())
-  email            String   @unique
-  handle           String   @unique
+  id               String    @id @default(uuid())
+  email            String    @unique
+  handle           String    @unique
   name             String
-  createdAt        DateTime @default(now())
-  lastActiveAt     DateTime @default(now())
-  altimetrixUserId String?  @unique
-  settings         Json     @default("{}")
+  createdAt        DateTime  @default(now())
+  lastActiveAt     DateTime  @default(now())
+  otpCode          String?
+  otpExpiresAt     DateTime?
+  otpAttempts      Int       @default(0)
+  lastLoginAt      DateTime?
+  altimetrixUserId String?   @unique
+  settings         Json      @default("{}")
 
   entities      Entity[]
   events        Event[]
@@ -42,8 +46,22 @@ model User {
   relationships Relationship[]
   lifeEvents    LifeEvent[]
   inputQueue    InputQueue[]
+  refreshTokens RefreshToken[]
 
   @@map("users")
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  token     String    @unique
+  expiresAt DateTime
+  createdAt DateTime  @default(now())
+  revokedAt DateTime?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
 }
 
 /// Universal node in the life graph.

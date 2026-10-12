@@ -4,6 +4,7 @@ import Fastify from "fastify";
 import multipart from "@fastify/multipart";
 import corsPlugin from "./plugins/cors.js";
 import authPlugin from "./plugins/auth.js";
+import authRoutes from "./routes/auth.js";
 import intakeRoutes from "./routes/intake.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
@@ -17,6 +18,7 @@ await app.register(authPlugin);
 await app.register(multipart, {
   limits: { fileSize: 25 * 1024 * 1024 },
 });
+await app.register(authRoutes);
 await app.register(intakeRoutes);
 
 app.get("/health", async () => ({
