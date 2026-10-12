@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import {
   confirmIntake,
@@ -22,6 +23,7 @@ const SPACES: Array<{ id: IntakeSpace; label: string }> = [
 const ACCEPT = ".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png";
 
 export default function IntakePage() {
+  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
   const [dragging, setDragging] = useState(false);
   const [fileName, setFileName] = useState<string | null>(null);
@@ -133,6 +135,22 @@ export default function IntakePage() {
       }, 2000);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onViewExisting() {
+    if (!result?.duplicate || saving) return;
+    const eventId = result.duplicate.existingEventId;
+    setSaving(true);
+    setError(null);
+    try {
+      await dismissIntake(result.queueId);
+      reset();
+      router.push(`/events/${eventId}`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not open the existing event.");
     } finally {
       setSaving(false);
     }
@@ -368,6 +386,38 @@ export default function IntakePage() {
                   );
                 })}
               </div>
+
+              {result?.duplicate ? (
+                <div className="mt-8 rounded-md bg-[#2A1F00] px-4 py-3" style={{ border: "0.5px solid #EF9F27" }}>
+                  <p className="text-sm text-[#F5F3EE]">⚠ This looks similar to an existing event:</p>
+                  <Link
+                    href={`/events/${result.duplicate.existingEventId}`}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="mt-2 inline-block text-sm text-[#EF9F27] underline"
+                  >
+                    {result.duplicate.existingTitle}
+                  </Link>
+                  <div className="mt-3 flex items-center gap-4">
+                    <button
+                      type="button"
+                      onClick={() => void onConfirm()}
+                      disabled={saving}
+                      className="text-sm text-[#F5F3EE] disabled:opacity-60"
+                    >
+                      Save anyway
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onViewExisting()}
+                      disabled={saving}
+                      className="text-sm text-[#EF9F27] disabled:opacity-60"
+                    >
+                      View existing
+                    </button>
+                  </div>
+                </div>
+              ) : null}
 
               <div className="mt-8 flex items-center gap-6">
                 <button

@@ -65,7 +65,7 @@ export default async function eventRoutes(fastify) {
     if (!event || event.status === "archived") {
       return reply.code(404).send({ error: "Event not found" });
     }
-    return presentEvent(event);
+    return presentEvent(event, { detail: true });
   });
 
   fastify.patch("/events/:id", { preHandler: [fastify.authenticate] }, async (request, reply) => {
@@ -113,7 +113,7 @@ export default async function eventRoutes(fastify) {
       where: { id: existing.id },
       data,
     });
-    return presentEvent(updated);
+    return presentEvent(updated, { detail: true });
   });
 
   fastify.delete("/events/:id", { preHandler: [fastify.authenticate] }, async (request, reply) => {
@@ -131,11 +131,13 @@ export default async function eventRoutes(fastify) {
   });
 }
 
-function presentEvent(event) {
+function presentEvent(event, { detail = false } = {}) {
   const places = Array.isArray(event.places) ? event.places : [];
   const named = places.find((place) => place && typeof place.name === "string" && place.name.trim());
+  const { fullText, ...rest } = event;
   return {
-    ...event,
+    ...rest,
+    ...(detail ? { fullText: typeof fullText === "string" && fullText.trim() ? fullText : null } : {}),
     location: named ? named.name : null,
   };
 }

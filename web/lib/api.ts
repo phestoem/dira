@@ -39,6 +39,12 @@ export type IntakeResult = {
   };
   matchingEntities: Array<{ id: string; name: string; entityType: string }>;
   needsClarification: string | null;
+  duplicate: {
+    existingEventId: string;
+    existingTitle: string;
+    message: string;
+    similarityScore?: number;
+  } | null;
 };
 
 export function apiUrl(path: string): string {
@@ -234,6 +240,8 @@ export type LifeEvent = {
   people: Array<{ name?: string; entityId?: string; role?: string }>;
   places: Array<{ name?: string; entityId?: string; role?: string }>;
   notes: string | null;
+  fullText?: string | null;
+  sourceFile?: string | null;
   createdAt: string;
   location: string | null;
   altimetrixEventType?: string | null;

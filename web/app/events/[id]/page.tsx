@@ -1,8 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
+import { ReactNode, useEffect, useState } from "react";
 import {
   archiveEvent,
   createEntity,
@@ -25,7 +25,10 @@ const SPACES: Array<{ id: IntakeSpace; label: string }> = [
 
 export default function EventDetailPage() {
   const params = useParams<{ id: string }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
+  const highlight = searchParams.get("q") || "";
+  const [showFullText, setShowFullText] = useState(false);
   const [event, setEvent] = useState<LifeEvent | null>(null);
   const [title, setTitle] = useState("");
   const [editingTitle, setEditingTitle] = useState(false);
@@ -212,6 +215,28 @@ export default function EventDetailPage() {
               </p>
             ) : null}
 
+            <section className="mt-6">
+              <button
+                type="button"
+                onClick={() => setShowFullText((open) => !open)}
+                className="text-sm text-[#6B6963] hover:text-[#F5F3EE]"
+                aria-expanded={showFullText}
+              >
+                Read full document {showFullText ? "▲" : "▼"}
+              </button>
+              {showFullText ? (
+                <div className="mt-3 text-[15px] leading-relaxed text-[#F5F3EE]/90">
+                  {event.fullText ? (
+                    <p className="whitespace-pre-wrap">{highlightText(event.fullText, highlight)}</p>
+                  ) : (
+                    <p className="text-[#6B6963]">
+                      Full text not available for this document (uploaded before this feature)
+                    </p>
+                  )}
+                </div>
+              ) : null}
+            </section>
+
             <dl className="mt-6 space-y-2 text-sm text-[#6B6963]">
               <div>Type · {event.eventType.replaceAll("_", " ")}</div>
               <div>Space · {event.space}</div>
@@ -378,6 +403,28 @@ export default function EventDetailPage() {
       </main>
     </div>
   );
+}
+
+function highlightText(text: string, query: string): ReactNode {
+  const terms = query
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter((term, index, all) => term.length >= 2 && all.findIndex((item) => item.toLowerCase() === term.toLowerCase()) === index);
+  if (!terms.length) return text;
+  const pattern = new RegExp(`(${terms.map(escapeRegExp).join("|")})`, "gi");
+  return text.split(pattern).map((part, index) =>
+    terms.some((term) => part.toLowerCase() === term.toLowerCase()) ? (
+      <mark key={index} className="bg-[#3C3489]/60 text-[#F5F3EE]">
+        {part}
+      </mark>
+    ) : (
+      <span key={index}>{part}</span>
+    ),
+  );
+}
+
+function escapeRegExp(value: string) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
 function formatAmount(amount: number, currency: string | null) {

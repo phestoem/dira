@@ -156,6 +156,10 @@ export default async function intakeRoutes(fastify) {
           body.entityId || null,
           true,
           queue.id,
+          {
+            fullText: typeof stored.fullText === "string" ? stored.fullText : null,
+            sourceFile: typeof stored.sourceFile === "string" ? stored.sourceFile : queue.filePath,
+          },
         );
         setImmediate(async () => {
           try {
@@ -222,6 +226,8 @@ async function rememberUnderstanding(queueId, result) {
         understood: result.understood,
         suggestedSpace: result.suggestedSpace,
         suggestedEventType: result.suggestedEventType,
+        fullText: typeof result.fullText === "string" && result.fullText.trim() ? result.fullText : null,
+        sourceFile: typeof result.sourceFile === "string" && result.sourceFile.trim() ? result.sourceFile : null,
       }),
     },
   });
@@ -250,6 +256,14 @@ async function rememberUnderstanding(queueId, result) {
       entityType: entity.entityType,
     })),
     needsClarification: result.understood.needsClarification,
+    duplicate: result.duplicate
+      ? {
+          existingEventId: result.duplicate.existingEventId,
+          existingTitle: result.duplicate.existingTitle,
+          similarityScore: result.duplicate.similarityScore,
+          message: result.duplicate.message,
+        }
+      : null,
   };
 }
 

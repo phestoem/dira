@@ -72,15 +72,20 @@ export async function understandFile(filePath, mimeType, userId) {
   const suggestedSpace = suggestSpace(understood);
   const suggestedEventType = suggestEventType(understood);
 
+  const fullText = typeof extracted.rawText === "string" ? extracted.rawText : "";
   console.log("[intake] understood as:", understood.contentType);
   console.log("[intake] confidence:", understood.confidence);
   console.log("[intake] matched entity:", matchingEntities[0]?.name ?? "none");
+  console.log("[intake] full text:", fullText.length, "characters");
 
   return {
     understood,
+    fullText,
+    sourceFile: filePath,
     matchingEntities,
     suggestedSpace,
     suggestedEventType,
+    duplicate: await duplicateOf(understood, userId),
   };
 }
 
@@ -99,10 +104,112 @@ export async function understandText(content, userId) {
     matchingEntities,
     suggestedSpace,
     suggestedEventType,
+    duplicate: await duplicateOf(understood, userId),
   };
 }
 
-export async function createEventFromUnderstanding(userId, understoodInput, entityId, confirmed, queueId) {
+export async function checkForDuplicate(understood, userId) {
+  const title = typeof understood?.title === "string" ? understood.title.trim() : "";
+  const titleNeedle = title.split(/\s+/).filter(Boolean).slice(0, 3).join(" ").replace(/[%_]/g, "");
+  const amount = numberOrNull(understood?.financial?.totalAmount);
+  const location = typeof understood?.location === "string" ? understood.location.trim() : "";
+  const or = [];
+  if (titleNeedle.length >= 3 && titleNeedle.toLowerCase() !== "untitled") {
+    or.push({ title: { contains: titleNeedle, mode: "insensitive" } });
+  }
+  if (location && amount != null && amount !== 0) {
+    const locationForms = [...new Set([location, location.toLowerCase(), location.toUpperCase()])];
+    or.push({
+      AND: [
+        { OR: locationForms.map((form) => ({ places: { string_contains: form } })) },
+        { financials: { path: ["amount"], equals: amount } },
+      ],
+    });
+  }
+  if (!or.length) return { understood, duplicate: null };
+
+  const similar = await prisma.event.findMany({
+    where: {
+      userId,
+      status: { not: "archived" },
+      OR: or,
+    },
+    select: { id: true, title: true, financials: true, places: true, tags: true },
+    orderBy: { createdAt: "desc" },
+    take: 3,
+  });
+
+  let best = null;
+  for (const event of similar) {
+    const score = similarityScore(event, understood);
+    if (!best || score > best.score) best = { event, score };
+  }
+  if (!best || best.score < 60) return { understood, duplicate: null };
+
+  const duplicate = {
+    existingEventId: best.event.id,
+    existingTitle: best.event.title,
+    similarityScore: Math.round(best.score),
+    message: "This looks similar to an existing event",
+  };
+  console.log("[intake] duplicate", duplicate.existingEventId, duplicate.similarityScore);
+  return { understood, duplicate };
+}
+
+async function duplicateOf(understood, userId) {
+  try {
+    return (await checkForDuplicate(understood, userId)).duplicate;
+  } catch (err) {
+    console.error("[intake] duplicate check failed:", err.message);
+    return null;
+  }
+}
+
+function similarityScore(existing, incoming) {
+  let score = 0;
+  const aWords = String(existing?.title || "").toLowerCase().split(/\s+/).filter(Boolean);
+  const bWords = String(incoming?.title || "").toLowerCase().split(/\s+/).filter(Boolean);
+  if (aWords.length && bWords.length) {
+    const shared = aWords.filter((word) => bWords.includes(word));
+    score += (shared.length / aWords.length) * 40;
+  }
+
+  const existingAmount = numberOrNull(existing?.financials?.amount);
+  const incomingAmount = numberOrNull(incoming?.financial?.totalAmount);
+  if (existingAmount != null && existingAmount !== 0 && existingAmount === incomingAmount) {
+    score += 30;
+  }
+
+  const existingLocation = placeName(existing);
+  const incomingLocation = typeof incoming?.location === "string" ? incoming.location.trim() : "";
+  if (
+    existingLocation &&
+    incomingLocation &&
+    existingLocation.toLowerCase() === incomingLocation.toLowerCase()
+  ) {
+    score += 20;
+  }
+
+  const existingType = contentTypeOf(existing);
+  if (existingType && incoming?.contentType && existingType === incoming.contentType) {
+    score += 10;
+  }
+
+  return score;
+}
+
+function placeName(event) {
+  const places = Array.isArray(event?.places) ? event.places : [];
+  const named = places.find((place) => place && typeof place.name === "string" && place.name.trim());
+  return named ? named.name.trim() : "";
+}
+
+function contentTypeOf(event) {
+  const tags = Array.isArray(event?.tags) ? event.tags : [];
+  return tags.find((tag) => CONTENT_TYPES.has(tag)) || null;
+}
+
+export async function createEventFromUnderstanding(userId, understoodInput, entityId, confirmed, queueId, document = {}) {
   if (confirmed !== true) {
     throw intakeError("Understanding was not confirmed", 400);
   }
@@ -160,6 +267,8 @@ export async function createEventFromUnderstanding(userId, understoodInput, enti
           : [],
         occurredAt,
         notes: understood.timeframe || null,
+        fullText: textOrNull(document.fullText),
+        sourceFile: textOrNull(document.sourceFile) || queue?.filePath || null,
         sentToAltimetrix: false,
         altimetrixEventType: significant ? altimetrixTypeFor(eventType) : null,
       },

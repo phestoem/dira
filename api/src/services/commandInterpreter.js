@@ -302,8 +302,9 @@ export async function executeQuery(query, userId, originalInput = "") {
       : [],
   ]);
 
+  const highlight = [...new Set(termGroups.flat().concat(location ? [location] : []))].filter(Boolean).slice(0, 6).join(" ");
   const results = [
-    ...events.map(presentEventResult),
+    ...events.map((event) => presentEventResult(event, highlight)),
     ...entitiesFound.map(presentEntityResult),
     ...visions.map(presentVisionResult),
   ];
@@ -765,6 +766,7 @@ function wordMatch(kind, word) {
         { title: { contains: word, mode: "insensitive" } },
         { understoodMeaning: { contains: word, mode: "insensitive" } },
         { notes: { contains: word, mode: "insensitive" } },
+        { fullText: { contains: word, mode: "insensitive" } },
         ...forms.map((form) => ({ places: { string_contains: form } })),
         ...forms.map((form) => ({ people: { string_contains: form } })),
         ...forms.map((form) => ({ financials: { string_contains: form } })),
@@ -1129,18 +1131,19 @@ function significantWords(value) {
     .filter((word) => word.length >= 3 && !STOP.has(word.toLowerCase()));
 }
 
-function presentEventResult(event) {
+function presentEventResult(event, highlight = "") {
   const financials = isPlainObject(event.financials) ? event.financials : {};
   const amount = numberOrNull(financials.amount);
   const currency = textOrNull(financials.currency);
   const location = placeName(event.places);
   const when = formatWhen(event.occurredAt || event.createdAt);
+  const query = highlight ? `?q=${encodeURIComponent(highlight)}` : "";
   return {
     type: "event",
     id: event.id,
     title: event.title,
     subtitle: [when, location, amount != null ? formatAmount(amount, currency) : null].filter(Boolean).join(" · ") || event.status,
-    href: `/events/${event.id}`,
+    href: `/events/${event.id}${query}`,
     status: event.status,
     space: event.space,
     location,
