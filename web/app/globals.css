@@ -44,3 +44,7 @@ body {
 .dira-dot:nth-child(3) {
   animation-delay: 1.2s;
 }
+
+.dira-md tr:nth-child(even) td {
+  background: #141412;
+}

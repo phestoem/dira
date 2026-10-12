@@ -1,7 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
+import { Children, cloneElement, FormEvent, isValidElement, ReactNode, useEffect, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import {
   archiveEvent,
   getAdvisorSuggestions,
@@ -351,7 +353,11 @@ function Message({
     );
   }
   if (turn.text && !turn.response) {
-    return <p className="dira-in ml-4 max-w-[90%] text-sm leading-[1.8] text-[#F5F3EE]">{turn.text}</p>;
+    return (
+      <div className="dira-in ml-4 max-w-[90%]">
+        <DiraMarkdown text={turn.text} />
+      </div>
+    );
   }
   const response = turn.response;
   if (!response) return null;
@@ -409,7 +415,7 @@ function ResponseBody({
   const { result } = response;
   if (result.type === "understanding") {
     const understanding = asUnderstanding(result.content);
-    if (!understanding) return <p className="text-sm text-[#F5F3EE]">{result.confirmationText}</p>;
+    if (!understanding) return <DiraMarkdown text={result.confirmationText || ""} />;
     return (
       <UnderstandingCard
         content={understanding}
@@ -426,7 +432,7 @@ function ResponseBody({
     const preview = command?.preview || previewItems(result.content);
     return (
       <div>
-        {result.confirmationText ? <Prose text={result.confirmationText} /> : null}
+        {result.confirmationText ? <DiraMarkdown text={result.confirmationText} /> : null}
         {preview.length ? (
           <ul className="mt-3 flex flex-col gap-2">
             {preview.map((item) => (
@@ -467,19 +473,19 @@ function ResponseBody({
   if (result.type === "journal_saved" && result.confirmationRequired) {
     return (
       <div>
-        <p className="text-sm leading-6 text-[#F5F3EE]">{result.confirmationText}</p>
+        <DiraMarkdown text={result.confirmationText || ""} />
         {!resolved ? <ConfirmRow busy={busy} onConfirm={() => onConfirm("personal", null)} onDismiss={onDismiss} confirmLabel="Save" /> : null}
       </div>
     );
   }
   if (result.type === "journal_saved") {
-    return <p className="text-sm text-[#F5F3EE]">Saved ✓</p>;
+    return <DiraMarkdown text="Saved ✓" />;
   }
   const answer = asAnswer(result.content);
   const reply = answer?.reply || messageOf(result.content) || result.confirmationText || "";
   return (
     <div>
-      <Prose text={reply} />
+      <DiraMarkdown text={reply} />
       {answer?.results?.length ? (
         <div className="mt-3 flex flex-col gap-2">
           {answer.results.map((record) => (
@@ -516,7 +522,7 @@ function UnderstandingCard({
   const spaceLabel = SPACES.find((item) => item.id === space)?.label || space;
   return (
     <div className="max-w-[480px] rounded-xl border border-[#2A2A28] bg-[#161614] p-4">
-      {prompt ? <p className="text-sm leading-[1.8] text-[#F5F3EE]">{prompt}</p> : null}
+      {prompt ? <DiraMarkdown text={prompt} /> : null}
       <h2 className="mt-3 text-base font-semibold text-[#F5F3EE]">{understood.title}</h2>
       {understood.summary ? <p className="mt-1 line-clamp-2 text-sm text-[#9B9892]">{understood.summary}</p> : null}
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -605,93 +611,94 @@ function ConfirmRow({
   );
 }
 
-function Prose({ text }: { text: string }) {
-  return <div className="text-sm leading-[1.8] text-[#F5F3EE]">{renderBlocks(cleanResponse(text))}</div>;
+const AMOUNT = /(\d[\d,]+)\s*(TSH|EUR|USD|KES)/g;
+
+function DiraMarkdown({ text }: { text: string }) {
+  if (!text.trim()) return null;
+  return (
+    <div className="dira-md">
+      <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
+        {text}
+      </ReactMarkdown>
+    </div>
+  );
 }
 
-function renderBlocks(text: string) {
-  const blocks: ReactNode[] = [];
-  let list: { ordered: boolean; items: string[] } | null = null;
+const markdownComponents = {
+  table: ({ children }: { children?: ReactNode }) => (
+    <div style={{ overflowX: "auto" }}>
+      <table style={{ borderCollapse: "collapse", width: "100%", margin: "12px 0", fontSize: 14 }}>{children}</table>
+    </div>
+  ),
+  th: ({ children }: { children?: ReactNode }) => (
+    <th style={{ background: "#1A1A18", border: "1px solid #2A2A28", padding: "8px 12px", color: "#F5F3EE", fontWeight: 600, textAlign: "left" }}>
+      {withAmounts(children)}
+    </th>
+  ),
+  td: ({ children }: { children?: ReactNode }) => (
+    <td style={{ border: "1px solid #2A2A28", padding: "8px 12px", color: "#9B9892" }}>{withAmounts(children)}</td>
+  ),
+  ul: ({ children }: { children?: ReactNode }) => (
+    <ul style={{ paddingLeft: 20, margin: "8px 0" }}>{children}</ul>
+  ),
+  ol: ({ children }: { children?: ReactNode }) => (
+    <ol style={{ paddingLeft: 20, margin: "8px 0" }}>{children}</ol>
+  ),
+  li: ({ children }: { children?: ReactNode }) => (
+    <li style={{ margin: "4px 0", lineHeight: 1.6, color: "#9B9892" }}>{withAmounts(children)}</li>
+  ),
+  p: ({ children }: { children?: ReactNode }) => (
+    <p style={{ margin: "8px 0", lineHeight: 1.8, color: "#F5F3EE" }}>{withAmounts(children)}</p>
+  ),
+  h1: ({ children }: { children?: ReactNode }) => (
+    <h1 style={{ fontSize: 18, fontWeight: 600, color: "#F5F3EE", margin: "8px 0" }}>{withAmounts(children)}</h1>
+  ),
+  h2: ({ children }: { children?: ReactNode }) => (
+    <h2 style={{ fontSize: 16, fontWeight: 600, color: "#F5F3EE", margin: "8px 0" }}>{withAmounts(children)}</h2>
+  ),
+  h3: ({ children }: { children?: ReactNode }) => (
+    <h3 style={{ fontSize: 14, fontWeight: 600, color: "#9B9892", margin: "8px 0" }}>{withAmounts(children)}</h3>
+  ),
+  strong: ({ children }: { children?: ReactNode }) => (
+    <strong style={{ color: "#F5F3EE", fontWeight: 600 }}>{withAmounts(children)}</strong>
+  ),
+  em: ({ children }: { children?: ReactNode }) => (
+    <em style={{ color: "#6B6963", fontStyle: "italic" }}>{withAmounts(children)}</em>
+  ),
+  code: ({ children }: { children?: ReactNode }) => (
+    <code style={{ background: "#1A1A18", padding: "2px 6px", borderRadius: 4, fontSize: 13, color: "#7F77DD" }}>{children}</code>
+  ),
+};
 
-  function flush() {
-    if (!list) return;
-    const items = list.items;
-    const ordered = list.ordered;
-    const Tag = ordered ? "ol" : "ul";
-    blocks.push(
-      <Tag key={`list-${blocks.length}`} className={`space-y-1 pl-5 ${ordered ? "list-decimal" : "list-disc"}`}>
-        {items.map((item, index) => (
-          <li key={index}>{renderInline(item, `li-${index}`)}</li>
-        ))}
-      </Tag>,
-    );
-    list = null;
-  }
-
-  for (const line of text.split("\n")) {
-    const bullet = line.match(/^(?:[-•]|\*)\s+(.*)$/);
-    const numbered = line.match(/^\d+\.\s+(.*)$/);
-    if (bullet || numbered) {
-      const ordered = Boolean(numbered);
-      if (list && list.ordered !== ordered) flush();
-      if (!list) list = { ordered, items: [] };
-      list.items.push((numbered || bullet)?.[1] || "");
-    } else {
-      flush();
-      if (line.trim()) {
-        blocks.push(
-          <p key={`line-${blocks.length}`} className="whitespace-pre-wrap">
-            {renderInline(line, `line-${blocks.length}`)}
-          </p>,
-        );
-      }
+function withAmounts(children: ReactNode, keyPrefix = "amt"): ReactNode {
+  return Children.map(children, (child, index) => {
+    if (typeof child === "string") return highlightAmounts(child, `${keyPrefix}-${index}`);
+    if (isValidElement<{ children?: ReactNode }>(child) && child.props.children != null) {
+      return cloneElement(child, { children: withAmounts(child.props.children, `${keyPrefix}-${index}`) });
     }
-  }
-  flush();
-  return <div className="space-y-3">{blocks}</div>;
+    return child;
+  });
 }
 
-function renderInline(text: string, keyPrefix: string): ReactNode[] {
-  const pattern = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
+function highlightAmounts(text: string, keyPrefix: string): ReactNode[] {
   const nodes: ReactNode[] = [];
+  const pattern = new RegExp(AMOUNT.source, "g");
   let last = 0;
-  let match: RegExpExecArray | null;
   let index = 0;
+  let match: RegExpExecArray | null;
   while ((match = pattern.exec(text))) {
-    if (match.index > last) nodes.push(...withAmount(text.slice(last, match.index), `${keyPrefix}-t${index}`));
-    const key = `${keyPrefix}-${index}`;
-    if (match[1] != null) nodes.push(<strong key={key}>{withAmount(match[1], `${key}-b`)}</strong>);
-    else nodes.push(<em key={key}>{withAmount(match[2] || "", `${key}-i`)}</em>);
-    index += 1;
-    last = match.index + match[0].length;
-  }
-  if (last < text.length) nodes.push(...withAmount(text.slice(last), `${keyPrefix}-end`));
-  return nodes.length ? nodes : [text.replace(/\*\*/g, "")];
-}
-
-function withAmount(text: string, keyPrefix: string): ReactNode[] {
-  const source = text.replace(/\*\*/g, "");
-  const pattern = /\d[\d,]*(?:\.\d+)?\s*(?:TSH|TZS|EUR|USD|KES|GBP|M|K)\b|\d{1,3}(?:,\d{3})+(?:\.\d+)?/gi;
-  const nodes: ReactNode[] = [];
-  let last = 0;
-  let match: RegExpExecArray | null;
-  let index = 0;
-  while ((match = pattern.exec(source))) {
-    if (match.index > last) nodes.push(source.slice(last, match.index));
+    if (match.index > last) nodes.push(text.slice(last, match.index));
     nodes.push(
-      <strong key={`${keyPrefix}-${index}`} className="font-semibold text-[#7F77DD]">
+      <span key={`${keyPrefix}-${index}`} style={{ color: "#7F77DD", fontWeight: 600 }}>
         {match[0]}
-      </strong>,
+      </span>,
     );
     index += 1;
     last = match.index + match[0].length;
   }
-  if (last < source.length) nodes.push(source.slice(last));
-  return nodes.length ? nodes : [source];
-}
-
-function cleanResponse(text: string) {
-  return String(text || "").replace(/```/g, "").trim();
+  if (!nodes.length) return [text];
+  if (last < text.length) nodes.push(text.slice(last));
+  return nodes;
 }
 
 type UnderstandingContent = {

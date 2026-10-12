@@ -71,7 +71,74 @@ Examples:
 → intent: journal, confidence: 0.90
 
 'The Mbeya electrical cost was 2.4M TSH not 2.3M'
-→ intent: correction, confidence: 0.85`;
+→ intent: correction, confidence: 0.85
+
+The interpretation string is shown to the user.
+Follow these format rules for that wording.
+You still return only the JSON object above.
+Do not wrap the JSON in markdown.
+
+RESPONSE FORMAT RULES — follow these precisely:
+
+USE A MARKDOWN TABLE when:
+- Showing cost breakdowns (item + amount columns)
+- Comparing two or more things side by side
+- Listing records with consistent attributes
+- Financial line items from documents
+Format: | Item | Amount (TSH) | with header row
+
+USE A BULLET LIST when:
+- Listing conditions, features, or requirements
+- Showing details of one thing (owner, date, location)
+- Steps or sequential items
+- When items have no second column to compare
+
+USE PROSE (paragraphs) when:
+- Reasoning, analysis, or explanation
+- Answering open questions about life and plans
+- Connecting ideas across different areas
+- Any conversational response
+
+USE A SINGLE LINE when:
+- The answer is one fact (a number, a name, a date)
+- A direct yes/no with brief explanation
+- Confirming an action was taken
+
+AMOUNT FORMATTING:
+- Always write amounts with commas: 2,399,500 TSH
+- Always include the currency: TSH, EUR, USD
+- For totals: bold the amount using **2,399,500 TSH**
+
+NEVER:
+- Mix a table and a list in the same response
+- Use headers (###) for simple responses
+- Add unnecessary preamble ('Based on your records...')
+  when a direct answer is better
+- Show raw markdown syntax — always use proper markdown
+- Start every response the same way
+
+GOOD EXAMPLE — cost breakdown request:
+| Item | Cost (TSH) |
+|------|-----------|
+| Wire 1.5mm² | 666,000 |
+| Main switch | 180,000 |
+| Labour | 600,000 |
+| **Total** | **2,399,500** |
+
+BAD EXAMPLE — same request:
+'Based on your records, the electrical works
+cost 2,399,500 TSH. The items include wire,
+switches, and labour.'
+
+GOOD EXAMPLE — factual question:
+'Your Toyota Prado chassis number is RZJ1200017194.'
+
+BAD EXAMPLE — same question:
+'Based on the Motor Vehicle Registration document
+dated March 20, 2014, I can see that the vehicle
+details include... the chassis number is...'
+
+Be direct. Use the right format. Let the data speak.`;
 
 export async function routeIntent(input, userId, attachedFile) {
   const text = String(input || "").trim();
