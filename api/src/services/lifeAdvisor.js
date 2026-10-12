@@ -145,15 +145,17 @@ export async function suggest(userId) {
 
 async function loadContext(userId) {
   const now = Date.now();
-  const [events, visions, journal, entities, user] = await Promise.all([
+  const [events, financialEvents, visions, journal, entities, user] = await Promise.all([
     prisma.event.findMany({
       where: {
         userId,
         status: { not: "archived" },
-        createdAt: { gte: new Date(now - 30 * DAY_MS) },
       },
-      orderBy: { createdAt: "desc" },
-      take: 10,
+      orderBy: [
+        { occurredAt: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
+      take: 30,
       select: {
         title: true,
         space: true,
@@ -161,6 +163,18 @@ async function loadContext(userId) {
         createdAt: true,
         financials: true,
         places: true,
+      },
+    }),
+    prisma.event.findMany({
+      where: {
+        userId,
+        status: { not: "archived" },
+      },
+      select: {
+        title: true,
+        occurredAt: true,
+        createdAt: true,
+        financials: true,
       },
     }),
     prisma.vision.findMany({
@@ -203,6 +217,7 @@ async function loadContext(userId) {
 
   return {
     events,
+    financialEvents,
     visions,
     themes: [...new Set(journal.flatMap((entry) => entry.understoodThemes || []))],
     entities,
@@ -218,7 +233,10 @@ function buildSystemPrompt(context) {
     const description = clip(entity.description, 140);
     return [entity.name, entity.entityType, description].filter(Boolean).join(" | ");
   });
-  const financials = financialPicture(context.events);
+  const financials = financialPicture(context.financialEvents);
+  const coverage = context.financialEvents.length > lines.length
+    ? `\nShowing the ${lines.length} most recent of ${context.financialEvents.length} events. The financial totals below include every recorded event.`
+    : "";
   const themes = context.themes.length ? context.themes.join(", ") : "none recorded";
   const today = new Date().toLocaleDateString("en-GB", {
     day: "numeric",
@@ -228,12 +246,21 @@ function buildSystemPrompt(context) {
 
   return `${ADVISOR_ROLE}
 
+You have access to ALL of the user's events.
+Use semantic understanding to find relevant ones —
+do not rely on exact keyword matching.
+'Mbeya project' should find events about Mbeya
+even if the word 'project' doesn't appear.
+'car' should find vehicle registration events.
+'land' should find property purchase events.
+Understand intent, not just keywords.
+
 CURRENT DATE: ${today}
 
 LIFE GRAPH CONTEXT:
 
-RECENT EVENTS:
-${lines.length ? lines.join("\n") : "none in the last 30 days"}
+EVENTS:
+${lines.length ? lines.join("\n") : "none recorded"}${coverage}
 
 ACTIVE VISIONS:
 ${visionLines.length ? visionLines.join("\n") : "none"}
@@ -244,7 +271,7 @@ ${entityLines.length ? entityLines.join("\n") : "none"}
 RECENT JOURNAL THEMES:
 ${themes}
 
-FINANCIAL PICTURE (last 30 days):
+FINANCIAL PICTURE:
 ${financials}
 ${context.altimetrixLinked ? "\nNote: This person also uses Altimetrix for personal reflection. Their emotional context is held there, not here." : ""}`;
 }
@@ -265,17 +292,29 @@ function financialPicture(events) {
   const rows = events
     .map((event) => ({ event, money: readMoney(event.financials) }))
     .filter((row) => row.money);
-  if (!rows.length) return "No financial activity recorded.";
+  if (!rows.length) return "Total recorded financial activity: none\nLast 30 days: none";
+  const since = Date.now() - 30 * DAY_MS;
+  const recent = rows.filter((row) => {
+    const when = new Date(row.event.occurredAt || row.event.createdAt).getTime();
+    return !Number.isNaN(when) && when >= since;
+  });
+  const largest = rows.reduce((best, row) => (row.money.amount > best.money.amount ? row : best));
+  return [
+    `Total recorded financial activity: ${totalsText(rows)}`,
+    `Last 30 days: ${recent.length ? totalsText(recent) : "none"}`,
+    `Largest: ${largest.event.title} — ${formatNumber(largest.money.amount)} ${largest.money.currency || "TSH"}`,
+  ].join("\n");
+}
+
+function totalsText(rows) {
   const totals = {};
   for (const row of rows) {
     const currency = row.money.currency || "TSH";
     totals[currency] = (totals[currency] || 0) + row.money.amount;
   }
-  const largest = rows.reduce((best, row) => (row.money.amount > best.money.amount ? row : best));
-  const summary = Object.entries(totals)
-    .map(([currency, amount]) => `${formatNumber(amount)} ${currency} across ${rows.filter((row) => (row.money.currency || "TSH") === currency).length} events`)
+  return Object.entries(totals)
+    .map(([currency, amount]) => `${formatNumber(amount)} ${currency}`)
     .join("; ");
-  return `Total activity: ${summary}\nLargest: ${largest.event.title} — ${formatNumber(largest.money.amount)} ${largest.money.currency || "TSH"}`;
 }
 
 async function completeChat(messages, systemPrompt) {

@@ -1,8 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, ReactNode, useEffect, useRef, useState } from "react";
 import {
+  archiveEvent,
   getAdvisorSuggestions,
   homeConfirm,
   homeInput,
@@ -54,6 +55,7 @@ type BrowserSpeech = {
 
 export default function HomePage() {
   const fileRef = useRef<HTMLInputElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const scrollerRef = useRef<HTMLDivElement>(null);
   const recognitionRef = useRef<BrowserSpeech | null>(null);
   const messagesRef = useRef<Turn[]>([]);
@@ -142,6 +144,35 @@ export default function HomePage() {
     void send(input);
   }
 
+  function askCorrection() {
+    inputRef.current?.focus();
+  }
+
+  async function undo(turn: Turn) {
+    const eventId = eventIdOf(turn.response?.result.content);
+    if (eventId) {
+      setBusy(true);
+      try {
+        await archiveEvent(eventId);
+        setMessages((current) =>
+          current.map((item) => (item.id === turn.id ? { ...item, response: undefined, text: "Undone." } : item)),
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Couldn't undo that.";
+        setMessages((current) => [...current, { id: newId(), role: "dira", text: message }]);
+      } finally {
+        setBusy(false);
+      }
+      return;
+    }
+    const sessionId = turn.response?.sessionId;
+    if (sessionId && turn.response?.result.confirmationRequired && !turn.resolved) {
+      await followUp(turn.id, () => homeConfirm(sessionId, false));
+      return;
+    }
+    askCorrection();
+  }
+
   function onVoice() {
     if (recording) {
       recognitionRef.current?.stop();
@@ -173,28 +204,31 @@ export default function HomePage() {
     recognition.start();
   }
 
+  const canSend = Boolean(input.trim() || file);
+
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       <div ref={scrollerRef} className="flex-1 overflow-y-auto">
         {messages.length === 0 ? (
-          <div className="flex h-full flex-col items-center justify-center px-6 text-center">
-            <p className="font-serif text-2xl text-[#F5F3EE]">What&apos;s on your mind?</p>
-            <div className="mt-6 flex flex-wrap justify-center gap-2">
+          <div className="flex h-full flex-col items-center justify-center px-6 pb-[120px] text-center">
+            <CompassMark />
+            <p className="mt-4 text-lg text-[#F5F3EE]">What&apos;s on your mind?</p>
+            <div className="mt-6 flex max-w-md flex-wrap justify-center gap-2">
               {suggestions.map((suggestion) => (
                 <button
                   key={suggestion}
                   type="button"
                   onClick={() => void send(suggestion, null)}
-                  className="rounded-full border border-[#2A2A28] px-3 py-1.5 text-sm text-[#9B9892] hover:text-[#F5F3EE]"
+                  className="rounded-full border border-[#2A2A28] px-3 py-2 text-sm text-[#6B6963] hover:border-[#4A4A48] hover:text-[#9B9892]"
                 >
                   {suggestion}
                 </button>
               ))}
             </div>
-            <p className="mt-6 text-xs text-[#6B6963]">Talk, attach a file, or use voice</p>
+            <p className="mt-6 text-xs text-[#3A3A38]">Type, attach a file, or speak</p>
           </div>
         ) : (
-          <div className="mx-auto flex w-full max-w-2xl flex-col gap-5 px-5 py-8">
+          <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pb-[120px] pt-8">
             {messages.map((turn) => (
               <Message
                 key={turn.id}
@@ -211,16 +245,18 @@ export default function HomePage() {
                     homeConfirm(turn.response?.sessionId || "", true, { selectedOption: intent }),
                   )
                 }
+                onCorrect={askCorrection}
+                onUndo={() => void undo(turn)}
               />
             ))}
           </div>
         )}
       </div>
 
-      <form onSubmit={onSubmit} className="border-t border-[#2A2A28] bg-[#0E0E0F] px-4 py-3" style={{ borderTopWidth: "0.5px" }}>
+      <form onSubmit={onSubmit} className="fixed inset-x-0 bottom-14 z-40 px-3 pb-3 sm:px-4">
         {file ? (
           <div className="mx-auto mb-2 flex max-w-2xl">
-            <span className="inline-flex items-center gap-2 rounded-full border border-[#2A2A28] px-3 py-1 text-xs text-[#F5F3EE]">
+            <span className="inline-flex items-center gap-2 rounded-full border border-[#2A2A28] bg-[#1A1A18] px-3 py-1 text-xs text-[#F5F3EE]">
               {file.name}
               <button type="button" onClick={() => setFile(null)} className="text-[#6B6963]" aria-label="Remove file">
                 ×
@@ -228,12 +264,12 @@ export default function HomePage() {
             </span>
           </div>
         ) : null}
-        <div className="mx-auto flex max-w-2xl items-center gap-2">
+        <div className="mx-auto flex max-w-2xl items-center gap-1 rounded-full border border-[#2A2A28] bg-[#1A1A18] py-1.5 pl-1.5 pr-1.5 focus-within:border-[#3C3489] focus-within:shadow-[0_0_0_2px_rgba(60,52,137,0.2)] sm:gap-2 sm:py-3 sm:pl-4 sm:pr-2">
           <button
             type="button"
             onClick={() => fileRef.current?.click()}
             aria-label="Attach a file"
-            className="flex h-10 w-10 shrink-0 items-center justify-center text-[#6B6963] hover:text-[#F5F3EE]"
+            className="flex h-11 w-11 shrink-0 items-center justify-center text-[#6B6963] hover:text-[#F5F3EE]"
           >
             <PaperclipIcon />
           </button>
@@ -249,18 +285,27 @@ export default function HomePage() {
             }}
           />
           <input
+            ref={inputRef}
             value={input}
             onChange={(event) => setInput(event.target.value)}
             placeholder="Talk to DIRA..."
-            className="min-w-0 flex-1 bg-transparent py-2 text-[15px] text-[#F5F3EE] outline-none placeholder:text-[#6B6963]"
+            className="min-w-0 flex-1 bg-transparent py-2 text-[15px] text-[#F5F3EE] outline-none placeholder:text-[#4A4A48]"
           />
           <button
             type="button"
             onClick={onVoice}
             aria-label={recording ? "Stop recording" : "Use voice"}
-            className={`flex h-10 w-10 shrink-0 items-center justify-center ${recording ? "text-[#7F77DD]" : "text-[#6B6963] hover:text-[#F5F3EE]"}`}
+            className={`flex h-11 w-11 shrink-0 items-center justify-center hover:text-[#F5F3EE] ${recording ? "animate-pulse text-[#E84747]" : "text-[#6B6963]"}`}
           >
             <MicIcon />
+          </button>
+          <button
+            type="submit"
+            aria-label="Send"
+            disabled={!canSend || busy}
+            className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-[#F5F3EE] disabled:cursor-default ${canSend ? "bg-[#3C3489]" : "bg-[#2A2A28]"}`}
+          >
+            <ArrowIcon />
           </button>
         </div>
       </form>
@@ -274,34 +319,46 @@ function Message({
   onConfirm,
   onDismiss,
   onOption,
+  onCorrect,
+  onUndo,
 }: {
   turn: Turn;
   busy: boolean;
   onConfirm: (space: IntakeSpace, occurredAt: string | null) => void;
   onDismiss: () => void;
   onOption: (intent: string) => void;
+  onCorrect: () => void;
+  onUndo: () => void;
 }) {
+  const [accepted, setAccepted] = useState(false);
   if (turn.role === "user") {
     return (
-      <p className="max-w-[85%] self-end text-right text-[15px] italic leading-6 text-[#9B9892]">{turn.text}</p>
+      <p
+        className="dira-in ml-auto max-w-[70%] border border-[#2A2A28] bg-[#1A1A18] px-3.5 py-2.5 text-[15px] italic leading-6 text-[#9B9892]"
+        style={{ borderWidth: "0.5px", borderRadius: "18px 18px 4px 18px" }}
+      >
+        {turn.text}
+      </p>
     );
   }
   if (turn.busy) {
     return (
-      <div className="flex gap-1 py-2" aria-label="DIRA is thinking">
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#6B6963]" />
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#6B6963] [animation-delay:150ms]" />
-        <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[#6B6963] [animation-delay:300ms]" />
+      <div className="dira-in ml-4 flex items-center gap-1.5 py-2" aria-label="DIRA is thinking">
+        <span className="dira-dot h-1.5 w-1.5 rounded-full bg-[#4A4A48]" />
+        <span className="dira-dot h-1.5 w-1.5 rounded-full bg-[#4A4A48]" />
+        <span className="dira-dot h-1.5 w-1.5 rounded-full bg-[#4A4A48]" />
       </div>
     );
   }
   if (turn.text && !turn.response) {
-    return <p className="max-w-[90%] text-sm leading-6 text-[#F5F3EE]">{turn.text}</p>;
+    return <p className="dira-in ml-4 max-w-[90%] text-sm leading-[1.8] text-[#F5F3EE]">{turn.text}</p>;
   }
   const response = turn.response;
   if (!response) return null;
+  const acted = response.routing.confidence > 0.8 && actedResult(response);
+  const unsure = response.routing.confidence < 0.8 && response.result.type !== "clarification";
   return (
-    <div className="max-w-[95%]">
+    <div className="dira-in my-2 ml-4 max-w-[95%]">
       <ResponseBody
         response={response}
         resolved={Boolean(turn.resolved)}
@@ -310,9 +367,24 @@ function Message({
         onDismiss={onDismiss}
         onOption={onOption}
       />
-      {response.routing.confidence < 0.8 ? (
-        <p className="mt-2 text-[11px] text-[#6B6963]">
-          {intentLabel(response.routing.intent)} · {Math.round(response.routing.confidence * 100)}%
+      {unsure && !accepted ? (
+        <p className="mt-2 text-[11px] text-[#4A4A48]">
+          I interpreted this as {intentPhrase(response.routing.intent)} — is that right?{" "}
+          <button type="button" onClick={() => setAccepted(true)} className="underline">
+            Yes
+          </button>
+          {" | "}
+          <button type="button" onClick={onCorrect} className="underline">
+            No, I meant...
+          </button>
+        </p>
+      ) : null}
+      {acted ? (
+        <p className="mt-2 text-[11px] text-[#4A4A48]">
+          Saved as {savedKind(response)} ·{" "}
+          <button type="button" onClick={onUndo} className="underline">
+            Undo
+          </button>
         </p>
       ) : null}
     </div>
@@ -354,7 +426,7 @@ function ResponseBody({
     const preview = command?.preview || previewItems(result.content);
     return (
       <div>
-        {result.confirmationText ? <p className="whitespace-pre-wrap text-sm leading-6 text-[#F5F3EE]">{result.confirmationText}</p> : null}
+        {result.confirmationText ? <Prose text={result.confirmationText} /> : null}
         {preview.length ? (
           <ul className="mt-3 flex flex-col gap-2">
             {preview.map((item) => (
@@ -372,7 +444,7 @@ function ResponseBody({
   if (result.type === "clarification") {
     return (
       <div>
-        <p className="text-sm leading-6 text-[#F5F3EE]">{result.confirmationText || "I want to make sure I understand. Did you mean:"}</p>
+        <p className="text-sm leading-[1.8] text-[#F5F3EE]">Did you mean:</p>
         {!resolved ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {(response.clarificationOptions || []).map((option) => (
@@ -382,7 +454,7 @@ function ResponseBody({
                 disabled={busy}
                 onClick={() => onOption(option.intent)}
                 title={option.description}
-                className="rounded-full border border-[#2A2A28] px-3 py-1.5 text-sm text-[#F5F3EE] disabled:opacity-60"
+                className="rounded-full border border-[#2A2A28] bg-[#161614] px-3 py-2 text-sm text-[#9B9892] hover:border-[#3C3489] disabled:opacity-60"
               >
                 {option.label}
               </button>
@@ -441,13 +513,22 @@ function UnderstandingCard({
   const [space, setSpace] = useState<IntakeSpace>(content.suggestedSpace || "personal");
   const [occurredAt, setOccurredAt] = useState(understood.occurredAt || "");
   const financial = understood.financial;
+  const spaceLabel = SPACES.find((item) => item.id === space)?.label || space;
   return (
-    <div className="rounded-lg border border-[#2A2A28] bg-[#161614] px-4 py-4">
-      {prompt ? <p className="text-sm leading-6 text-[#F5F3EE]">{prompt}</p> : null}
-      <h2 className="mt-3 text-lg text-[#F5F3EE]">{understood.title}</h2>
-      {understood.summary ? <p className="mt-2 text-sm leading-6 text-[#F5F3EE]/85">{understood.summary}</p> : null}
+    <div className="max-w-[480px] rounded-xl border border-[#2A2A28] bg-[#161614] p-4">
+      {prompt ? <p className="text-sm leading-[1.8] text-[#F5F3EE]">{prompt}</p> : null}
+      <h2 className="mt-3 text-base font-semibold text-[#F5F3EE]">{understood.title}</h2>
+      {understood.summary ? <p className="mt-1 line-clamp-2 text-sm text-[#9B9892]">{understood.summary}</p> : null}
+      <div className="mt-3 flex flex-wrap gap-1.5">
+        {understood.contentType ? (
+          <span className="rounded-full border border-[#2A2A28] px-2 py-0.5 text-[11px] uppercase tracking-wide text-[#6B6963]">
+            {understood.contentType.replaceAll("_", " ")}
+          </span>
+        ) : null}
+        <span className="rounded-full border border-[#2A2A28] px-2 py-0.5 text-[11px] text-[#6B6963]">{spaceLabel}</span>
+      </div>
       {financial?.hasFinancials && financial.totalAmount != null ? (
-        <p className="mt-3 text-sm text-[#7F77DD]">
+        <p className="mt-3 text-xl font-semibold text-[#7F77DD]">
           {Number(financial.totalAmount).toLocaleString("en-US")} {financial.currency || ""}
         </p>
       ) : null}
@@ -460,22 +541,22 @@ function UnderstandingCard({
           </Link>
         </p>
       ) : null}
-      <label className="mt-4 block">
-        <span className="text-xs text-[#6B6963]">When did this happen?</span>
+      <label className="mt-3 block">
+        <span className="text-[11px] text-[#6B6963]">When did this happen?</span>
         <input
           type="date"
           value={occurredAt}
           onChange={(event) => setOccurredAt(event.target.value)}
-          className="mt-2 w-full border-x-0 border-t-0 border-b border-[#2A2A28] bg-transparent pb-1 text-sm text-[#F5F3EE] outline-none [color-scheme:dark]"
+          className="mt-1 w-full border-x-0 border-t-0 border-b border-[#2A2A28] bg-transparent pb-1 text-sm text-[#F5F3EE] outline-none [color-scheme:dark]"
         />
       </label>
-      <div className="mt-4 flex flex-wrap gap-2">
+      <div className="mt-3 flex flex-wrap gap-1.5">
         {SPACES.map((item) => (
           <button
             key={item.id}
             type="button"
             onClick={() => setSpace(item.id)}
-            className={`rounded-full px-3 py-1 text-xs ${space === item.id ? "bg-[#3C3489] text-[#F5F3EE]" : "border border-[#2A2A28] text-[#6B6963]"}`}
+            className={`rounded-full px-2.5 py-1 text-[11px] ${space === item.id ? "bg-[#3C3489] text-[#F5F3EE]" : "border border-[#2A2A28] text-[#6B6963]"}`}
           >
             {item.label}
           </button>
@@ -484,7 +565,8 @@ function UnderstandingCard({
       {!resolved ? (
         <ConfirmRow
           busy={busy}
-          confirmLabel="Confirm"
+          confirmLabel="Save"
+          quietDismiss
           onConfirm={() => onConfirm(space, occurredAt || null)}
           onDismiss={onDismiss}
         />
@@ -496,20 +578,27 @@ function UnderstandingCard({
 function ConfirmRow({
   busy,
   confirmLabel,
+  quietDismiss,
   onConfirm,
   onDismiss,
 }: {
   busy: boolean;
   confirmLabel: string;
+  quietDismiss?: boolean;
   onConfirm: () => void;
   onDismiss: () => void;
 }) {
   return (
-    <div className="mt-4 flex gap-2">
+    <div className="mt-4 flex items-center gap-3">
       <button type="button" onClick={onConfirm} disabled={busy} className="rounded bg-[#3C3489] px-4 py-2 text-sm text-[#F5F3EE] disabled:opacity-60">
         {confirmLabel}
       </button>
-      <button type="button" onClick={onDismiss} disabled={busy} className="rounded border border-[#2A2A28] px-4 py-2 text-sm text-[#6B6963] disabled:opacity-60">
+      <button
+        type="button"
+        onClick={onDismiss}
+        disabled={busy}
+        className={quietDismiss ? "px-1 py-2 text-sm text-[#6B6963] disabled:opacity-60" : "rounded border border-[#2A2A28] px-4 py-2 text-sm text-[#6B6963] disabled:opacity-60"}
+      >
         Dismiss
       </button>
     </div>
@@ -517,29 +606,92 @@ function ConfirmRow({
 }
 
 function Prose({ text }: { text: string }) {
-  const blocks = text.split(/\n{2,}/);
-  return (
-    <div className="flex flex-col gap-3">
-      {blocks.map((block) => (
-        <p key={block} className="whitespace-pre-wrap text-sm leading-6 text-[#F5F3EE]">
-          {renderInline(block)}
-        </p>
-      ))}
-    </div>
-  );
+  return <div className="text-sm leading-[1.8] text-[#F5F3EE]">{renderBlocks(cleanResponse(text))}</div>;
 }
 
-function renderInline(text: string) {
-  const parts = text.split(/(\*\*[^*]+\*\*|\*[^*]+\*)/g);
-  return parts.map((part, index) => {
-    if (part.startsWith("**") && part.endsWith("**")) {
-      return <strong key={index}>{part.slice(2, -2)}</strong>;
+function renderBlocks(text: string) {
+  const blocks: ReactNode[] = [];
+  let list: { ordered: boolean; items: string[] } | null = null;
+
+  function flush() {
+    if (!list) return;
+    const items = list.items;
+    const ordered = list.ordered;
+    const Tag = ordered ? "ol" : "ul";
+    blocks.push(
+      <Tag key={`list-${blocks.length}`} className={`space-y-1 pl-5 ${ordered ? "list-decimal" : "list-disc"}`}>
+        {items.map((item, index) => (
+          <li key={index}>{renderInline(item, `li-${index}`)}</li>
+        ))}
+      </Tag>,
+    );
+    list = null;
+  }
+
+  for (const line of text.split("\n")) {
+    const bullet = line.match(/^(?:[-•]|\*)\s+(.*)$/);
+    const numbered = line.match(/^\d+\.\s+(.*)$/);
+    if (bullet || numbered) {
+      const ordered = Boolean(numbered);
+      if (list && list.ordered !== ordered) flush();
+      if (!list) list = { ordered, items: [] };
+      list.items.push((numbered || bullet)?.[1] || "");
+    } else {
+      flush();
+      if (line.trim()) {
+        blocks.push(
+          <p key={`line-${blocks.length}`} className="whitespace-pre-wrap">
+            {renderInline(line, `line-${blocks.length}`)}
+          </p>,
+        );
+      }
     }
-    if (part.startsWith("*") && part.endsWith("*")) {
-      return <em key={index}>{part.slice(1, -1)}</em>;
-    }
-    return <span key={index}>{part}</span>;
-  });
+  }
+  flush();
+  return <div className="space-y-3">{blocks}</div>;
+}
+
+function renderInline(text: string, keyPrefix: string): ReactNode[] {
+  const pattern = /\*\*([^*\n]+)\*\*|\*([^*\n]+)\*/g;
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let index = 0;
+  while ((match = pattern.exec(text))) {
+    if (match.index > last) nodes.push(...withAmount(text.slice(last, match.index), `${keyPrefix}-t${index}`));
+    const key = `${keyPrefix}-${index}`;
+    if (match[1] != null) nodes.push(<strong key={key}>{withAmount(match[1], `${key}-b`)}</strong>);
+    else nodes.push(<em key={key}>{withAmount(match[2] || "", `${key}-i`)}</em>);
+    index += 1;
+    last = match.index + match[0].length;
+  }
+  if (last < text.length) nodes.push(...withAmount(text.slice(last), `${keyPrefix}-end`));
+  return nodes.length ? nodes : [text.replace(/\*\*/g, "")];
+}
+
+function withAmount(text: string, keyPrefix: string): ReactNode[] {
+  const source = text.replace(/\*\*/g, "");
+  const pattern = /\d[\d,]*(?:\.\d+)?\s*(?:TSH|TZS|EUR|USD|KES|GBP|M|K)\b|\d{1,3}(?:,\d{3})+(?:\.\d+)?/gi;
+  const nodes: ReactNode[] = [];
+  let last = 0;
+  let match: RegExpExecArray | null;
+  let index = 0;
+  while ((match = pattern.exec(source))) {
+    if (match.index > last) nodes.push(source.slice(last, match.index));
+    nodes.push(
+      <strong key={`${keyPrefix}-${index}`} className="font-semibold text-[#7F77DD]">
+        {match[0]}
+      </strong>,
+    );
+    index += 1;
+    last = match.index + match[0].length;
+  }
+  if (last < source.length) nodes.push(source.slice(last));
+  return nodes.length ? nodes : [source];
+}
+
+function cleanResponse(text: string) {
+  return String(text || "").replace(/```/g, "").trim();
 }
 
 type UnderstandingContent = {
@@ -547,6 +699,7 @@ type UnderstandingContent = {
   understood: {
     title: string;
     summary: string;
+    contentType?: string;
     location: string | null;
     occurredAt?: string | null;
     people?: string[];
@@ -612,14 +765,31 @@ function toLastAction(response: HomeResponse): HomeLastAction {
   };
 }
 
-function intentLabel(intent: string) {
-  if (intent === "intake_file") return "Reading a file";
-  if (intent === "intake_text") return "Saving an event";
-  if (intent === "question") return "Answering";
-  if (intent === "command") return "A change";
-  if (intent === "journal") return "A reflection";
-  if (intent === "correction") return "A correction";
-  return "Unclear";
+function intentPhrase(intent: string) {
+  if (intent === "intake_file") return "reading a file";
+  if (intent === "intake_text") return "saving an event";
+  if (intent === "question") return "a question";
+  if (intent === "command") return "a change";
+  if (intent === "journal") return "a journal note";
+  if (intent === "correction") return "a correction";
+  return "something unclear";
+}
+
+function savedKind(response: HomeResponse) {
+  if (response.result.type === "journal_saved" || response.routing.intent === "journal") return "a journal note";
+  if (response.routing.intent === "command" || response.routing.intent === "correction") return "a change";
+  return "an event";
+}
+
+function actedResult(response: HomeResponse) {
+  if (response.result.confirmationRequired) return false;
+  return response.result.type === "saved" || response.result.type === "journal_saved";
+}
+
+function eventIdOf(value: unknown) {
+  if (!value || typeof value !== "object" || !("eventId" in value)) return "";
+  const id = (value as { eventId?: unknown }).eventId;
+  return typeof id === "string" ? id : "";
 }
 
 function newId() {
@@ -649,6 +819,23 @@ function MicIcon() {
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <rect x="9" y="3" width="6" height="11" rx="3" stroke="currentColor" strokeWidth="1.5" />
       <path d="M6 11a6 6 0 0 0 12 0M12 17v4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function ArrowIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function CompassMark() {
+  return (
+    <svg width="32" height="32" viewBox="0 0 24 24" fill="none" aria-hidden="true" className="text-[#2A2A28]">
+      <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" />
+      <path d="m14.8 9.2-1.6 4.2-4.2 1.6 1.6-4.2 4.2-1.6Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   );
 }

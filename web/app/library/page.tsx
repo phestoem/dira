@@ -98,10 +98,10 @@ export default function LibraryPage() {
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           placeholder="Search everything"
-          className="w-full border-x-0 border-t-0 border-b border-[#2A2A28] bg-transparent pb-2 text-sm text-[#F5F3EE] outline-none placeholder:text-[#6B6963]"
+          className="w-full rounded-full border border-[#2A2A28] bg-[#1A1A18] px-4 py-3 text-sm text-[#F5F3EE] outline-none placeholder:text-[#4A4A48] focus:border-[#3C3489] focus:shadow-[0_0_0_2px_rgba(60,52,137,0.2)]"
         />
 
-        <div className="mt-5 flex flex-wrap gap-2">
+        <div className="mt-6 flex flex-wrap gap-3">
           {KINDS.map((item) => (
             <button
               key={item.id}
@@ -113,7 +113,7 @@ export default function LibraryPage() {
             </button>
           ))}
         </div>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-4 flex flex-wrap gap-3">
           {SPACES.map((item) => (
             <button
               key={item.label}
@@ -155,7 +155,7 @@ export default function LibraryPage() {
 function EventCard({ event }: { event: LifeEvent }) {
   const amount = event.financials?.amount;
   return (
-    <Link href={`/events/${event.id}`} className="block rounded-lg border border-[#2A2A28] px-4 py-4 hover:border-[#3C3489]">
+    <Link href={`/events/${event.id}`} className="block rounded-lg border border-[#2A2A28] px-4 py-4 transition-colors hover:border-[#4A4A48]">
       <div className="flex items-start justify-between gap-4">
         <h2 className="text-lg text-[#F5F3EE]">{event.title}</h2>
         {typeof amount === "number" ? (
@@ -176,7 +176,7 @@ function EventCard({ event }: { event: LifeEvent }) {
 
 function VisionCard({ vision }: { vision: Vision }) {
   return (
-    <Link href={`/visions/${vision.id}`} className="block rounded-lg border border-[#2A2A28] px-4 py-4 hover:border-[#3C3489]">
+    <Link href={`/visions/${vision.id}`} className="block rounded-lg border border-[#2A2A28] px-4 py-4 transition-colors hover:border-[#4A4A48]">
       <div className="flex items-start justify-between gap-4">
         <h2 className="flex items-center gap-2 text-lg text-[#F5F3EE]">
           <CompassIcon />
@@ -197,7 +197,7 @@ function VisionCard({ vision }: { vision: Vision }) {
 function EntityCard({ entity }: { entity: EntityRecord }) {
   const related = (entity.eventCount || 0) + (entity.visionCount || 0);
   return (
-    <Link href={`/entities/${entity.id}`} className="block rounded-lg border border-[#2A2A28] px-4 py-4 hover:border-[#3C3489]">
+    <Link href={`/entities/${entity.id}`} className="block rounded-lg border border-[#2A2A28] px-4 py-4 transition-colors hover:border-[#4A4A48]">
       <h2 className="text-lg text-[#F5F3EE]">{entity.name}</h2>
       <p className="mt-2 text-xs text-[#6B6963]">
         {entity.entityType}

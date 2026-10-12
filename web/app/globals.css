@@ -7,3 +7,40 @@ body {
   color: #f5f3ee;
   font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
 }
+
+@keyframes dira-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.dira-in {
+  animation: dira-in 200ms ease-out;
+}
+
+@keyframes dira-dot {
+  0%,
+  100% {
+    opacity: 0.2;
+  }
+  40% {
+    opacity: 1;
+  }
+}
+
+.dira-dot {
+  animation: dira-dot 1.8s ease-in-out infinite;
+}
+
+.dira-dot:nth-child(2) {
+  animation-delay: 0.6s;
+}
+
+.dira-dot:nth-child(3) {
+  animation-delay: 1.2s;
+}
