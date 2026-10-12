@@ -1,6 +1,5 @@
 import { randomUUID } from "crypto";
 import OpenAI from "openai";
-import { Prisma } from "@prisma/client";
 import { prisma } from "../prisma.js";
 
 const MODEL = "gpt-4o-mini";
@@ -647,62 +646,56 @@ function fallbackSummary(results, totals, aggregation) {
 
 async function searchEvents(userId, options) {
   if (!hasQueryConstraint(options) && !options.allowBroad) return [];
-  const conditions = [Prisma.sql`"userId" = ${userId}::uuid`];
-  pushStatus(conditions, options.status);
-  if (options.space) conditions.push(Prisma.sql`space = ${options.space}`);
-  if (options.eventType) conditions.push(Prisma.sql`"eventType" = ${options.eventType}`);
-  pushTimeframe(conditions, options.timeframe, Prisma.sql`"occurredAt"`, Prisma.sql`"createdAt"`);
-  pushLocation(conditions, options.location, "event");
-  pushTerms(conditions, options.termGroups, "event");
-  if (options.projectsOnly) {
-    conditions.push(Prisma.sql`(
-      "eventType" = 'project_update'
-      OR title ILIKE ${like("project")}
-      OR tags::text ILIKE ${like("project")}
-      OR COALESCE("understoodMeaning", '') ILIKE ${like("project")}
-    )`);
-  }
-  const ids = await prisma.$queryRaw`
-    SELECT id FROM events
-    WHERE ${Prisma.join(conditions, " AND ")}
-    ORDER BY COALESCE("occurredAt", "createdAt") DESC
-    LIMIT 20
-  `;
-  return loadInOrder("event", userId, ids, EVENT_SELECT);
+  return prisma.event.findMany({
+    where: {
+      userId,
+      ...statusWhere(options.status),
+      ...(options.space ? { space: options.space } : {}),
+      ...(options.eventType ? { eventType: options.eventType } : {}),
+      ...andWhere([
+        termFilter("event", options.termGroups, options.location),
+        timeframeWhere(options.timeframe, "occurredAt"),
+        options.projectsOnly ? projectFilter() : null,
+      ]),
+    },
+    select: EVENT_SELECT,
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+    take: 20,
+  });
 }
 
 async function searchEntities(userId, options) {
   if (!hasQueryConstraint(options) && !options.entityType && !options.allowBroad) return [];
-  const conditions = [Prisma.sql`"userId" = ${userId}::uuid`];
-  pushStatus(conditions, options.status);
-  if (options.space) conditions.push(Prisma.sql`space = ${options.space}`);
-  if (options.entityType) conditions.push(Prisma.sql`"entityType" = ${options.entityType}`);
-  pushLocation(conditions, options.location, "entity");
-  pushTerms(conditions, options.termGroups, "entity");
-  const ids = await prisma.$queryRaw`
-    SELECT id FROM entities
-    WHERE ${Prisma.join(conditions, " AND ")}
-    ORDER BY name ASC
-    LIMIT 20
-  `;
-  return loadInOrder("entity", userId, ids, ENTITY_SELECT);
+  return prisma.entity.findMany({
+    where: {
+      userId,
+      ...statusWhere(options.status),
+      ...(options.space ? { space: options.space } : {}),
+      ...(options.entityType ? { entityType: options.entityType } : {}),
+      ...andWhere([termFilter("entity", options.termGroups, options.location)]),
+    },
+    select: ENTITY_SELECT,
+    orderBy: { name: "asc" },
+    take: 20,
+  });
 }
 
 async function searchVisions(userId, options) {
   if (!hasQueryConstraint(options) && !options.allowBroad) return [];
-  const conditions = [Prisma.sql`"userId" = ${userId}::uuid`];
-  pushStatus(conditions, options.status);
-  if (options.space) conditions.push(Prisma.sql`space = ${options.space}`);
-  pushTimeframe(conditions, options.timeframe, Prisma.sql`"lastTouchedAt"`, Prisma.sql`"createdAt"`);
-  pushLocation(conditions, options.location, "vision");
-  pushTerms(conditions, options.termGroups, "vision");
-  const ids = await prisma.$queryRaw`
-    SELECT id FROM visions
-    WHERE ${Prisma.join(conditions, " AND ")}
-    ORDER BY "lastTouchedAt" DESC
-    LIMIT 20
-  `;
-  return loadInOrder("vision", userId, ids, VISION_SELECT);
+  return prisma.vision.findMany({
+    where: {
+      userId,
+      ...statusWhere(options.status),
+      ...(options.space ? { space: options.space } : {}),
+      ...andWhere([
+        termFilter("vision", options.termGroups, options.location),
+        timeframeWhere(options.timeframe, "lastTouchedAt"),
+      ]),
+    },
+    select: VISION_SELECT,
+    orderBy: { lastTouchedAt: "desc" },
+    take: 20,
+  });
 }
 
 function hasQueryConstraint(options) {
@@ -717,65 +710,94 @@ function hasQueryConstraint(options) {
   );
 }
 
-function pushTerms(conditions, termGroups, blobName) {
-  if (!termGroups?.length) return;
-  const groups = termGroups.map((words) => {
-    const parts = words.map((word) => blobMatch(blobName, word));
-    return Prisma.sql`(${Prisma.join(parts, " AND ")})`;
-  });
-  conditions.push(Prisma.sql`(${Prisma.join(groups, " OR ")})`);
+function statusWhere(status) {
+  if (status === "archived") return { status: "archived" };
+  if (status) return { status };
+  return { status: { not: "archived" } };
 }
 
-function pushLocation(conditions, location, blobName) {
-  if (!location) return;
-  conditions.push(blobMatch(blobName, location));
+function timeframeWhere(timeframe, field) {
+  if (!timeframe) return null;
+  const range = { gte: timeframe.start, lt: timeframe.end };
+  return {
+    OR: [
+      { [field]: range },
+      { AND: [{ [field]: null }, { createdAt: range }] },
+    ],
+  };
 }
 
-function blobMatch(kind, word) {
-  const pattern = like(word);
+function termFilter(kind, termGroups, location) {
+  const parts = [];
+  if (location) parts.push(wordMatch(kind, location));
+  if (termGroups?.length) {
+    parts.push({
+      OR: termGroups.map((words) => ({
+        AND: words.map((word) => wordMatch(kind, word)),
+      })),
+    });
+  }
+  if (!parts.length) return null;
+  return parts.length === 1 ? parts[0] : { AND: parts };
+}
+
+function projectFilter() {
+  return {
+    OR: [
+      { eventType: "project_update" },
+      { title: { contains: "project", mode: "insensitive" } },
+      { understoodMeaning: { contains: "project", mode: "insensitive" } },
+      { tags: { hasSome: ["project", "Project"] } },
+    ],
+  };
+}
+
+function andWhere(parts) {
+  const and = parts.filter(Boolean);
+  return and.length ? { AND: and } : {};
+}
+
+function wordMatch(kind, word) {
+  const forms = matchForms(word);
   if (kind === "event") {
-    return Prisma.sql`(
-      title ILIKE ${pattern}
-      OR COALESCE("understoodMeaning", '') ILIKE ${pattern}
-      OR COALESCE(notes, '') ILIKE ${pattern}
-      OR places::text ILIKE ${pattern}
-      OR people::text ILIKE ${pattern}
-      OR financials::text ILIKE ${pattern}
-      OR tags::text ILIKE ${pattern}
-    )`;
+    return {
+      OR: [
+        { title: { contains: word, mode: "insensitive" } },
+        { understoodMeaning: { contains: word, mode: "insensitive" } },
+        { notes: { contains: word, mode: "insensitive" } },
+        ...forms.map((form) => ({ places: { string_contains: form } })),
+        ...forms.map((form) => ({ people: { string_contains: form } })),
+        ...forms.map((form) => ({ financials: { string_contains: form } })),
+        { tags: { hasSome: forms } },
+      ],
+    };
   }
   if (kind === "entity") {
-    return Prisma.sql`(
-      name ILIKE ${pattern}
-      OR COALESCE(description, '') ILIKE ${pattern}
-      OR aliases::text ILIKE ${pattern}
-      OR attributes::text ILIKE ${pattern}
-    )`;
+    return {
+      OR: [
+        { name: { contains: word, mode: "insensitive" } },
+        { description: { contains: word, mode: "insensitive" } },
+        { aliases: { hasSome: forms } },
+        ...forms.map((form) => ({ attributes: { string_contains: form } })),
+      ],
+    };
   }
-  return Prisma.sql`(
-    title ILIKE ${pattern}
-    OR COALESCE(summary, '') ILIKE ${pattern}
-    OR COALESCE(notes, '') ILIKE ${pattern}
-    OR tags::text ILIKE ${pattern}
-    OR "connectedEntities"::text ILIKE ${pattern}
-  )`;
+  return {
+    OR: [
+      { title: { contains: word, mode: "insensitive" } },
+      { summary: { contains: word, mode: "insensitive" } },
+      { notes: { contains: word, mode: "insensitive" } },
+      { tags: { hasSome: forms } },
+      ...forms.map((form) => ({ connectedEntities: { string_contains: form } })),
+    ],
+  };
 }
 
-function pushStatus(conditions, status) {
-  if (status === "archived") {
-    conditions.push(Prisma.sql`status = 'archived'`);
-    return;
-  }
-  conditions.push(Prisma.sql`status <> 'archived'`);
-  if (status) conditions.push(Prisma.sql`status = ${status}`);
-}
-
-function pushTimeframe(conditions, timeframe, primary, fallback) {
-  if (!timeframe) return;
-  conditions.push(Prisma.sql`(
-    (${primary} >= ${timeframe.start} AND ${primary} < ${timeframe.end})
-    OR (${primary} IS NULL AND ${fallback} >= ${timeframe.start} AND ${fallback} < ${timeframe.end})
-  )`);
+function matchForms(word) {
+  const value = String(word || "").trim();
+  const lower = value.toLowerCase();
+  const titled = lower ? `${lower.charAt(0).toUpperCase()}${lower.slice(1)}` : value;
+  return [...new Set([value, lower, titled, value.toUpperCase()].filter(Boolean))];
 }
 
 async function loadInOrder(model, userId, rows, select) {
@@ -804,15 +826,7 @@ async function collectCorrectionTargets(correction, userId) {
 }
 
 async function idsContaining(model, userId, needle) {
-  const table = model === "event" ? Prisma.sql`events` : model === "entity" ? Prisma.sql`entities` : Prisma.sql`visions`;
-  const rows = await prisma.$queryRaw`
-    SELECT id FROM ${table}
-    WHERE "userId" = ${userId}::uuid
-      AND status <> 'archived'
-      AND ${blobMatch(model, needle)}
-    LIMIT 40
-  `;
-  return rows.map((row) => row.id);
+  return findMatchingIds(model, userId, [needle], 40);
 }
 
 function replacementFor(model, record, findText, replaceText) {
@@ -872,15 +886,19 @@ async function searchNamed(userId, target, model) {
 }
 
 async function idsMatchingWords(model, userId, words) {
-  const table = model === "event" ? Prisma.sql`events` : model === "entity" ? Prisma.sql`entities` : Prisma.sql`visions`;
-  const parts = words.map((word) => blobMatch(model, word));
-  const rows = await prisma.$queryRaw`
-    SELECT id FROM ${table}
-    WHERE "userId" = ${userId}::uuid
-      AND status <> 'archived'
-      AND ${Prisma.join(parts, " AND ")}
-    LIMIT 20
-  `;
+  return findMatchingIds(model, userId, words, 20);
+}
+
+async function findMatchingIds(model, userId, words, take) {
+  const rows = await prisma[model].findMany({
+    where: {
+      userId,
+      status: { not: "archived" },
+      AND: words.map((word) => wordMatch(model, word)),
+    },
+    select: { id: true },
+    take,
+  });
   return rows.map((row) => row.id);
 }
 
@@ -1430,10 +1448,6 @@ function yearRange(year) {
 
 function monthRange(year, month) {
   return { start: new Date(year, month, 1), end: new Date(year, month + 1, 1) };
-}
-
-function like(value) {
-  return `%${String(value).replace(/[\\%_]/g, "").slice(0, 80)}%`;
 }
 
 function clipWords(text, max) {
