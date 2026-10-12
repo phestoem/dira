@@ -158,11 +158,16 @@ async function loadContext(userId) {
       take: 30,
       select: {
         title: true,
+        eventType: true,
         space: true,
         occurredAt: true,
         createdAt: true,
+        understoodMeaning: true,
         financials: true,
+        people: true,
         places: true,
+        tags: true,
+        fullText: true,
       },
     }),
     prisma.event.findMany({
@@ -227,7 +232,7 @@ async function loadContext(userId) {
 }
 
 function buildSystemPrompt(context) {
-  const lines = context.events.map(formatEvent);
+  const lines = context.events.map(buildEventContext);
   const visionLines = context.visions.map((vision) => formatVision(vision, context.entityNames));
   const entityLines = context.entities.map((entity) => {
     const description = clip(entity.description, 140);
@@ -255,12 +260,21 @@ even if the word 'project' doesn't appear.
 'land' should find property purchase events.
 Understand intent, not just keywords.
 
+You have access to structured data AND full document
+text for each event. Use ALL of it to answer questions.
+If someone asks about plot boundaries, look in the
+document content. If they ask about legal conditions,
+look in the document content. If they ask about
+technical specifications, look in the document content.
+The summary is a starting point — the full context
+is what matters.
+
 CURRENT DATE: ${today}
 
 LIFE GRAPH CONTEXT:
 
 EVENTS:
-${lines.length ? lines.join("\n") : "none recorded"}${coverage}
+${lines.length ? lines.join("\n\n") : "none recorded"}${coverage}
 
 ACTIVE VISIONS:
 ${visionLines.length ? visionLines.join("\n") : "none"}
@@ -276,11 +290,52 @@ ${financials}
 ${context.altimetrixLinked ? "\nNote: This person also uses Altimetrix for personal reflection. Their emotional context is held there, not here." : ""}`;
 }
 
-function formatEvent(event) {
-  const when = formatWhen(event.occurredAt || event.createdAt);
-  const location = placeName(event.places);
-  const money = moneySummary(event.financials);
-  return [event.title, event.space, when, money, location].filter(Boolean).join(" | ");
+function buildEventContext(event) {
+  const parts = [];
+  const financials = event.financials && typeof event.financials === "object" && !Array.isArray(event.financials) ? event.financials : {};
+  const money = readMoney(financials);
+  const people = Array.isArray(event.people) ? event.people : [];
+  const tags = Array.isArray(event.tags) ? event.tags.filter((tag) => typeof tag === "string" && tag.trim()) : [];
+  const location = typeof event.location === "string" && event.location.trim()
+    ? event.location.trim()
+    : placeName(event.places);
+  const summary = typeof event.understoodMeaning === "string" ? event.understoodMeaning.trim() : "";
+  const fullText = typeof event.fullText === "string" ? event.fullText.replace(/\s+/g, " ").trim() : "";
+
+  parts.push(`Title: ${event.title}`);
+  parts.push(`Date: ${formatWhen(event.occurredAt) || "unknown"}`);
+  parts.push(`Type: ${event.eventType}`);
+  parts.push(`Space: ${event.space}`);
+  if (summary) parts.push(`Summary: ${summary.slice(0, 300)}`);
+  if (location) parts.push(`Location: ${location}`);
+
+  const namedPeople = people
+    .map((person) => {
+      if (!person || typeof person !== "object") return "";
+      const name = typeof person.name === "string" ? person.name.trim() : "";
+      const role = typeof person.role === "string" ? person.role.trim() : "";
+      if (!name) return "";
+      return role ? `${name} (${role})` : name;
+    })
+    .filter(Boolean);
+  if (namedPeople.length) parts.push(`People involved: ${namedPeople.join(", ")}`);
+
+  if (financials.hasFinancials || money || (Array.isArray(financials.items) && financials.items.length)) {
+    if (money) parts.push(`Total: ${formatNumber(money.amount)} ${money.currency}`);
+    const items = (Array.isArray(financials.items) ? financials.items : [])
+      .slice(0, 10)
+      .map((item) => {
+        const description = typeof item?.description === "string" && item.description.trim() ? item.description.trim() : "Item";
+        const amount = numberOrNull(item?.amount);
+        const currency = typeof item?.currency === "string" && item.currency.trim() ? item.currency.trim() : money?.currency || "";
+        return amount == null ? `  - ${description}` : `  - ${description}: ${formatNumber(amount)} ${currency}`.trim();
+      });
+    if (items.length) parts.push(`Line items:\n${items.join("\n")}`);
+  }
+
+  if (fullText) parts.push(`Document content: ${fullText.slice(0, 500)}`);
+  if (tags.length) parts.push(`Tags: ${tags.join(", ")}`);
+  return parts.join("\n");
 }
 
 function formatVision(vision, entityNames) {
@@ -387,12 +442,6 @@ function readMoney(financials) {
   if (amount == null || amount === 0) return null;
   const raw = textOr(financials.currency, "TSH").toUpperCase();
   return { amount, currency: raw === "TZS" ? "TSH" : raw };
-}
-
-function moneySummary(financials) {
-  const money = readMoney(financials);
-  if (!money) return null;
-  return `${formatNumber(money.amount)} ${money.currency}`;
 }
 
 function placeName(places) {
