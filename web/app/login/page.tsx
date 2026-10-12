@@ -41,7 +41,7 @@ export default function LoginPage() {
       const { accessToken, refreshToken, user } = await verifyOTP(value, digits);
       saveTokens({ accessToken, refreshToken });
       saveUser(user);
-      router.push("/intake");
+      router.push("/home");
     } catch (err) {
       setOtp("");
       setError(err instanceof Error ? err.message : "Invalid code.");

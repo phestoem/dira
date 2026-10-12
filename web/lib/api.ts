@@ -346,6 +346,7 @@ export type EntityRecord = {
   status: string;
   attributes: Record<string, unknown>;
   aliases: string[];
+  createdAt?: string;
   eventCount?: number;
   visionCount?: number;
   events?: Array<{ id: string; title: string }>;
@@ -630,6 +631,80 @@ export async function askCommand(input: string): Promise<string> {
   const res = await apiFetch(`/commands/ask?${params.toString()}`);
   if (!res.ok) throw new Error(await parseError(res));
   return res.text();
+}
+
+export type HomeRouting = {
+  intent: string;
+  confidence: number;
+  interpretation: string;
+};
+
+export type HomeClarification = {
+  label: string;
+  intent: string;
+  description: string;
+};
+
+export type HomeResponse = {
+  sessionId: string | null;
+  routing: HomeRouting;
+  action: "proceed" | "confirm" | "clarify";
+  result: {
+    type: string;
+    content: unknown;
+    confirmationRequired: boolean;
+    confirmationText: string | null;
+  };
+  clarificationOptions: HomeClarification[] | null;
+};
+
+export type HomeLastAction = {
+  sessionId: string | null;
+  intent: string;
+  summary: string;
+  saved: boolean;
+};
+
+export async function homeInput(
+  message: string,
+  file?: File | null,
+  conversationHistory: Array<{ role: "user" | "assistant"; content: string }> = [],
+  lastAction?: HomeLastAction | null,
+): Promise<HomeResponse> {
+  if (file) {
+    const body = new FormData();
+    body.append("message", message);
+    body.append("conversationHistory", JSON.stringify(conversationHistory));
+    if (lastAction) body.append("lastAction", JSON.stringify(lastAction));
+    body.append("file", file);
+    const res = await apiFetch("/home/input", { method: "POST", body });
+    if (!res.ok) throw new Error(await parseError(res));
+    return res.json() as Promise<HomeResponse>;
+  }
+  const res = await apiFetch("/home/input", {
+    method: "POST",
+    body: JSON.stringify({ message, conversationHistory, lastAction: lastAction || null }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<HomeResponse>;
+}
+
+export async function homeConfirm(
+  sessionId: string,
+  confirmed: boolean,
+  options: {
+    selectedOption?: string;
+    space?: IntakeSpace;
+    occurredAt?: string | null;
+    corrections?: Record<string, unknown>;
+  } = {},
+): Promise<HomeResponse> {
+  const res = await apiFetch("/home/confirm", {
+    method: "POST",
+    body: JSON.stringify({ sessionId, confirmed, ...options }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<HomeResponse>;
 }
 
 export async function saveJournal(content: string, occurredAt?: string): Promise<JournalEntry> {

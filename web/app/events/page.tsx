@@ -89,7 +89,7 @@ export default function EventsPage() {
   return (
     <div className="min-h-[100dvh]">
       <header className="flex items-center justify-between border-b border-[#2A2A28] px-6 py-4">
-        <Link href="/intake" className="text-sm tracking-[0.22em] text-[#F5F3EE]">
+        <Link href="/home" className="text-sm tracking-[0.22em] text-[#F5F3EE]">
           DIRA
         </Link>
         <input
@@ -98,7 +98,7 @@ export default function EventsPage() {
           placeholder="Search events and entities"
           className="mx-4 w-full max-w-xs border-x-0 border-t-0 border-b border-[#2A2A28] bg-transparent pb-1 text-sm text-[#F5F3EE] outline-none placeholder:text-[#6B6963]"
         />
-        <Link href="/intake" className="shrink-0 text-sm text-[#F5F3EE]">
+        <Link href="/home" className="shrink-0 text-sm text-[#F5F3EE]">
           New +
         </Link>
       </header>

@@ -8,7 +8,7 @@ export default function Home() {
   const router = useRouter();
 
   useEffect(() => {
-    router.replace(isAuthenticated() ? "/intake" : "/login");
+    router.replace(isAuthenticated() ? "/home" : "/login");
   }, [router]);
 
   return null;

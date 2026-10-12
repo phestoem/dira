@@ -31,7 +31,7 @@ export default function CommandBar() {
   const [done, setDone] = useState<string[] | null>(null);
 
   useEffect(() => {
-    if (pathname === "/advisor") return;
+    if (pathname === "/advisor" || pathname === "/home" || pathname === "/library" || pathname === "/account" || pathname === "/login") return;
     function onKey(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -130,7 +130,7 @@ export default function CommandBar() {
     }
   }
 
-  if (pathname === "/advisor") return null;
+  if (pathname === "/advisor" || pathname === "/home" || pathname === "/library" || pathname === "/account" || pathname === "/login") return null;
 
   return (
     <>
