@@ -1,13 +1,13 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   confirmCommand,
   interpretCommand,
   type CommandResult,
 } from "@/lib/api";
+import { getAccessToken } from "@/lib/auth";
 
 const EXAMPLES = [
   "Change Ntagha to Ntabha in Mbeya land",
@@ -17,8 +17,6 @@ const EXAMPLES = [
 ];
 
 export default function CommandBar() {
-  const pathname = usePathname();
-  const hidden = pathname === "/login";
   const inputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
   const openRef = useRef(false);
@@ -31,7 +29,6 @@ export default function CommandBar() {
   const [done, setDone] = useState<string[] | null>(null);
 
   useEffect(() => {
-    if (hidden) return;
     function onKey(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -43,7 +40,7 @@ export default function CommandBar() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [hidden]);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -72,6 +69,12 @@ export default function CommandBar() {
   async function run(value: string) {
     const text = value.trim();
     if (!text || loading) return;
+    if (!getAccessToken()) {
+      setInput(text);
+      setError("Sign in to use commands.");
+      setOpen(true);
+      return;
+    }
     const requestId = requestRef.current + 1;
     requestRef.current = requestId;
     setInput(text);
@@ -124,19 +127,23 @@ export default function CommandBar() {
     }
   }
 
-  if (hidden) return null;
-
   return (
     <>
       {open ? null : (
         <button
           type="button"
           aria-label="Open command bar"
-          title="Command (Ctrl+K)"
           onClick={() => setOpen(true)}
-          className="fixed bottom-20 right-4 z-[60] flex h-12 w-12 items-center justify-center rounded-full bg-[#3C3489] text-lg text-[#F5F3EE] shadow-lg"
+          className="fixed inset-x-0 bottom-14 z-[60] flex h-12 items-center gap-3 border-t border-[#2A2A28] bg-[#161614] px-4 text-left"
+          style={{ borderTopWidth: "0.5px" }}
         >
-          /
+          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#3C3489] text-sm text-[#F5F3EE]">
+            /
+          </span>
+          <span className="min-w-0 flex-1 truncate text-sm text-[#6B6963]">
+            Ask anything or give a command...
+          </span>
+          <span className="shrink-0 text-[10px] text-[#6B6963]">Ctrl K</span>
         </button>
       )}
       {open ? (

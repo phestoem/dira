@@ -16,7 +16,7 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-[100dvh] bg-[#0E0E0F] text-[#F5F3EE] antialiased">
-        <div className="pb-16">{children}</div>
+        <div className="pb-28">{children}</div>
         <CommandBar />
         <BottomNav />
       </body>
