@@ -1,7 +1,12 @@
 import "dotenv/config";
+import { mkdirSync } from "fs";
 import Fastify from "fastify";
+import multipart from "@fastify/multipart";
 import corsPlugin from "./plugins/cors.js";
 import authPlugin from "./plugins/auth.js";
+import intakeRoutes from "./routes/intake.js";
+
+mkdirSync("/tmp/dira-uploads", { recursive: true });
 
 const port = Number(process.env.PORT) || 4800;
 
@@ -9,11 +14,26 @@ const app = Fastify({ logger: true });
 
 await app.register(corsPlugin);
 await app.register(authPlugin);
+await app.register(multipart, {
+  limits: { fileSize: 25 * 1024 * 1024 },
+});
+await app.register(intakeRoutes);
 
 app.get("/health", async () => ({
   status: "ok",
   service: "dira-api",
 }));
+
+app.setErrorHandler((error, request, reply) => {
+  if (error.code === "FST_REQ_FILE_TOO_LARGE") {
+    return reply.code(413).send({ error: "File is too large" });
+  }
+  request.log.error(error);
+  const statusCode = error.statusCode && error.statusCode >= 400 ? error.statusCode : 500;
+  return reply.code(statusCode).send({
+    error: statusCode === 500 ? "Internal server error" : error.message,
+  });
+});
 
 try {
   await app.listen({ port, host: "0.0.0.0" });
