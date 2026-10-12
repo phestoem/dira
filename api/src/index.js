@@ -13,6 +13,7 @@ import entityRoutes from "./routes/entities.js";
 import statsRoutes from "./routes/stats.js";
 import userRoutes from "./routes/users.js";
 import commandRoutes from "./routes/commands.js";
+import advisorRoutes from "./routes/advisor.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
 
@@ -34,6 +35,7 @@ await app.register(entityRoutes);
 await app.register(statsRoutes);
 await app.register(userRoutes);
 await app.register(commandRoutes);
+await app.register(advisorRoutes);
 
 app.get("/health", async () => ({
   status: "ok",

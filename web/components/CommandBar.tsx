@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { FormEvent, useEffect, useRef, useState } from "react";
 import {
   confirmCommand,
@@ -17,6 +18,7 @@ const EXAMPLES = [
 ];
 
 export default function CommandBar() {
+  const pathname = usePathname();
   const inputRef = useRef<HTMLInputElement>(null);
   const requestRef = useRef(0);
   const openRef = useRef(false);
@@ -29,6 +31,7 @@ export default function CommandBar() {
   const [done, setDone] = useState<string[] | null>(null);
 
   useEffect(() => {
+    if (pathname === "/advisor") return;
     function onKey(event: KeyboardEvent) {
       if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "k") {
         event.preventDefault();
@@ -40,7 +43,7 @@ export default function CommandBar() {
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, []);
+  }, [pathname]);
 
   useEffect(() => {
     if (!open) return;
@@ -126,6 +129,8 @@ export default function CommandBar() {
       /* The preview is already dismissed. */
     }
   }
+
+  if (pathname === "/advisor") return null;
 
   return (
     <>

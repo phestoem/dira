@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import AccountLink from "@/components/AccountLink";
 import BottomNav from "@/components/BottomNav";
 import CommandBar from "@/components/CommandBar";
 import "./globals.css";
@@ -17,6 +18,7 @@ export default function RootLayout({
     <html lang="en">
       <body className="min-h-[100dvh] bg-[#0E0E0F] text-[#F5F3EE] antialiased">
         <div className="pb-28">{children}</div>
+        <AccountLink />
         <CommandBar />
         <BottomNav />
       </body>

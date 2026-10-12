@@ -538,6 +538,29 @@ export async function confirmCommand(
   return res.json() as Promise<{ success: boolean; changes: string[] }>;
 }
 
+export type AdvisorMessage = { role: "user" | "assistant"; content: string };
+
+export type AdvisorReply = {
+  reply: string;
+  contextUsed: { eventsCount: number; visionsCount: number; entitiesCount: number };
+};
+
+export async function advisorChat(messages: AdvisorMessage[]): Promise<AdvisorReply> {
+  const res = await apiFetch("/advisor/chat", {
+    method: "POST",
+    body: JSON.stringify({ messages }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<AdvisorReply>;
+}
+
+export async function getAdvisorSuggestions(): Promise<string[]> {
+  const res = await apiFetch("/advisor/suggest");
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = (await res.json()) as { suggestions?: string[] };
+  return Array.isArray(data.suggestions) ? data.suggestions : [];
+}
+
 export async function askCommand(input: string): Promise<string> {
   const params = new URLSearchParams({ input });
   const res = await apiFetch(`/commands/ask?${params.toString()}`);

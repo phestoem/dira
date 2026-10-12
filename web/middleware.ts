@@ -18,6 +18,7 @@ export function middleware(request: NextRequest) {
       pathname === "/events" ||
       pathname.startsWith("/events/") ||
       pathname === "/journal" ||
+      pathname === "/advisor" ||
       pathname === "/visions" ||
       pathname.startsWith("/visions/") ||
       pathname === "/entities" ||
@@ -37,6 +38,7 @@ export const config = {
     "/events",
     "/events/:path*",
     "/journal",
+    "/advisor",
     "/visions",
     "/visions/:path*",
     "/entities",

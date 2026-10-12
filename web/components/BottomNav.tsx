@@ -6,9 +6,9 @@ import { usePathname } from "next/navigation";
 const ITEMS = [
   { href: "/intake", label: "Intake", icon: UploadIcon },
   { href: "/events", label: "Events", icon: ListIcon },
-  { href: "/visions", label: "Visions", icon: CompassIcon },
+  { href: "/advisor", label: "Advisor", icon: CompassIcon },
+  { href: "/visions", label: "Visions", icon: SeedIcon },
   { href: "/journal", label: "Journal", icon: JournalIcon },
-  { href: "/account", label: "Account", icon: PersonIcon },
 ] as const;
 
 export default function BottomNav() {
@@ -31,7 +31,7 @@ export default function BottomNav() {
               active ? "text-[#7F77DD]" : "text-[#6B6963]"
             }`}
           >
-            <Icon />
+            <Icon prominent={item.href === "/advisor"} />
             <span className="text-[9px] leading-none">{item.label}</span>
           </Link>
         );
@@ -40,7 +40,8 @@ export default function BottomNav() {
   );
 }
 
-function UploadIcon() {
+function UploadIcon({ prominent }: { prominent?: boolean }) {
+  void prominent;
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M12 16V5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -50,7 +51,8 @@ function UploadIcon() {
   );
 }
 
-function ListIcon() {
+function ListIcon({ prominent }: { prominent?: boolean }) {
+  void prominent;
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M9 7h11M9 12h11M9 17h11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
@@ -59,16 +61,29 @@ function ListIcon() {
   );
 }
 
-function CompassIcon() {
+function CompassIcon({ prominent = false }: { prominent?: boolean }) {
+  const size = prominent ? 22 : 18;
   return (
-    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <circle cx="12" cy="12" r="8" stroke="currentColor" strokeWidth="1.5" />
       <path d="m14.8 9.2-1.6 4.2-4.2 1.6 1.6-4.2 4.2-1.6Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
     </svg>
   );
 }
 
-function JournalIcon() {
+function SeedIcon({ prominent }: { prominent?: boolean }) {
+  void prominent;
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M12 20V10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M12 13c2.8-1.2 4.2-3.4 4.5-6.2-3 .2-5 1.6-6 3.4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M12 14.5c-2.2-1-3.6-2.8-4.2-5.2 2.6.4 4.2 1.6 5.2 3.2" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function JournalIcon({ prominent }: { prominent?: boolean }) {
+  void prominent;
   return (
     <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M6.5 3.5h11A1.5 1.5 0 0 1 19 5v14.5H7.2A2.2 2.2 0 0 0 5 21.7V5.7A2.2 2.2 0 0 1 7.2 3.5Z" stroke="currentColor" strokeWidth="1.5" strokeLinejoin="round" />
@@ -77,11 +92,3 @@ function JournalIcon() {
   );
 }
 
-function PersonIcon() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="8" r="3" stroke="currentColor" strokeWidth="1.5" />
-      <path d="M5.5 19.5c1.2-2.8 3.3-4 6.5-4s5.3 1.2 6.5 4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-    </svg>
-  );
-}
