@@ -499,6 +499,8 @@ function publicUnderstanding(result) {
   return {
     queueId: undefined,
     suggestedSpace: result.suggestedSpace || null,
+    altimetrixContext: result.understood.altimetrixContext || null,
+    emotionalSignificance: result.understood.emotionalSignificance || null,
     understood: {
       title: result.understood.title,
       summary: result.understood.summary,
@@ -509,6 +511,9 @@ function publicUnderstanding(result) {
       people: result.understood.people,
       financial: result.understood.financial,
       confidence: result.understood.confidence,
+      needsClarification: result.understood.needsClarification || null,
+      altimetrixContext: result.understood.altimetrixContext || null,
+      emotionalSignificance: result.understood.emotionalSignificance || null,
     },
     matchingEntities: (result.matchingEntities || []).map((entity) => ({
       id: entity.id,

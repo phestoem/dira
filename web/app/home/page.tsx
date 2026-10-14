@@ -539,6 +539,40 @@ function UnderstandingCard({
         </p>
       ) : null}
       {understood.location ? <p className="mt-2 text-xs text-[#6B6963]">{understood.location}</p> : null}
+      {content.altimetrixContext ? (
+        <div
+          style={{
+            background: "#1A1A2E",
+            border: "1px solid #3C3489",
+            borderRadius: "8px",
+            padding: "12px 14px",
+            marginTop: "12px",
+          }}
+        >
+          <div
+            style={{
+              fontSize: "11px",
+              color: "#7F77DD",
+              fontWeight: 600,
+              marginBottom: "6px",
+              textTransform: "uppercase",
+              letterSpacing: "0.5px",
+            }}
+          >
+            From Altimetrix
+          </div>
+          <div
+            style={{
+              fontSize: "13px",
+              color: "#9B9892",
+              fontStyle: "italic",
+              lineHeight: "1.6",
+            }}
+          >
+            {content.altimetrixContext}
+          </div>
+        </div>
+      ) : null}
       {content.duplicate ? (
         <p className="mt-3 rounded-md border border-[#EF9F27] bg-[#2A1F00] px-3 py-2 text-xs text-[#F5F3EE]">
           {content.duplicate.message}:{" "}
@@ -703,6 +737,8 @@ function highlightAmounts(text: string, keyPrefix: string): ReactNode[] {
 
 type UnderstandingContent = {
   suggestedSpace?: IntakeSpace | null;
+  altimetrixContext?: string | null;
+  emotionalSignificance?: string | null;
   understood: {
     title: string;
     summary: string;
