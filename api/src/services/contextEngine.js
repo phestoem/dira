@@ -707,14 +707,30 @@ export async function detectVisionInJournalEntry(entry, userId) {
 }
 
 async function understandWithContext(rawText, userId, eventType) {
-  const topics = extractQuickTopics(rawText);
-  const entityNames = extractEntityNames(rawText);
-  const [understood, altimetrixContext] = await Promise.all([
-    interpretContent(rawText),
-    prisma.user
-      .findUnique({ where: { id: userId } })
-      .then((user) => getAltimetrixContext(topics, entityNames, eventType, user)),
-  ]);
+  const understood = await interpretContent(rawText);
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  const topics = contextTopics(rawText, understood);
+  const entityNames = contextNames(rawText, understood);
+  console.log(
+    "[intake] altimetrix query:",
+    topics.join(", ") || "(none)",
+    "|",
+    entityNames.join(", ") || "(none)",
+  );
+  const altimetrixContext = await getAltimetrixContext(
+    topics,
+    entityNames,
+    eventType,
+    user,
+    contextQuery(rawText, understood),
+  );
+  if (!user?.altimetrixUserId) {
+    console.log("[intake] altimetrix skipped: account not linked");
+  } else if (altimetrixContext?.context) {
+    console.log("[intake] altimetrix context attached");
+  } else {
+    console.log("[intake] altimetrix returned no context");
+  }
   return applyAltimetrix(understood, altimetrixContext);
 }
 
@@ -753,32 +769,78 @@ async function enrichVision(vision, userId, location) {
   console.log("[bridge] vision enriched from Altimetrix:", vision.title);
 }
 
+const NEEDLE_SKIP = new Set([
+  "the", "this", "that", "from", "with", "and", "for", "your", "what", "when", "where",
+  "have", "been", "they", "them", "their", "some", "more", "also", "just", "like",
+  "want", "would", "could", "should", "about", "into", "over", "after", "before",
+  "plan", "plans", "planning", "notes", "other", "event", "looks",
+]);
+
+function contextQuery(rawText, understood) {
+  const bits = [understood?.title, understood?.location, understood?.summary].filter(
+    (bit) => typeof bit === "string" && bit.trim(),
+  );
+  const note = String(rawText || "").replace(/\s+/g, " ").trim().slice(0, 400);
+  return [bits.join(". "), note].filter(Boolean).join(" — ").slice(0, 700);
+}
+
+function contextTopics(rawText, understood) {
+  const people = Array.isArray(understood?.people) ? understood.people : [];
+  return uniqueNeedles([
+    ...phraseParts(understood?.location),
+    ...phraseParts(understood?.project),
+    ...people.flatMap((person) => phraseParts(person)),
+    ...extractQuickTopics(rawText),
+    ...phraseParts(understood?.title),
+  ]).slice(0, 8);
+}
+
+function contextNames(rawText, understood) {
+  const people = Array.isArray(understood?.people) ? understood.people : [];
+  return uniqueNeedles([
+    ...extractEntityNames(rawText),
+    ...people,
+    understood?.location,
+  ]).slice(0, 8);
+}
+
+function phraseParts(value) {
+  const text = String(value || "").trim();
+  if (text.length < 3) return [];
+  const words = text
+    .split(/[^A-Za-z0-9]+/)
+    .map((word) => word.toLowerCase())
+    .filter((word) => word.length >= 3 && !NEEDLE_SKIP.has(word));
+  if (words.length === 0) return [];
+  if (words.length === 1) return words;
+  return [words.join(" "), ...words];
+}
+
 function extractQuickTopics(text) {
   const source = String(text || "");
   const locationWords = source.match(
     /\b(Tanzania|Zanzibar|Mbeya|Dar|Helsinki|Finland|Jambiani|Arusha|Nairobi)\b/gi,
   ) || [];
   const activityWords = source.match(
-    /\b(farming|electrical|construction|fence|property|house|land|investment|business|family|health|travel|retirement|project)\b/gi,
+    /\b(farming|electrical|construction|fence|property|house|land|investment|business|family|health|travel|retirement|project|camp(?:ing)?|tent|visitors?|stays?|guesthouse|lodge|hotel)\b/gi,
   ) || [];
   return [...new Set([
     ...locationWords.map((word) => word.toLowerCase()),
     ...activityWords.map((word) => word.toLowerCase()),
-  ])].slice(0, 5);
+  ])].slice(0, 8);
 }
 
 function extractEntityNames(text) {
-  const matches = String(text || "").match(/\b[A-Z][a-z]+\b/g) || [];
-  const skip = new Set(["The", "This", "That", "From", "With", "And", "For", "Your", "What", "When", "Where"]);
-  const counts = {};
-  for (const word of matches) {
-    if (skip.has(word)) continue;
-    counts[word] = (counts[word] || 0) + 1;
-  }
-  return Object.entries(counts)
-    .filter(([, count]) => count > 1)
-    .map(([word]) => word)
-    .slice(0, 5);
+  const source = String(text || "");
+  const phrases = source.match(/\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)+\b/g) || [];
+  const words = source.match(/\b[A-Z][a-z]{2,}\b/g) || [];
+  const skip = new Set([
+    "The", "This", "That", "From", "With", "And", "For", "Your", "What", "When", "Where",
+    "Have", "Been", "They", "Them", "Their", "Some", "More", "Also", "Just", "Like",
+    "Want", "Would", "Could", "Should", "About", "Into", "Over", "After", "Before",
+    "Planning", "Plan", "Plans",
+  ]);
+  return [...new Set([...phrases, ...words.filter((word) => !skip.has(word))])].slice(0, 8);
 }
 
 async function classifyJournalVision(content) {

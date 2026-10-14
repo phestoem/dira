@@ -69,7 +69,7 @@ export async function sendLifeEvent(event, userId, diraUser) {
   }
 }
 
-export async function getAltimetrixContext(topics, entityNames, eventType, diraUser) {
+export async function getAltimetrixContext(topics, entityNames, eventType, diraUser, queryText) {
   try {
     if (!diraUser?.altimetrixUserId) return null;
     const topicList = cleanList(topics);
@@ -80,6 +80,11 @@ export async function getAltimetrixContext(topics, entityNames, eventType, diraU
     const base = bridgeBase();
     if (!secret) return null;
 
+    const subject = [...topicList, ...names].join(", ");
+    const query = typeof queryText === "string" && queryText.trim()
+      ? queryText.trim().slice(0, 700)
+      : `What does this person think/feel about: ${subject}?`;
+
     const response = await fetch(`${base}/bridge/context`, {
       method: "POST",
       headers: {
@@ -88,7 +93,7 @@ export async function getAltimetrixContext(topics, entityNames, eventType, diraU
       },
       body: JSON.stringify({
         userId: diraUser.altimetrixUserId,
-        query: `What does this person think/feel about: ${topicList.join(", ")}?`,
+        query,
         topics: topicList,
         entityNames: names,
         eventType: eventType || "personal",
