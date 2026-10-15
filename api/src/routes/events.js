@@ -1,4 +1,5 @@
 import { prisma } from "../prisma.js";
+import { retireEdges } from "../services/graph/relationshipExtractor.js";
 
 const SPACES = new Set(["personal", "family", "professional", "vision"]);
 const STATUSES = new Set(["active", "completed", "cancelled", "dormant", "archived"]);
@@ -113,6 +114,7 @@ export default async function eventRoutes(fastify) {
       where: { id: existing.id },
       data,
     });
+    if (data.status === "archived") await retireEdges(request.userId, "event", existing.id);
     return presentEvent(updated, { detail: true });
   });
 
@@ -130,6 +132,7 @@ export default async function eventRoutes(fastify) {
       where: { id: existing.id },
       data: { status: "archived" },
     });
+    await retireEdges(request.userId, "event", existing.id);
     if (queue) {
       await prisma.inputQueue.update({
         where: { id: queue.id },

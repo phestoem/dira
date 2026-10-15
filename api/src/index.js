@@ -19,6 +19,7 @@ import homeRoutes from "./routes/home.js";
 import emailRoutes from "./routes/email.js";
 import queueRoutes from "./routes/queue.js";
 import digestRoutes from "./routes/digest.js";
+import graphRoutes from "./routes/graph.js";
 import { runScheduledDigests } from "./services/digestService.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
@@ -46,6 +47,7 @@ await app.register(homeRoutes);
 await app.register(emailRoutes);
 await app.register(queueRoutes);
 await app.register(digestRoutes);
+await app.register(graphRoutes);
 
 cron.schedule("0 * * * *", () => {
   console.log("[digest] running daily digest...");

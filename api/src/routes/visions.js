@@ -1,5 +1,6 @@
 import { prisma } from "../prisma.js";
 import { checkAndSendNudges } from "../services/nudgeService.js";
+import { getSubgraph } from "../services/graph/graphQuery.js";
 
 const STATUSES = new Set(["seed", "forming", "held", "active", "released", "archived"]);
 const FILTERABLE = new Set(["seed", "forming", "held", "active"]);
@@ -59,7 +60,19 @@ export default async function visionRoutes(fastify) {
         tags: event.tags ?? [],
       }));
 
-    return { suggestions };
+    const seeds = (Array.isArray(vision.connectedEntities) ? vision.connectedEntities : [])
+      .filter((item) => item?.entityId)
+      .map((item) => ({ kind: "entity", id: item.entityId }));
+    let nearby = [];
+    if (seeds.length) {
+      const subgraph = await getSubgraph(request.userId, seeds, { depth: 2, maxNodes: 40 }).catch(() => ({ nodes: [], edges: [] }));
+      nearby = (subgraph.nodes || [])
+        .filter((node) => node.kind === "entity" || node.kind === "event")
+        .slice(0, 8)
+        .map((node) => ({ id: node.id, title: node.name, kind: node.kind }));
+    }
+
+    return { suggestions, nearby };
   });
 
   fastify.post("/visions/:id/link-event", { preHandler: [fastify.authenticate] }, async (request, reply) => {

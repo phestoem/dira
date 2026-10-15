@@ -69,27 +69,33 @@ model RefreshToken {
 model Entity {
   id          String                       @id @default(uuid())
   userId      String
-  // person | place | project | organisation | property | other
-  entityType  String
-  name        String
-  aliases     String[]                     @default([])
-  description String?
-  attributes  Json                         @default("{}")
+  // person | place | project | organisation | property | asset | vehicle | document | other
+  entityType     String
+  name           String
+  aliases        String[]                     @default([])
+  description    String?
+  attributes     Json                         @default("{}")
   // personal | family | professional | vision
-  space       String                       @default("personal")
+  space          String                       @default("personal")
   // active | dormant | archived
-  status      String                       @default("active")
-  embedding   Unsupported("vector(1536)")?
-  createdAt   DateTime                     @default(now())
-  updatedAt   DateTime                     @updatedAt
+  status         String                       @default("active")
+  isSelf         Boolean                      @default(false)
+  kind           String?
+  birthDate      DateTime?
+  deathDate      DateTime?
+  normalizedName String?
+  mergedIntoId   String?
+  embedding      Unsupported("vector(1536)")?
+  createdAt      DateTime                     @default(now())
+  updatedAt      DateTime                     @updatedAt
 
-  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  relationshipsFrom Relationship[] @relation("RelationshipFrom")
-  relationshipsTo   Relationship[] @relation("RelationshipTo")
-  inputResults      InputQueue[]   @relation("InputResultEntity")
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  inputResults InputQueue[] @relation("InputResultEntity")
 
   @@index([userId, space, status])
   @@index([userId, entityType])
+  @@index([userId, normalizedName])
+  @@index([userId, isSelf])
   @@map("entities")
 }
 
@@ -210,25 +216,36 @@ model DiaryEntry {
   @@map("diary_entries")
 }
 
-/// A typed, weighted, directional edge between two entities.
+/// A typed edge between two graph nodes. Nodes may be entities, events, or visions.
 model Relationship {
-  id               String   @id @default(uuid())
-  userId           String
-  fromEntityId     String
-  toEntityId       String
-  // supervises | funds | manages | knows | family | owns | works_at | contributes_to
-  relationshipType String
-  strength         Float    @default(0.5)
-  notes            String?
-  createdAt        DateTime @default(now())
+  id              String    @id @default(uuid())
+  userId          String
+  fromKind        String
+  fromId          String
+  toKind          String
+  toId            String
+  type            String
+  label           String?
+  category        String
+  status          String    @default("suggested")
+  source          String
+  confidence      Float     @default(0.5)
+  strength        Float     @default(0.5)
+  validFrom       DateTime?
+  validTo         DateTime?
+  evidenceEventId String?
+  evidenceText    String?
+  attributes      Json      @default("{}")
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 
-  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-  fromEntity Entity @relation("RelationshipFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
-  toEntity   Entity @relation("RelationshipTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@index([userId, relationshipType])
-  @@index([fromEntityId])
-  @@index([toEntityId])
+  @@unique([userId, fromKind, fromId, type, toKind, toId])
+  @@index([userId, fromKind, fromId])
+  @@index([userId, toKind, toId])
+  @@index([userId, status])
+  @@index([userId, category])
   @@map("relationships")
 }
 

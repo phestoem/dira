@@ -2,6 +2,8 @@ import { extname } from "path";
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { getAltimetrixContext } from "./altimetrixBridge.js";
+import { expandGraphNames } from "./graph/entityResolver.js";
+import { anchorVision } from "./graph/relationshipExtractor.js";
 import {
   extractFromCsv,
   extractFromExcel,
@@ -144,7 +146,7 @@ export async function checkForDuplicate(understood, userId) {
       status: { not: "archived" },
       OR: or,
     },
-    select: { id: true, title: true, financials: true, places: true, tags: true },
+    select: { id: true, title: true, financials: true, places: true, people: true, occurredAt: true, tags: true },
     orderBy: { createdAt: "desc" },
     take: 3,
   });
@@ -205,7 +207,31 @@ function similarityScore(existing, incoming) {
     score += 10;
   }
 
+  if (samePartyAndDate(existing, incoming)) score += 20;
+
   return score;
+}
+
+function samePartyAndDate(existing, incoming) {
+  const left = dayKey(existing?.occurredAt);
+  const right = dayKey(incoming?.occurredAt);
+  if (!left || left !== right) return false;
+  const existingNames = refNames(existing?.people).concat(refNames(existing?.places));
+  const incomingNames = refNames(incoming?.people).concat([incoming?.location].filter(Boolean));
+  const wanted = new Set(incomingNames.map((name) => name.toLowerCase()));
+  return existingNames.some((name) => wanted.has(name.toLowerCase()));
+}
+
+function refNames(value) {
+  if (!Array.isArray(value)) return [];
+  return value.map((item) => (typeof item === "string" ? item : item?.name)).filter((name) => typeof name === "string" && name.trim());
+}
+
+function dayKey(value) {
+  if (!value) return "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toISOString().slice(0, 10);
 }
 
 function placeName(event) {
@@ -698,6 +724,9 @@ export async function detectVisionInJournalEntry(entry, userId) {
   });
   console.log("[vision-detect] created vision:", result.title, "from journal entry:", entry.id);
   setImmediate(() => {
+    anchorVision(userId, vision).catch((err) => console.error("[graph] vision anchor failed:", err.message));
+  });
+  setImmediate(() => {
     enrichVision(vision, userId, result.location).catch((err) => {
       console.error("[bridge] vision enrichment failed:", err.message);
     });
@@ -709,7 +738,7 @@ async function understandWithContext(rawText, userId, eventType) {
   const understood = await interpretContent(rawText);
   const user = await prisma.user.findUnique({ where: { id: userId } });
   const topics = contextTopics(rawText, understood);
-  const entityNames = contextNames(rawText, understood);
+  const entityNames = await expandGraphNames(userId, contextNames(rawText, understood)).catch(() => contextNames(rawText, understood));
   console.log(
     "[intake] altimetrix query:",
     topics.join(", ") || "(none)",

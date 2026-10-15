@@ -12,7 +12,7 @@ export async function generateDigest(userId) {
   const yesterday = shiftDay(today, -1);
   const yesterdayStart = startOfHelsinkiDay(yesterday.year, yesterday.month, yesterday.day);
   const todayStart = startOfHelsinkiDay(today.year, today.month, today.day);
-  const [events, pendingQueue, visions, yesterdayEvents, yesterdayVisions] = await Promise.all([
+  const [events, pendingQueue, visions, yesterdayEvents, yesterdayVisions, people] = await Promise.all([
     prisma.event.findMany({
       where: { userId, status: { not: "archived" } },
       select: { id: true, title: true, occurredAt: true, dueAt: true, people: true },
@@ -48,15 +48,30 @@ export async function generateDigest(userId) {
       },
       select: { title: true },
     }),
+    prisma.entity.findMany({
+      where: { userId, entityType: "person", status: { not: "archived" }, birthDate: { not: null } },
+      select: { id: true, name: true, birthDate: true, deathDate: true, attributes: true, entityType: true },
+    }),
   ]);
 
   const upcomingBirthdays = [];
   const upcomingEvents = [];
-  const mentions = { birthdayIds: [], eventIds: [] };
+  const memorials = [];
+  const mentions = { birthdayIds: [], eventIds: [], memorialIds: [] };
+  const namedBirthdays = new Set();
+
+  for (const person of people) {
+    if (person.deathDate) continue;
+    const birthday = birthdayFromEntity(person, today, memory.birthdayIds);
+    if (!birthday) continue;
+    upcomingBirthdays.push(birthday);
+    mentions.birthdayIds.push(birthday.mark);
+    namedBirthdays.add(person.name.toLowerCase());
+  }
 
   for (const event of events) {
     const birthday = birthdayFrom(event, today, memory.birthdayIds);
-    if (birthday) {
+    if (birthday && !namedBirthdays.has(String(birthday.name || "").toLowerCase())) {
       upcomingBirthdays.push(birthday);
       mentions.birthdayIds.push(birthday.mark);
       continue;
@@ -83,9 +98,40 @@ export async function generateDigest(userId) {
     ...yesterdayVisions.map((vision) => ({ title: vision.title, kind: "vision" })),
   ];
 
+  const family = await familyIds(userId);
+  for (const person of people) {
+    if (!person.deathDate || !family.has(person.id)) continue;
+    const day = calendarDay(person.deathDate);
+    if (!day) continue;
+    const daysAway = daysUntilAnniversary(day.month, day.day, today);
+    if (daysAway !== 0) continue;
+    const key = `${person.id}:${today.year}:memorial`;
+    if (memory.memorialIds.has(key)) continue;
+    const years = today.year - day.year;
+    memorials.push({ name: person.name, years: Math.max(years, 0), mark: key });
+    mentions.memorialIds.push(key);
+  }
+
+  const assets = await prisma.entity.findMany({
+    where: { userId, entityType: { in: ["asset", "vehicle", "document"] }, status: { not: "archived" } },
+    select: { id: true, name: true, attributes: true },
+  });
+  for (const asset of assets) {
+    const expiry = asset.attributes?.expiry || asset.attributes?.expiresAt;
+    const day = calendarDay(expiry);
+    if (!day) continue;
+    const daysAway = daysUntilDate(expiry, today);
+    if (daysAway == null || daysAway < 0 || daysAway > 3) continue;
+    const stage = eventStage(daysAway, memory.eventIds, asset.id, today.year);
+    if (!stage) continue;
+    upcomingEvents.push({ title: `${asset.name} renewal`, date: formatMonthDay(day.month, day.day), daysAway, mark: stage });
+    mentions.eventIds.push(stage);
+  }
+
   const digest = {
     upcomingBirthdays,
     upcomingEvents,
+    memorials,
     pendingQueue,
     dormantVisions,
     yesterday: yesterdayActivity,
@@ -97,9 +143,10 @@ export async function generateDigest(userId) {
     || digest.upcomingEvents.length
     || digest.pendingQueue
     || digest.dormantVisions.length
-    || digest.yesterday.length,
+    || digest.yesterday.length
+    || digest.memorials.length,
   );
-  for (const item of [...upcomingBirthdays, ...upcomingEvents]) delete item.mark;
+  for (const item of [...upcomingBirthdays, ...upcomingEvents, ...memorials]) delete item.mark;
   return digest;
 }
 
@@ -173,6 +220,7 @@ function digestMemory(settings) {
     lastDigestSent: sent && !Number.isNaN(sent.getTime()) ? sent : null,
     birthdayIds: new Set(stringList(content.birthdayIds)),
     eventIds: new Set(stringList(content.eventIds)),
+    memorialIds: new Set(stringList(content.memorialIds)),
   };
 }
 
@@ -188,6 +236,7 @@ async function rememberDigest(user, digest) {
         lastDigestContent: {
           birthdayIds: [...new Set([...previous.birthdayIds, ...digest.mentions.birthdayIds])],
           eventIds: [...new Set([...previous.eventIds, ...digest.mentions.eventIds])],
+          memorialIds: [...new Set([...previous.memorialIds, ...(digest.mentions.memorialIds || [])])],
         },
       },
     },
@@ -201,6 +250,29 @@ function digestSections(digest) {
   if (digest.dormantVisions.length) sections.push("visions");
   if (digest.yesterday.length) sections.push("yesterday");
   return sections;
+}
+
+function birthdayFromEntity(person, today, mentioned) {
+  const day = calendarDay(person.birthDate);
+  if (!day) return null;
+  const daysAway = daysUntilAnniversary(day.month, day.day, today);
+  const stage = birthdayStage(daysAway, mentioned, person.id, anniversaryYear(day.month, day.day, today));
+  if (!stage) return null;
+  return { name: person.name, date: formatMonthDay(day.month, day.day), daysAway, mark: stage };
+}
+
+async function familyIds(userId) {
+  const self = await prisma.entity.findFirst({ where: { userId, isSelf: true }, select: { id: true } });
+  if (!self) return new Set();
+  const edges = await prisma.relationship.findMany({
+    where: { userId, status: "confirmed", category: "family", type: { in: ["parent_of", "spouse_of", "child_of"] } },
+    select: { fromId: true, toId: true, type: true },
+  });
+  const ids = new Set();
+  for (const edge of edges) {
+    if (edge.fromId === self.id || edge.toId === self.id) ids.add(edge.fromId === self.id ? edge.toId : edge.fromId);
+  }
+  return ids;
 }
 
 function birthdayFrom(event, today, mentioned) {
@@ -339,6 +411,7 @@ function renderDigest(digest, when) {
   const blocks = [];
   const upcoming = [
     ...digest.upcomingBirthdays.map((item) => birthdayLine(item)),
+    ...(digest.memorials || []).map((item) => `Today marks ${item.years} years since ${escapeHtml(item.name)} passed`),
     ...digest.upcomingEvents.map((item) => `${escapeHtml(item.title)} ${away(item.daysAway)}`),
   ];
   if (upcoming.length) blocks.push(section("Upcoming", upcoming));

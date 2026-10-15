@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useEffect, useState } from "react";
+import { getGraphSuggestions } from "@/lib/api";
 
 const ITEMS = [
   { href: "/home", label: "Home", icon: HouseIcon },
@@ -11,6 +13,13 @@ const ITEMS = [
 
 export default function BottomNav() {
   const pathname = usePathname();
+  const [reviewCount, setReviewCount] = useState(0);
+  useEffect(() => {
+    if (pathname === "/login") return;
+    getGraphSuggestions()
+      .then((page) => setReviewCount(page.count || 0))
+      .catch(() => setReviewCount(0));
+  }, [pathname]);
   if (pathname === "/login") return null;
 
   return (
@@ -28,7 +37,12 @@ export default function BottomNav() {
             aria-current={active ? "page" : undefined}
             className={`flex flex-1 flex-col items-center justify-center gap-1 ${active ? "text-[#7F77DD]" : "text-[#6B6963]"}`}
           >
-            <Icon />
+            <span className="relative">
+              <Icon />
+              {item.href === "/library" && reviewCount > 0 ? (
+                <span className="absolute -right-2 -top-1 h-1.5 w-1.5 rounded-full bg-[#7F77DD]" />
+              ) : null}
+            </span>
             <span className="text-[9px] leading-none">{item.label}</span>
           </Link>
         );

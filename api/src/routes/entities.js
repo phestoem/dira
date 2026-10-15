@@ -1,6 +1,10 @@
 import { prisma } from "../prisma.js";
+import { normalizeName } from "../services/graph/entityResolver.js";
+import { anchorEventEdges, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
+import { getNeighbors } from "../services/graph/graphQuery.js";
+import { categoryOf, normalizeType } from "../services/graph/relationshipTypes.js";
 
-const TYPES = new Set(["person", "place", "project", "organisation", "property", "other"]);
+const TYPES = new Set(["person", "place", "project", "organisation", "property", "asset", "vehicle", "document", "other"]);
 const SPACES = new Set(["personal", "family", "professional", "vision"]);
 const STATUSES = new Set(["active", "dormant", "archived"]);
 const TARGETS = new Set(["event", "vision", "entity"]);
@@ -78,6 +82,7 @@ export default async function entityRoutes(fastify) {
         return reply.code(400).send({ error: "Name is required" });
       }
       data.name = body.name.trim();
+      data.normalizedName = normalizeName(data.name);
     }
     if (body.description !== undefined) {
       data.description = textOrNull(body.description);
@@ -141,6 +146,7 @@ export async function findOrCreateEntity(userId, input) {
       userId,
       name,
       entityType,
+      normalizedName: normalizeName(name),
       description: textOrNull(input.description),
       space: SPACES.has(input.space) ? input.space : "personal",
       attributes: isPlainObject(input.attributes) ? input.attributes : {},
@@ -162,16 +168,30 @@ export async function linkEntityToTarget(userId, entityId, input) {
     if (targetId === entity.id) throw httpError("Cannot link an entity to itself", 400);
     const target = await ownEntity(userId, targetId);
     if (!target) throw httpError("Target not found", 404);
+    const normalized = normalizeType(relationship);
     const duplicate = await prisma.relationship.findFirst({
-      where: { userId, fromEntityId: entity.id, toEntityId: target.id, relationshipType: relationship },
+      where: {
+        userId,
+        fromKind: "entity",
+        fromId: entity.id,
+        toKind: "entity",
+        toId: target.id,
+        type: normalized.type,
+      },
     });
     if (!duplicate) {
       await prisma.relationship.create({
         data: {
           userId,
-          fromEntityId: entity.id,
-          toEntityId: target.id,
-          relationshipType: relationship,
+          fromKind: "entity",
+          fromId: entity.id,
+          toKind: "entity",
+          toId: target.id,
+          type: normalized.type,
+          category: categoryOf(normalized.type),
+          status: "confirmed",
+          source: "user",
+          attributes: {},
         },
       });
     }
@@ -257,32 +277,32 @@ export async function extractAndLinkEntities(event, userId, understood) {
   }
 
   console.log(`[entity-extract] created/found ${linked.length} entities for event: ${event.id}`);
+  try {
+    await anchorEventEdges(userId, event);
+  } catch (err) {
+    console.error("[graph] anchor failed:", err.message);
+  }
+  const text = [understood?.understoodMeaning, understood?.summary, event.title, String(event.fullText || "").slice(0, 3000)]
+    .filter((part) => typeof part === "string" && part.trim())
+    .join("\n");
+  scheduleExtraction(userId, text, { source: "intake", evidenceEventId: event.id, title: event.title });
   return linked;
 }
 
 async function graphFor(userId, entity) {
-  const [outgoing, incoming, index] = await Promise.all([
-    prisma.relationship.findMany({
-      where: { userId, fromEntityId: entity.id },
-      include: { toEntity: true },
-    }),
-    prisma.relationship.findMany({
-      where: { userId, toEntityId: entity.id },
-      include: { fromEntity: true },
-    }),
+  const [neighbors, index] = await Promise.all([
+    getNeighbors(userId, "entity", entity.id, { includeSuggested: true }),
     relatedIndex(userId),
   ]);
   const related = linksFor(entity.id, index);
   return [
-    ...outgoing.map((row) => ({
-      type: "entity",
-      relationship: row.relationshipType,
-      target: { id: row.toEntity.id, name: row.toEntity.name, entityType: row.toEntity.entityType },
-    })),
-    ...incoming.map((row) => ({
-      type: "entity",
-      relationship: row.relationshipType,
-      target: { id: row.fromEntity.id, name: row.fromEntity.name, entityType: row.fromEntity.entityType },
+    ...neighbors.map((row) => ({
+      type: row.node.kind,
+      relationship: row.displayType,
+      status: row.edge.status,
+      category: row.edge.category,
+      edgeId: row.edge.id,
+      target: { id: row.node.id, name: row.node.name, entityType: row.node.entityType },
     })),
     ...related.events.map((event) => ({
       type: "event",
@@ -348,6 +368,11 @@ function presentEntity(entity, extra = {}) {
     id: entity.id,
     name: entity.name,
     entityType: entity.entityType,
+    kind: entity.kind || null,
+    isSelf: Boolean(entity.isSelf),
+    birthDate: entity.birthDate || null,
+    deathDate: entity.deathDate || null,
+    normalizedName: entity.normalizedName || null,
     description: entity.description,
     space: entity.space,
     status: entity.status,

@@ -25,7 +25,8 @@ export function middleware(request: NextRequest) {
       pathname.startsWith("/visions/") ||
       pathname === "/entities" ||
       pathname.startsWith("/entities/") ||
-      pathname === "/account")
+      pathname === "/account" ||
+      pathname === "/family")
   ) {
     return NextResponse.redirect(new URL("/login", request.url));
   }
@@ -48,5 +49,6 @@ export const config = {
     "/entities",
     "/entities/:path*",
     "/account",
+    "/family",
   ],
 };

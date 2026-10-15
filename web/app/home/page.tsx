@@ -11,10 +11,12 @@ import {
   confirmQueueItem,
   dismissQueueItem,
   getAdvisorSuggestions,
+  getGraphSuggestions,
   getQueue,
   homeConfirm,
   homeInput,
   reopenQueueItem,
+  saveRelationshipFact,
   submitText,
   type CommandRecord,
   type CommandResult,
@@ -87,6 +89,7 @@ export default function HomePage() {
   const [recording, setRecording] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>(FALLBACK_SUGGESTIONS);
   const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [connectionCount, setConnectionCount] = useState(0);
   const [queueOpen, setQueueOpen] = useState(false);
   const [lastConfirmed, setLastConfirmed] = useState<LastConfirmed | null>(null);
 
@@ -110,6 +113,9 @@ export default function HomePage() {
         });
     };
     loadQueue();
+    getGraphSuggestions().then((page) => {
+      if (!cancelled) setConnectionCount(page.count || 0);
+    }).catch(() => undefined);
     const timer = window.setInterval(loadQueue, 60000);
     window.addEventListener("focus", loadQueue);
     return () => {
@@ -335,7 +341,7 @@ export default function HomePage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       <div ref={scrollerRef} className="flex-1 overflow-y-auto">
-        {queue.length > 0 ? (
+        {queue.length > 0 || connectionCount > 0 ? (
           <div className="sticky top-3 z-10 flex justify-center px-4">
             <button
               type="button"
@@ -343,7 +349,8 @@ export default function HomePage() {
               className="rounded-full px-3 py-1.5 text-xs text-[#F5F3EE]"
               style={{ background: "#1A1A2E", border: "1px solid #3C3489" }}
             >
-              {queue.length} {queue.length === 1 ? "item" : "items"} waiting for review
+              {queue.length > 0 ? <span className="block">{queue.length} {queue.length === 1 ? "item" : "items"} waiting for review</span> : null}
+              {connectionCount > 0 ? <span className="block">{connectionCount} connections to confirm</span> : null}
             </button>
           </div>
         ) : null}
@@ -373,6 +380,9 @@ export default function HomePage() {
                 turn={turn}
                 busy={busy}
                 onRetry={(turnId, text) => void retry(turnId, text)}
+                onConfirmEdges={(ids) => {
+                  void followUp(turn.id, () => homeConfirm(turn.response?.sessionId || "", true, { selectedEdgeIds: ids }));
+                }}
                 onConfirm={(space, occurredAt) => {
                   const content = asUnderstanding(turn.response?.result.content);
                   const queueId = turn.reopenQueueId || content?.queueId || "";
@@ -478,6 +488,7 @@ function Message({
   busy,
   onRetry,
   onConfirm,
+  onConfirmEdges,
   onDismiss,
   onOption,
   onCorrect,
@@ -487,6 +498,7 @@ function Message({
   busy: boolean;
   onRetry: (turnId: string, text: string) => void;
   onConfirm: (space: IntakeSpace, occurredAt: string | null) => void;
+  onConfirmEdges: (ids: string[]) => void;
   onDismiss: () => void;
   onOption: (intent: string) => void;
   onCorrect: () => void;
@@ -536,6 +548,7 @@ function Message({
         restored={Boolean(turn.restored)}
         busy={busy}
         onConfirm={onConfirm}
+        onConfirmEdges={onConfirmEdges}
         onDismiss={onDismiss}
         onOption={onOption}
       />
@@ -569,6 +582,7 @@ function ResponseBody({
   restored,
   busy,
   onConfirm,
+  onConfirmEdges,
   onDismiss,
   onOption,
 }: {
@@ -577,10 +591,24 @@ function ResponseBody({
   restored: boolean;
   busy: boolean;
   onConfirm: (space: IntakeSpace, occurredAt: string | null) => void;
+  onConfirmEdges: (ids: string[]) => void;
   onDismiss: () => void;
   onOption: (intent: string) => void;
 }) {
   const { result } = response;
+  if (result.type === "relationship_preview") {
+    const content = result.content as { edges?: Array<{ id: string; line: string }> };
+    return (
+      <RelationshipCard
+        edges={content.edges || []}
+        prompt={result.confirmationText}
+        resolved={resolved}
+        busy={busy}
+        onConfirm={onConfirmEdges}
+        onDismiss={onDismiss}
+      />
+    );
+  }
   if (result.type === "understanding") {
     const understanding = asUnderstanding(result.content);
     if (!understanding) return <DiraMarkdown text={result.confirmationText || ""} />;
@@ -672,6 +700,53 @@ function ResponseBody({
 
 type ChipPhase = "open" | "fading" | "saving" | "saved";
 
+function RelationshipCard({
+  edges,
+  prompt,
+  resolved,
+  busy,
+  onConfirm,
+  onDismiss,
+}: {
+  edges: Array<{ id: string; line: string }>;
+  prompt: string | null;
+  resolved: boolean;
+  busy: boolean;
+  onConfirm: (ids: string[]) => void;
+  onDismiss: () => void;
+}) {
+  const [selected, setSelected] = useState(edges.map((edge) => edge.id));
+  return (
+    <div>
+      {prompt ? <p className="text-sm text-[#F5F3EE]">{prompt}</p> : null}
+      <ul className="mt-3 space-y-2">
+        {edges.map((edge) => (
+          <li key={edge.id} className="text-sm text-[#F5F3EE]">
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={selected.includes(edge.id)}
+                onChange={() => setSelected((current) => (current.includes(edge.id) ? current.filter((id) => id !== edge.id) : [...current, edge.id]))}
+              />
+              {edge.line}
+            </label>
+          </li>
+        ))}
+      </ul>
+      {!resolved ? (
+        <div className="mt-3 flex gap-3 text-sm">
+          <button type="button" disabled={busy || selected.length === 0} onClick={() => onConfirm(selected)} className="text-[#7F77DD] disabled:opacity-60">
+            Confirm
+          </button>
+          <button type="button" disabled={busy} onClick={onDismiss} className="text-[#6B6963]">
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function FactChips({ facts }: { facts: ConversationalFact[] }) {
   const [chips, setChips] = useState(facts.map((fact, index) => ({ ...fact, key: `${index}-${fact.suggestedTitle}`, phase: "open" as ChipPhase })));
 
@@ -700,9 +775,13 @@ function FactChips({ facts }: { facts: ConversationalFact[] }) {
     if (!chip || chip.phase === "saving" || chip.phase === "saved") return;
     setChips((current) => current.map((item) => (item.key === key ? { ...item, phase: "saving" } : item)));
     try {
-      const content = chip.fact.trim().length >= 10 ? chip.fact : `${chip.suggestedTitle}. ${chip.fact}`;
-      const intake = await submitText(content);
-      await confirmIntake(intake.queueId, "personal");
+      if (chip.category === "relationship") {
+        await saveRelationshipFact(chip.fact);
+      } else {
+        const content = chip.fact.trim().length >= 10 ? chip.fact : `${chip.suggestedTitle}. ${chip.fact}`;
+        const intake = await submitText(content);
+        await confirmIntake(intake.queueId, "personal");
+      }
       setChips((current) => current.map((item) => (item.key === key ? { ...item, phase: "saved" } : item)));
       window.setTimeout(() => fade(key), 900);
     } catch {

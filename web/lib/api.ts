@@ -359,7 +359,7 @@ export type Vision = {
   altimetrixContext?: string | null;
 };
 
-export type EntityType = "person" | "place" | "project" | "organisation" | "property" | "other";
+export type EntityType = "person" | "place" | "project" | "organisation" | "property" | "asset" | "vehicle" | "document" | "other";
 
 export type EntityRecord = {
   id: string;
@@ -370,6 +370,10 @@ export type EntityRecord = {
   status: string;
   attributes: Record<string, unknown>;
   aliases: string[];
+  kind?: string | null;
+  isSelf?: boolean;
+  birthDate?: string | null;
+  deathDate?: string | null;
   createdAt?: string;
   eventCount?: number;
   visionCount?: number;
@@ -671,7 +675,7 @@ export type HomeClarification = {
 
 export type ConversationalFact = {
   fact: string;
-  category: "person" | "date" | "place" | "event" | "financial";
+  category: "person" | "date" | "place" | "event" | "financial" | "relationship";
   suggestedTitle: string;
   confidence: number;
 };
@@ -729,6 +733,7 @@ export async function homeConfirm(
     space?: IntakeSpace;
     occurredAt?: string | null;
     corrections?: Record<string, unknown>;
+    selectedEdgeIds?: string[];
   } = {},
 ): Promise<HomeResponse> {
   const res = await apiFetch("/home/confirm", {
@@ -737,6 +742,163 @@ export async function homeConfirm(
   });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<HomeResponse>;
+}
+
+export type GraphNeighbor = {
+  edgeId: string;
+  type: string;
+  category: string;
+  status: string;
+  displayType: string;
+  direction: string;
+  validFrom: string | null;
+  validTo: string | null;
+  label: string | null;
+  source: string;
+  node: { kind: string; id: string; name: string; entityType?: string };
+};
+
+export type GraphSuggestion = {
+  id: string;
+  type: string;
+  category: string;
+  status: string;
+  source: string;
+  fromName: string;
+  toName: string;
+  fromJournal?: boolean;
+  evidenceText?: string | null;
+  attributes?: Record<string, unknown>;
+};
+
+export type FamilyTree = {
+  self: FamilyPerson | null;
+  spouse: FamilyPerson[];
+  parents: FamilyPerson[];
+  grandparents: FamilyPerson[];
+  siblings: FamilyPerson[];
+  children: FamilyPerson[];
+  grandchildren: FamilyPerson[];
+};
+
+export type FamilyPerson = {
+  id: string;
+  name: string;
+  birthDate?: string | null;
+  deathDate?: string | null;
+  kind?: string | null;
+};
+
+export async function getGraphEntity(id: string): Promise<{
+  neighbors: GraphNeighbor[];
+  timeline: Array<{ kind: string; id: string; title: string; at: string | null }>;
+  money: Array<{ name: string; currency: string; total: number; count: number; channel: string | null }>;
+}> {
+  const res = await apiFetch(`/graph/entity/${id}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{
+    neighbors: GraphNeighbor[];
+    timeline: Array<{ kind: string; id: string; title: string; at: string | null }>;
+    money: Array<{ name: string; currency: string; total: number; count: number; channel: string | null }>;
+  }>;
+}
+
+export async function getGraphSubgraph(seed?: string, depth = 2): Promise<{
+  nodes: Array<{ kind: string; id: string; name: string; entityType?: string }>;
+  edges: Array<{ id: string; fromId: string; toId: string; type: string; category: string }>;
+}> {
+  const query = new URLSearchParams();
+  if (seed) query.set("seed", seed);
+  query.set("depth", String(depth));
+  const res = await apiFetch(`/graph/subgraph?${query.toString()}`);
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{
+    nodes: Array<{ kind: string; id: string; name: string; entityType?: string }>;
+    edges: Array<{ id: string; fromId: string; toId: string; type: string; category: string }>;
+  }>;
+}
+
+export async function getFamily(): Promise<FamilyTree> {
+  const res = await apiFetch("/graph/family");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<FamilyTree>;
+}
+
+export async function getGraphSuggestions(): Promise<{
+  relationships: GraphSuggestion[];
+  duplicates: Array<{ left: { id: string; name: string }; right: { id: string; name: string }; score: number }>;
+  conflicts: GraphSuggestion[];
+  count: number;
+}> {
+  const res = await apiFetch("/graph/suggestions");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{
+    relationships: GraphSuggestion[];
+    duplicates: Array<{ left: { id: string; name: string }; right: { id: string; name: string }; score: number }>;
+    conflicts: GraphSuggestion[];
+    count: number;
+  }>;
+}
+
+export async function getGraphTypes(): Promise<{ types: Array<{ type: string; category: string; phrase: string }> }> {
+  const res = await apiFetch("/graph/types");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ types: Array<{ type: string; category: string; phrase: string }> }>;
+}
+
+export async function createGraphRelationship(body: {
+  fromName: string;
+  toName: string;
+  type: string;
+  fromType?: string;
+  toType?: string;
+  note?: string;
+}): Promise<unknown> {
+  const res = await apiFetch("/graph/relationships", { method: "POST", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function saveRelationshipFact(text: string): Promise<unknown> {
+  const res = await apiFetch("/graph/facts", { method: "POST", body: JSON.stringify({ text }) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function confirmGraphRelationship(id: string): Promise<unknown> {
+  const res = await apiFetch(`/graph/relationships/${id}/confirm`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function rejectGraphRelationship(id: string): Promise<unknown> {
+  const res = await apiFetch(`/graph/relationships/${id}/reject`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function patchGraphRelationship(id: string, body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiFetch(`/graph/relationships/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function mergeGraphEntities(keepId: string, mergeId: string): Promise<unknown> {
+  const res = await apiFetch("/graph/entities/merge", { method: "POST", body: JSON.stringify({ keepId, mergeId }) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function separateGraphEntities(leftId: string, rightId: string): Promise<unknown> {
+  const res = await apiFetch("/graph/entities/separate", { method: "POST", body: JSON.stringify({ leftId, rightId }) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function patchGraphEntity(id: string, body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiFetch(`/graph/entities/${id}`, { method: "PATCH", body: JSON.stringify(body) });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
 }
 
 export async function saveJournal(content: string, occurredAt?: string): Promise<JournalEntry> {

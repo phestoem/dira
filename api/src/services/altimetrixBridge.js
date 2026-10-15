@@ -10,6 +10,43 @@ export function isSignificantEvent(event) {
   return isLargeTsh(event, TSH_THRESHOLD);
 }
 
+const shiftSent = new Map();
+
+export async function notifyRelationshipShift(userId, edge, options = {}) {
+  try {
+    if (!edge || (edge.category !== "family" && edge.category !== "ownership")) return { sent: false };
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user?.altimetrixUserId) return { sent: false };
+    const day = new Date().toISOString().slice(0, 10);
+    const key = `${userId}:${edge.fromId}:${day}`;
+    if (shiftSent.get(key)) return { sent: false };
+    shiftSent.set(key, true);
+    const [from, to] = await Promise.all([
+      prisma.entity.findFirst({ where: { id: edge.fromId, userId }, select: { name: true } }),
+      prisma.entity.findFirst({ where: { id: edge.toId, userId }, select: { name: true } }),
+    ]);
+    const verb = String(edge.type || "related").replace(/_/g, " ");
+    const title = options.ended
+      ? `${from?.name || "Someone"} no longer ${verb} ${to?.name || "someone"}`
+      : `${from?.name || "Someone"} ${verb} ${to?.name || "someone"}`;
+    return await postLifeEvent(user, {
+      eventType: "relationship_shift",
+      title,
+      context: null,
+      space: "personal",
+      people: [from?.name, to?.name].filter(Boolean).map((name) => ({ name })),
+      financials: null,
+      occurredAt: new Date().toISOString(),
+      reflectionHint: "A close relationship or something you own has changed.",
+      sourceSystem: "dira",
+      sourceEventId: edge.id,
+    });
+  } catch (err) {
+    console.error("[bridge] error:", err.message);
+    return { sent: false };
+  }
+}
+
 export async function sendLifeEvent(event, userId, diraUser) {
   try {
     const linkedId = diraUser?.altimetrixUserId;
@@ -43,13 +80,25 @@ export async function sendLifeEvent(event, userId, diraUser) {
       sourceEventId: event.id,
     };
 
+    return postLifeEvent(diraUser, payload, event.id);
+  } catch (err) {
+    console.error("[bridge] error:", err.message);
+    return { sent: false };
+  }
+}
+
+async function postLifeEvent(diraUser, payload, markEventId) {
+  try {
+    const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
+    const base = (process.env.ALTIMETRIX_URL || process.env.ALTIMETRIX_API_URL || "http://localhost:4700").replace(/\/$/, "");
+    if (!secret || !diraUser?.altimetrixUserId) return { sent: false };
     const response = await fetch(`${base}/life-events/ingest`, {
       method: "POST",
       headers: {
         "X-Bridge-Secret": secret,
         "Content-Type": "application/json",
       },
-      body: JSON.stringify(payload),
+      body: JSON.stringify({ ...payload, userId: diraUser.altimetrixUserId }),
     });
     if (!response.ok) {
       const detail = await response.text();
@@ -57,11 +106,13 @@ export async function sendLifeEvent(event, userId, diraUser) {
       return { sent: false };
     }
 
-    await prisma.event.update({
-      where: { id: event.id },
-      data: { sentToAltimetrix: true },
-    });
-    console.log("[bridge] sent event:", event.title, "→ Altimetrix");
+    if (markEventId) {
+      await prisma.event.update({
+        where: { id: markEventId },
+        data: { sentToAltimetrix: true },
+      });
+    }
+    console.log("[bridge] sent event:", payload.title, "→ Altimetrix");
     return { sent: true };
   } catch (err) {
     console.error("[bridge] error:", err.message);

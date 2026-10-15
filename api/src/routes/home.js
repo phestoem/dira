@@ -14,6 +14,10 @@ import {
 import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
+import { commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
+import { getOrCreateSelf } from "../services/graph/entityResolver.js";
+import { findPaths, getFamilyTree, getMoneyFlows, getNeighbors, serializeForPrompt, getSubgraph } from "../services/graph/graphQuery.js";
+import { phraseFor } from "../services/graph/relationshipTypes.js";
 
 const UPLOAD_DIR = "/tmp/dira-uploads";
 const PENDING_TTL_MS = 5 * 60 * 1000;
@@ -39,6 +43,9 @@ const INTENT_LABEL = {
   command: "Change something",
   journal: "Journal entry",
   correction: "Correct the last thing",
+  relationship_add: "Save a connection",
+  relationship_change: "Update a connection",
+  graph_query: "Answer from the graph",
 };
 
 export default async function homeRoutes(fastify) {
@@ -95,6 +102,7 @@ export default async function homeRoutes(fastify) {
       if (entry.kind === "intake") return await confirmIntake(request, entry, body);
       if (entry.kind === "journal") return await confirmJournal(request.userId, entry);
       if (entry.kind === "command") return await confirmStoredCommand(entry);
+      if (entry.kind === "relationships") return await confirmRelationships(request.userId, entry, body);
       if (entry.kind === "dismiss") return await confirmDismiss(request.userId, entry);
       return reply.code(400).send({ error: "Nothing to confirm." });
     } catch (err) {
@@ -110,6 +118,9 @@ async function executeIntent(userId, routing, payload) {
   if (routing.intent === "command") return runCommand(userId, routing, payload);
   if (routing.intent === "journal") return runJournal(userId, routing, payload);
   if (routing.intent === "correction") return runCorrection(userId, routing, payload);
+  if (routing.intent === "relationship_add") return runRelationshipAdd(userId, routing, payload);
+  if (routing.intent === "relationship_change") return runRelationshipChange(userId, routing, payload);
+  if (routing.intent === "graph_query") return runGraphQuery(userId, routing, payload);
   return clarifyResponse(userId, { ...routing, action: "clarify" }, payload);
 }
 
@@ -272,6 +283,9 @@ async function runQuestion(userId, routing, payload) {
     console.error("[home] fact extract failed:", err.message);
     return [];
   });
+  if (looksRelational(payload.message)) {
+    scheduleExtraction(userId, payload.message, { source: "conversation", forceStatus: "suggested", title: "conversation" });
+  }
   const [reply, facts] = await Promise.all([chat(messages, userId), factsPromise]);
   return {
     sessionId: null,
@@ -561,7 +575,173 @@ async function saveJournal(userId, content) {
       console.error("[vision-detect] failed:", err.message);
     }
   });
+  scheduleExtraction(userId, content, { source: "journal", forceStatus: "suggested" });
   return entry;
+}
+
+async function runRelationshipAdd(userId, routing, payload) {
+  const self = await getOrCreateSelf(userId);
+  const extracted = await extractTriples(payload.message, {
+    selfName: self.name,
+    today: new Date().toISOString().slice(0, 10),
+  });
+  const committed = await commitTriples(userId, extracted.triples, {
+    source: "conversation",
+    forceStatus: "suggested",
+    entityFacts: extracted.entityFacts,
+  });
+  const edges = await recentSuggested(userId, committed.created + committed.updated);
+  return relationshipCard(userId, routing, edges, "add");
+}
+
+async function runRelationshipChange(userId, routing, payload) {
+  const self = await getOrCreateSelf(userId);
+  const extracted = await extractTriples(payload.message, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
+  const proposals = [];
+  for (const triple of extracted.triples) {
+    const saved = await commitTriples(userId, [triple], { source: "conversation", forceStatus: "suggested" });
+    void saved;
+  }
+  const edges = await prisma.relationship.findMany({
+    where: { userId, status: "confirmed", validTo: null },
+    orderBy: { updatedAt: "desc" },
+    take: 8,
+  });
+  const today = new Date().toISOString().slice(0, 10);
+  for (const edge of edges) {
+    if (!messageMentions(payload.message, edge)) continue;
+    proposals.push({ ...edge, proposedValidTo: today });
+  }
+  if (!proposals.length) {
+    return answerResponse(routing, "I couldn't find a confirmed connection to end. It may still be a suggestion in Review.", false);
+  }
+  const sessionId = remember(userId, { kind: "relationships", mode: "change", edgeIds: proposals.map((edge) => edge.id), validTo: today, routing });
+  return {
+    sessionId,
+    routing: publicRouting(routing),
+    action: "confirm",
+    result: {
+      type: "relationship_preview",
+      content: { edges: await labelEdges(userId, proposals), mode: "change" },
+      confirmationRequired: true,
+      confirmationText: "End these connections? They stay in the history.",
+    },
+    clarificationOptions: null,
+  };
+}
+
+async function runGraphQuery(userId, routing, payload) {
+  const self = await getOrCreateSelf(userId);
+  const text = payload.message;
+  let data = "";
+  if (/\bfamily tree|familia|ndugu|parents|siblings|children\b/i.test(text)) {
+    const tree = await getFamilyTree(userId);
+    data = JSON.stringify(tree);
+  } else if (/\bmoney|sent|paid|funded\b/i.test(text)) {
+    data = JSON.stringify(await getMoneyFlows(userId, {}));
+  } else if (/\bhow am i connected|how are we connected|path\b/i.test(text)) {
+    const names = text.match(/\b[A-Z][\p{L}'-]{2,}\b/gu) || [];
+    const target = names.length
+      ? await prisma.entity.findFirst({ where: { userId, name: { equals: names[0], mode: "insensitive" }, status: { not: "archived" } } })
+      : null;
+    data = target
+      ? JSON.stringify(await findPaths(userId, { kind: "entity", id: self.id }, { kind: "entity", id: target.id }))
+      : "No matching person.";
+  } else {
+    const names = text.match(/\b[A-Z][\p{L}'-]{2,}\b/gu) || [];
+    const target = names.length
+      ? await prisma.entity.findFirst({ where: { userId, name: { contains: names[0], mode: "insensitive" }, status: { not: "archived" } } })
+      : self;
+    const neighbors = await getNeighbors(userId, "entity", (target || self).id, {});
+    const subgraph = await getSubgraph(userId, [{ kind: "entity", id: (target || self).id }], { depth: 2 });
+    data = [serializeForPrompt(subgraph).join("\n"), ...neighbors.map((row) => `${row.displayType} ${row.node.name}`)].join("\n");
+  }
+  const messages = advisorMessages(payload.history, `${text}\n\nGRAPH DATA:\n${data || "No confirmed connections."}`);
+  const reply = await chat(messages, userId);
+  return {
+    sessionId: null,
+    routing: publicRouting(routing),
+    action: routing.action,
+    result: {
+      type: "answer",
+      content: { reply: reply.reply, contextUsed: reply.contextUsed },
+      confirmationRequired: false,
+      confirmationText: null,
+    },
+    clarificationOptions: null,
+  };
+}
+
+async function confirmRelationships(userId, entry, body) {
+  const selected = Array.isArray(body.selectedEdgeIds) && body.selectedEdgeIds.length
+    ? body.selectedEdgeIds
+    : entry.edgeIds;
+  const chosen = new Set(selected);
+  for (const id of entry.edgeIds || []) {
+    if (entry.mode === "change") {
+      if (!chosen.has(id)) continue;
+      await prisma.relationship.updateMany({
+        where: { id, userId, status: "confirmed" },
+        data: { validTo: entry.validTo ? new Date(entry.validTo) : new Date() },
+      });
+      continue;
+    }
+    await prisma.relationship.updateMany({
+      where: { id, userId },
+      data: chosen.has(id) ? { status: "confirmed", source: "user" } : { status: "rejected" },
+    });
+  }
+  return doneResponse(entry.routing, "saved", { message: entry.mode === "change" ? "Updated the history." : "Connections saved." }, null);
+}
+
+async function relationshipCard(userId, routing, edges, mode) {
+  if (!edges.length) {
+    return answerResponse(routing, "I didn't find a connection to save in that.", false);
+  }
+  const sessionId = remember(userId, { kind: "relationships", mode, edgeIds: edges.map((edge) => edge.id), routing });
+  return {
+    sessionId,
+    routing: publicRouting(routing),
+    action: "confirm",
+    result: {
+      type: "relationship_preview",
+      content: { edges: await labelEdges(userId, edges), mode },
+      confirmationRequired: true,
+      confirmationText: "Save these connections?",
+    },
+    clarificationOptions: null,
+  };
+}
+
+async function recentSuggested(userId, count) {
+  return prisma.relationship.findMany({
+    where: { userId, status: "suggested", label: { not: "conflict" } },
+    orderBy: { createdAt: "desc" },
+    take: Math.max(count, 1),
+  });
+}
+
+async function labelEdges(userId, edges) {
+  const ids = [...new Set(edges.flatMap((edge) => [edge.fromId, edge.toId]))];
+  const entities = ids.length ? await prisma.entity.findMany({ where: { userId, id: { in: ids } } }) : [];
+  const names = new Map(entities.map((entity) => [entity.id, entity.name]));
+  return edges.map((edge) => ({
+    id: edge.id,
+    line: `${names.get(edge.fromId) || "Someone"} → ${phraseFor(edge.type, "out")} → ${names.get(edge.toId) || "someone"}`,
+    category: edge.category,
+  }));
+}
+
+function looksRelational(text) {
+  return /\b(mother|father|sister|brother|wife|husband|son|daughter|mama|baba|dada|mke|mume|mtoto|supervises|owns|caretaker|fundi|sibling|spouse)\b/i.test(String(text || ""));
+}
+
+function messageMentions(text, edge) {
+  const blob = String(text || "").toLowerCase();
+  const ending = /\b(no longer|sold|ended|moved|not my|amehama|si tena)\b/i.test(blob);
+  if (!ending) return false;
+  const phrase = String(edge.type || "").replace(/_/g, " ");
+  return blob.includes(phrase) || blob.includes(phrase.split(" ")[0]);
 }
 
 async function readPayload(request) {

@@ -1,6 +1,9 @@
 import { randomUUID } from "crypto";
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
+import { mergeEntities } from "./graph/entityResolver.js";
+import { retireEdges } from "./graph/relationshipExtractor.js";
+import { categoryOf, normalizeType } from "./graph/relationshipTypes.js";
 
 const MODEL = "gpt-4o-mini";
 const PENDING_TTL_MS = 5 * 60 * 1000;
@@ -439,6 +442,9 @@ async function applyActionPlan(plan, affectedIds, userId) {
       const existing = await prisma[op.model].findFirst({ where: { id: op.recordId, userId } });
       if (!existing) continue;
       await prisma[op.model].update({ where: { id: op.recordId }, data: op.data });
+      if (op.data?.status === "archived" && ["event", "vision", "entity"].includes(op.model)) {
+        await retireEdges(userId, op.model, op.recordId);
+      }
       changes.push(`${op.title}: ${op.change}`);
       continue;
     }
@@ -448,21 +454,31 @@ async function applyActionPlan(plan, affectedIds, userId) {
         prisma.entity.findFirst({ where: { id: op.toId, userId } }),
       ]);
       if (!from || !to || from.id === to.id) continue;
+      const normalized = normalizeType(op.relationshipType);
       const duplicate = await prisma.relationship.findFirst({
         where: {
           userId,
-          fromEntityId: from.id,
-          toEntityId: to.id,
-          relationshipType: op.relationshipType,
+          fromKind: "entity",
+          fromId: from.id,
+          toKind: "entity",
+          toId: to.id,
+          type: normalized.type,
         },
       });
       if (!duplicate) {
         await prisma.relationship.create({
           data: {
             userId,
-            fromEntityId: from.id,
-            toEntityId: to.id,
-            relationshipType: op.relationshipType,
+            fromKind: "entity",
+            fromId: from.id,
+            toKind: "entity",
+            toId: to.id,
+            type: normalized.type,
+            category: categoryOf(normalized.type),
+            status: "confirmed",
+            source: "user",
+            strength: 0.7,
+            attributes: {},
           },
         });
       }
@@ -475,9 +491,7 @@ async function applyActionPlan(plan, affectedIds, userId) {
         prisma.entity.findFirst({ where: { id: op.dropId, userId, status: { not: "archived" } } }),
       ]);
       if (!keep || !drop || keep.id === drop.id) continue;
-      const aliases = [...new Set([...(keep.aliases || []), drop.name, ...(drop.aliases || [])])];
-      await prisma.entity.update({ where: { id: keep.id }, data: { aliases } });
-      await prisma.entity.update({ where: { id: drop.id }, data: { status: "archived" } });
+      await mergeEntities(userId, keep.id, drop.id);
       changes.push(`${op.change}`);
     }
   }

@@ -3,12 +3,23 @@
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
-import { getEntity, getEntityGraph, updateEntity, type EntityGraph, type EntityRecord } from "@/lib/api";
+import {
+  confirmGraphRelationship,
+  createGraphRelationship,
+  getEntity,
+  getGraphEntity,
+  getGraphTypes,
+  listEntities,
+  mergeGraphEntities,
+  rejectGraphRelationship,
+  updateEntity,
+  type EntityRecord,
+  type GraphNeighbor,
+} from "@/lib/api";
 
 export default function EntityDetailPage() {
   const params = useParams<{ id: string }>();
   const [entity, setEntity] = useState<EntityRecord | null>(null);
-  const [graph, setGraph] = useState<EntityGraph | null>(null);
   const [name, setName] = useState("");
   const [editingName, setEditingName] = useState(false);
   const [description, setDescription] = useState("");
@@ -16,14 +27,19 @@ export default function EntityDetailPage() {
   const [attributes, setAttributes] = useState<Array<{ key: string; value: string }>>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [neighbors, setNeighbors] = useState<GraphNeighbor[]>([]);
+  const [money, setMoney] = useState<Array<{ name: string; currency: string; total: number; count: number }>>([]);
+  const [timeline, setTimeline] = useState<Array<{ kind: string; id: string; title: string; at: string | null }>>([]);
 
   useEffect(() => {
     let cancelled = false;
-    Promise.all([getEntity(params.id), getEntityGraph(params.id)])
-      .then(([loaded, links]) => {
+    Promise.all([getEntity(params.id), getGraphEntity(params.id)])
+      .then(([loaded, detail]) => {
         if (cancelled) return;
         apply(loaded);
-        setGraph(links);
+        setNeighbors(detail.neighbors);
+        setMoney(detail.money);
+        setTimeline(detail.timeline);
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Could not load this entity.");
@@ -95,8 +111,6 @@ export default function EntityDetailPage() {
       setError(err instanceof Error ? err.message : "Could not save attributes.");
     }
   }
-
-  const entityLinks = (graph?.relationships || []).filter((item) => item.type === "entity");
 
   return (
     <div className="min-h-[100dvh]">
@@ -218,24 +232,155 @@ export default function EntityDetailPage() {
               </ul>
             </section>
 
-            <section className="mt-8">
-              <h2 className="text-sm text-[#6B6963]">Relationships</h2>
-              <ul className="mt-3 space-y-2">
-                {entityLinks.map((item) => (
-                  <li key={`${item.target.id}-${item.relationship}`} className="text-sm text-[#F5F3EE]">
-                    <Link href={`/entities/${item.target.id}`} className="hover:underline">
-                      {item.target.name}
-                    </Link>
-                    <span className="text-[#6B6963]"> · {item.relationship}</span>
-                  </li>
-                ))}
-                {entityLinks.length === 0 ? <li className="text-sm text-[#6B6963]">None yet.</li> : null}
-              </ul>
-            </section>
+            <Connections
+              entity={entity}
+              neighbors={neighbors}
+              money={money}
+              timeline={timeline}
+              onChange={() => {
+                getGraphEntity(entity.id).then((detail) => {
+                  setNeighbors(detail.neighbors);
+                  setMoney(detail.money);
+                  setTimeline(detail.timeline);
+                }).catch(() => undefined);
+              }}
+            />
           </article>
         ) : null}
       </main>
     </div>
+  );
+}
+
+const CATEGORY_COLOR: Record<string, string> = {
+  family: "#D4A5E8",
+  ownership: "#7F77DD",
+  work: "#8FB3D9",
+  project: "#8FB3D9",
+  location: "#9BC59D",
+  financial: "#E8C27A",
+  social: "#9B9892",
+};
+
+function Connections({
+  entity,
+  neighbors,
+  money,
+  timeline,
+  onChange,
+}: {
+  entity: EntityRecord;
+  neighbors: GraphNeighbor[];
+  money: Array<{ name: string; currency: string; total: number; count: number }>;
+  timeline: Array<{ kind: string; id: string; title: string; at: string | null }>;
+  onChange: () => void;
+}) {
+  const [adding, setAdding] = useState(false);
+  const [types, setTypes] = useState<Array<{ type: string; phrase: string }>>([]);
+  const [type, setType] = useState("related_to");
+  const [target, setTarget] = useState("");
+  const [mergeName, setMergeName] = useState("");
+  const groups = new Map<string, GraphNeighbor[]>();
+  for (const neighbor of neighbors) {
+    const list = groups.get(neighbor.category) || [];
+    list.push(neighbor);
+    groups.set(neighbor.category, list);
+  }
+
+  useEffect(() => {
+    if (!adding) return;
+    getGraphTypes().then((page) => setTypes(page.types)).catch(() => undefined);
+  }, [adding]);
+
+  return (
+    <section className="mt-10">
+      <h2 className="text-sm text-[#6B6963]">Connections</h2>
+      {Array.from(groups.entries()).map(([category, rows]) => (
+        <div key={category} className="mt-4">
+          <p className="text-xs capitalize" style={{ color: CATEGORY_COLOR[category] || "#9B9892" }}>
+            {category}
+          </p>
+          <ul className="mt-2 space-y-2">
+            {rows.map((row) => (
+              <li key={row.edgeId} className={`text-sm ${row.validTo ? "text-[#6B6963]" : "text-[#F5F3EE]"}`}>
+                {row.displayType} → {row.node.kind === "entity" ? (
+                  <Link href={`/entities/${row.node.id}`} className="hover:underline">{row.node.name}</Link>
+                ) : row.node.name}
+                {row.validFrom ? ` · since ${row.validFrom.slice(0, 4)}` : ""}
+                {row.validTo ? ` · ended ${row.validTo.slice(0, 10)}` : ""}
+                {row.status === "suggested" ? (
+                  <span className="ml-2 text-xs">
+                    <button type="button" className="text-[#7F77DD]" onClick={() => void confirmGraphRelationship(row.edgeId).then(onChange)}>Confirm</button>
+                    {" · "}
+                    <button type="button" className="text-[#6B6963]" onClick={() => void rejectGraphRelationship(row.edgeId).then(onChange)}>Reject</button>
+                  </span>
+                ) : (
+                  <button type="button" className="ml-2 text-xs text-[#6B6963]" onClick={() => void rejectGraphRelationship(row.edgeId).then(onChange)}>
+                    Remove
+                  </button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+      <button type="button" className="mt-4 text-sm text-[#7F77DD]" onClick={() => setAdding((value) => !value)}>
+        + Add connection
+      </button>
+      {adding ? (
+        <form
+          className="mt-3 space-y-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void createGraphRelationship({ fromName: entity.name, toName: target, type, fromType: entity.entityType, toType: "person" }).then(() => {
+              setTarget("");
+              onChange();
+            });
+          }}
+        >
+          <select value={type} onChange={(event) => setType(event.target.value)} className="w-full border border-[#2A2A28] bg-[#161614] px-2 py-2 text-sm text-[#F5F3EE]">
+            {types.map((item) => (
+              <option key={item.type} value={item.type}>{item.phrase}</option>
+            ))}
+          </select>
+          <input value={target} onChange={(event) => setTarget(event.target.value)} placeholder="Person or place" className="w-full border border-[#2A2A28] bg-transparent px-2 py-2 text-sm text-[#F5F3EE] outline-none" />
+          <button type="submit" className="text-sm text-[#F5F3EE]">Save</button>
+        </form>
+      ) : null}
+      <form
+        className="mt-6 flex gap-2"
+        onSubmit={(event) => {
+          event.preventDefault();
+          void listEntities({ search: mergeName }).then((page) => {
+            const match = page.entities.find((item) => item.id !== entity.id);
+            if (match) return mergeGraphEntities(entity.id, match.id);
+            return null;
+          });
+        }}
+      >
+        <input value={mergeName} onChange={(event) => setMergeName(event.target.value)} placeholder="Merge with…" className="flex-1 border-x-0 border-t-0 border-b border-[#2A2A28] bg-transparent text-sm text-[#F5F3EE] outline-none" />
+        <button type="submit" className="text-sm text-[#6B6963]">Merge</button>
+      </form>
+      {money.length ? (
+        <div className="mt-6">
+          <h3 className="text-sm" style={{ color: CATEGORY_COLOR.financial }}>Money</h3>
+          <ul className="mt-2 space-y-1 text-sm text-[#F5F3EE]">
+            {money.map((row) => (
+              <li key={`${row.name}-${row.currency}`}>{row.total} {row.currency} · {row.count} · {row.name}</li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className="mt-6">
+        <h3 className="text-sm text-[#6B6963]">Timeline</h3>
+        <ul className="mt-2 space-y-1 text-sm text-[#F5F3EE]">
+          {timeline.map((point) => (
+            <li key={`${point.kind}-${point.id}`}>{point.at ? point.at.slice(0, 10) : "Undated"} · {point.title}</li>
+          ))}
+          {timeline.length === 0 ? <li className="text-[#6B6963]">None yet.</li> : null}
+        </ul>
+      </div>
+    </section>
   );
 }
 

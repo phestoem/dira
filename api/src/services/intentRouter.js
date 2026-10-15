@@ -10,6 +10,9 @@ const INTENTS = new Set([
   "command",
   "journal",
   "correction",
+  "relationship_add",
+  "relationship_change",
+  "graph_query",
   "unclear",
 ]);
 
@@ -30,6 +33,15 @@ Intent types:
   (not facts to save — personal reflection)
 - correction: they are correcting something DIRA
   said or did in this conversation
+- relationship_add: they state a connection to remember
+  ("Burton supervises the house", "Neema is my sister",
+   "Otina anasimamia nyumba")
+- relationship_change: a connection ended or changed
+  ("Burton no longer supervises", "we sold the car",
+   "dada yangu amehama")
+- graph_query: they ask who is connected, how they are
+  connected, for a family tree, or who they sent
+  money to
 - unclear: genuinely ambiguous
 
 When the user says 'I meant X' or 'not that, I meant'
@@ -86,6 +98,24 @@ Examples:
 
 'How much have I spent in Tanzania this year?'
 → intent: question, confidence: 0.92
+
+'Burton supervises all my Mbeya projects'
+→ intent: relationship_add, confidence: 0.9
+
+'Neema ni dada yangu'
+→ intent: relationship_add, confidence: 0.9
+
+'Burton no longer supervises Mbeya'
+→ intent: relationship_change, confidence: 0.88
+
+'Who is connected to the Mbeya home?'
+→ intent: graph_query, confidence: 0.9
+
+'How am I connected to Otina?'
+→ intent: graph_query, confidence: 0.9
+
+'Nani ameunganishwa na Mbeya?'
+→ intent: graph_query, confidence: 0.86
 
 'Fix the dates on my events'
 → intent: command, confidence: 0.88
@@ -409,6 +439,30 @@ function heuristic(text, fileAttached) {
       alternatives: [{ intent: "command", interpretation: "Change a saved record." }],
     });
   }
+  if (/\b(no longer|not my|sold the|amehama|si tena)\b/.test(lower) && /\b(supervis|sister|brother|wife|owns|dada|mke|mume)\b/.test(lower)) {
+    return normalize({
+      intent: "relationship_change",
+      confidence: 0.78,
+      interpretation: "Update a connection that has ended.",
+      alternatives: [],
+    });
+  }
+  if (/\b(who is connected|how am i connected|family tree|sent money|nani ameunganishwa)\b/.test(lower)) {
+    return normalize({
+      intent: "graph_query",
+      confidence: 0.8,
+      interpretation: "Answer from the relationship graph.",
+      alternatives: [],
+    });
+  }
+  if (/\b(is my|ni dada|ni kaka|supervises|takes care of|anasimamia)\b/.test(lower)) {
+    return normalize({
+      intent: "relationship_add",
+      confidence: 0.76,
+      interpretation: "Save a connection between people or places.",
+      alternatives: [{ intent: "intake_text", interpretation: "It could also be an event." }],
+    });
+  }
   if (/^(how|what|when|where|why|which|who|did|have|has|am)\b/i.test(text) || text.includes("?")) {
     return normalize({
       intent: "question",
@@ -632,9 +686,10 @@ function stripThink(text) {
   return String(text || "").replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
 
-const FACT_CATEGORIES = new Set(["person", "date", "place", "event", "financial"]);
+const FACT_CATEGORIES = new Set(["person", "date", "place", "event", "financial", "relationship"]);
 const FACT_PROMPT = `Extract any specific biographical or life facts from this message. Return JSON:
-{ "facts": [{ "fact": string, "category": "person" | "date" | "place" | "event" | "financial", "suggestedTitle": string, "confidence": 0-1 }] }
+{ "facts": [{ "fact": string, "category": "person" | "date" | "place" | "event" | "financial" | "relationship", "suggestedTitle": string, "confidence": 0-1 }] }
+A relationship fact uses suggestedTitle like "Link: Neema — sister of you".
 Only return facts that are specific and saveable.
 Names, dates, and places are facts.
 Opinions and questions are not facts.
@@ -715,7 +770,8 @@ function normalizeConversationalFact(item) {
 function factCategory(value) {
   const raw = String(value || "").toLowerCase();
   if (FACT_CATEGORIES.has(raw)) return raw;
-  if (/(person|people|family|relationship|child|daughter|son)/.test(raw)) return "person";
+  if (raw === "relationship" || raw === "link") return "relationship";
+  if (/(person|people|family|child|daughter|son)/.test(raw)) return "person";
   if (/(date|birth|birthday|time)/.test(raw)) return "date";
   if (/(place|location|city)/.test(raw)) return "place";
   if (/(money|financial|cost|payment)/.test(raw)) return "financial";
@@ -727,6 +783,15 @@ const MONTH = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?
 const STOP_NAME = new Set(["our", "my", "the", "a", "an", "her", "his", "their", "daughter", "son", "child", "wife", "husband", "born", "was", "were", "in", "at", "on"]);
 
 function heuristicFacts(text) {
+  const link = text.match(/\b([A-Z][\p{L}'’-]{2,})\s+is my\s+(sister|brother|mother|father|wife|husband|son|daughter)\b/u);
+  if (link) {
+    return [{
+      fact: `${link[1]} is my ${link[2]}`,
+      category: "relationship",
+      suggestedTitle: `Link: ${link[1]} — ${link[2]} of you`,
+      confidence: 0.9,
+    }];
+  }
   const dated = text.match(new RegExp(`\\b${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,)?\\s+\\d{4}\\b|\\b\\d{1,2}[/.\\-]\\d{1,2}[/.\\-]\\d{2,4}\\b`, "i"));
   const monthDay = text.match(new RegExp(`\\b${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, "i"));
   const year = text.match(/\b(?:19|20)\d{2}\b/);

@@ -1,5 +1,7 @@
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
+import { resolveEntity } from "./graph/entityResolver.js";
+import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 
 const MODEL = "qwen/qwen3.8-27b";
 const FACT_MODEL = "gpt-4o-mini";
@@ -104,6 +106,10 @@ Be direct. Use the right format. Let the data speak.`;
 export async function chat(messages, userId) {
   const history = normalizeMessages(messages);
   const context = await loadContext(userId);
+  const latest = [...history].reverse().find((message) => message.role === "user")?.content || "";
+  const graph = await graphContext(userId, latest);
+  context.graphLines = graph.lines;
+  context.familyLines = graph.family;
   const system = buildSystemPrompt(context);
   const reply = await completeChat(history, system);
   console.log(
@@ -299,7 +305,8 @@ async function loadContext(userId) {
 }
 
 function buildSystemPrompt(context) {
-  const lines = context.events.map(buildEventContext);
+  const eventLimit = (context.graphLines || []).length > 20 ? 8 : context.events.length;
+  const lines = context.events.slice(0, eventLimit).map(buildEventContext);
   const visionLines = context.visions.map((vision) => formatVision(vision, context.entityNames));
   const entityLines = context.entities.map((entity) => {
     const description = clip(entity.description, 140);
@@ -354,9 +361,59 @@ ${entityLines.length ? entityLines.join("\n") : "none"}
 RECENT JOURNAL THEMES:
 ${themes}
 
+RELATIONSHIP GRAPH:
+${(context.graphLines || []).length ? context.graphLines.join("\n") : "none confirmed"}
+
+${(context.familyLines || []).length ? `FAMILY:\n${context.familyLines.join("\n")}` : ""}
+
+Prefer confirmed graph edges for who-is-connected questions.
+Mention when a relationship has ended.
+Never state a suggested edge as fact. Say "I have an unconfirmed note that…" when one is useful.
+Speak about people who have died in the past tense, and leave them out of upcoming birthdays.
+
 FINANCIAL PICTURE:
 ${financials}
 ${context.altimetrixLinked ? "\nNote: This person also uses Altimetrix for personal reflection. Their emotional context is held there, not here." : ""}`;
+}
+
+async function graphContext(userId, text) {
+  try {
+    const self = await prisma.entity.findFirst({ where: { userId, isSelf: true, status: { not: "archived" } } });
+    const seeds = self ? [{ kind: "entity", id: self.id }] : [];
+    const names = [
+      ...(String(text).match(/\b(?:my|our)\s+(?:mother|father|wife|husband|sister|brother|son|daughter|mama|baba)\b/gi) || []),
+      ...(String(text).match(/\b[A-Z][\p{L}'-]{2,}(?:\s+[A-Z][\p{L}'-]{2,}){0,2}\b/gu) || []),
+    ].slice(0, 6);
+    for (const name of names) {
+      const resolved = await resolveEntity(userId, { name }, { readOnly: true });
+      if (resolved.entity) seeds.push({ kind: "entity", id: resolved.entity.id });
+    }
+    if (!seeds.length) return { lines: [], family: [] };
+    const subgraph = await getSubgraph(userId, seeds, { depth: 2, maxNodes: 60 });
+    const family = /\b(family|mother|father|sister|brother|wife|husband|son|daughter|birthday|mama|baba|dada)\b/i.test(text)
+      ? familyLines(await getFamilyTree(userId))
+      : [];
+    return { lines: serializeForPrompt(subgraph, { maxTriples: 40 }), family };
+  } catch (err) {
+    console.error("[graph] advisor context failed:", err.message);
+    return { lines: [], family: [] };
+  }
+}
+
+function familyLines(tree) {
+  const line = (person) => {
+    if (!person?.name) return "";
+    const born = person.birthDate ? ` b. ${new Date(person.birthDate).getUTCFullYear()}` : "";
+    const died = person.deathDate ? ` d. ${new Date(person.deathDate).getUTCFullYear()}` : "";
+    return `${person.name}${born}${died}`;
+  };
+  const rows = [];
+  if (tree.self) rows.push(`Self: ${line(tree.self)}`);
+  for (const [label, people] of [["Spouse", tree.spouse], ["Parents", tree.parents], ["Siblings", tree.siblings], ["Children", tree.children]]) {
+    const names = (people || []).map(line).filter(Boolean);
+    if (names.length) rows.push(`${label}: ${names.join(", ")}`);
+  }
+  return rows;
 }
 
 function buildEventContext(event) {

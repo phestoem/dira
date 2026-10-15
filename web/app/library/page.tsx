@@ -11,12 +11,17 @@ import {
   type LifeEvent,
   type Vision,
 } from "@/lib/api";
+import { GraphPanel, PeoplePanel, PlacesPanel, ReviewPanel } from "@/components/GraphLibrary";
 
 const KINDS = [
   { id: "all", label: "All" },
   { id: "events", label: "Events" },
   { id: "visions", label: "Visions" },
   { id: "entities", label: "Entities" },
+  { id: "people", label: "People" },
+  { id: "places", label: "Places & Assets" },
+  { id: "graph", label: "Graph" },
+  { id: "review", label: "Review" },
 ] as const;
 
 const SPACES: Array<{ id: "" | IntakeSpace; label: string }> = [
@@ -126,13 +131,18 @@ export default function LibraryPage() {
           ))}
         </div>
 
+        {kind === "people" ? <PeoplePanel /> : null}
+        {kind === "places" ? <PlacesPanel /> : null}
+        {kind === "graph" ? <GraphPanel /> : null}
+        {kind === "review" ? <ReviewPanel /> : null}
+
         {error ? <p className="mt-6 text-sm text-red-300/85">{error}</p> : null}
-        {loading && rows.length === 0 ? <p className="mt-8 text-sm text-[#6B6963]">Loading…</p> : null}
-        {!loading && !error && rows.length === 0 ? (
+        {loading && rows.length === 0 && !["people", "places", "graph", "review"].includes(kind) ? <p className="mt-8 text-sm text-[#6B6963]">Loading…</p> : null}
+        {!loading && !error && rows.length === 0 && !["people", "places", "graph", "review"].includes(kind) ? (
           <p className="mt-8 text-sm text-[#6B6963]">Nothing here yet. Talk to DIRA and it will show up.</p>
         ) : null}
 
-        <ul className="mt-6 space-y-3">
+        <ul className={`mt-6 space-y-3 ${["people", "places", "graph", "review"].includes(kind) ? "hidden" : ""}`}>
           {rows.map((row) => (
             <li key={`${row.kind}-${row.kind === "event" ? row.event.id : row.kind === "vision" ? row.vision.id : row.entity.id}`}>
               {row.kind === "event" ? <EventCard event={row.event} /> : null}
@@ -208,6 +218,9 @@ function EntityCard({ entity }: { entity: EntityRecord }) {
 }
 
 async function loadLibrary(kind: Kind, space: "" | IntakeSpace, search: string) {
+  if (kind === "people" || kind === "places" || kind === "graph" || kind === "review") {
+    return { rows: [], cursor: null };
+  }
   const wantEvents = kind === "all" || kind === "events";
   const wantVisions = kind === "all" || kind === "visions";
   const wantEntities = kind === "entities" || (kind === "all" && search.length >= 2);
