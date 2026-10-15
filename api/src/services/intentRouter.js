@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
+import { isRelationshipStatement } from "./graph/familyStatement.js";
 
 const OPENAI_MODEL = "gpt-4o-mini";
 const GROQ_MODEL = "qwen/qwen3.8-27b";
@@ -104,6 +105,10 @@ Examples:
 
 'Neema ni dada yangu'
 → intent: relationship_add, confidence: 0.9
+
+'My family: my father Enock Mwakyusa passed away on 25 April 2004 and my mother Froidah Biniala Kyando lives in our family home in Mbeya. My sisters are Jeni, Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda Goodluck Mambosho. My children are Careen (my eldest daughter, born before my marriage), Patrick, Presley, Powell and Prisha.'
+→ intent: relationship_add, confidence: 0.93
+   Dates and places in a family introduction are facts about those people, not a new event.
 
 'Burton no longer supervises Mbeya'
 → intent: relationship_change, confidence: 0.88
@@ -239,6 +244,17 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
   }
   applyConversationCorrection(classified, text, history, fileAttached);
   applyAnswerFollowUp(classified, text, history, lastAction, fileAttached);
+  if (!fileAttached && isRelationshipStatement(text) && !["relationship_change", "correction", "graph_query", "command"].includes(classified.intent)) {
+    if (classified.intent !== "relationship_add") {
+      classified.alternatives = [
+        { intent: classified.intent, interpretation: classified.interpretation },
+        ...classified.alternatives,
+      ].filter((item) => item?.intent && item.intent !== "relationship_add").slice(0, 2);
+    }
+    classified.intent = "relationship_add";
+    classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
+    classified.interpretation = "Save who these people are to you.";
+  }
   return decide(classified);
 }
 
@@ -455,7 +471,7 @@ function heuristic(text, fileAttached) {
       alternatives: [],
     });
   }
-  if (/\b(is my|ni dada|ni kaka|supervises|takes care of|anasimamia)\b/.test(lower)) {
+  if (isRelationshipStatement(text) || /\b(is my|ni dada|ni kaka|supervises|takes care of|anasimamia)\b/.test(lower)) {
     return normalize({
       intent: "relationship_add",
       confidence: 0.76,

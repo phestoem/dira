@@ -14,11 +14,10 @@ import {
 import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
+import { describeRelationshipLine, parseFamilyStatement } from "../services/graph/familyStatement.js";
 import { commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
 import { findPaths, getFamilyTree, getMoneyFlows, getNeighbors, serializeForPrompt, getSubgraph } from "../services/graph/graphQuery.js";
-import { phraseFor } from "../services/graph/relationshipTypes.js";
-
 const UPLOAD_DIR = "/tmp/dira-uploads";
 const PENDING_TTL_MS = 5 * 60 * 1000;
 const pending = new Map();
@@ -581,20 +580,27 @@ async function saveJournal(userId, content) {
 
 async function runRelationshipAdd(userId, routing, payload) {
   const self = await getOrCreateSelf(userId);
-  let extracted;
-  try {
-    extracted = await extractTriples(payload.message, {
-      selfName: self.name,
-      today: new Date().toISOString().slice(0, 10),
-    });
-  } catch (err) {
-    console.error("[graph] relationship extract failed:", err.message);
-    return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
+  const parsed = parseFamilyStatement(payload.message);
+  let triples = parsed.triples;
+  let entityFacts = parsed.entityFacts;
+  if (!triples.length) {
+    try {
+      const extracted = await extractTriples(payload.message, {
+        selfName: self.name,
+        today: new Date().toISOString().slice(0, 10),
+      });
+      triples = extracted.triples;
+      entityFacts = extracted.entityFacts;
+    } catch (err) {
+      console.error("[graph] relationship extract failed:", err.message);
+      return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
+    }
   }
-  const committed = await commitTriples(userId, extracted.triples, {
+  const committed = await commitTriples(userId, triples, {
     source: "conversation",
     forceStatus: "suggested",
-    entityFacts: extracted.entityFacts,
+    entityFacts,
+    message: payload.message,
   });
   const edges = await recentSuggested(userId, committed.created + committed.updated);
   return relationshipCard(userId, routing, edges, "add");
@@ -736,12 +742,29 @@ async function recentSuggested(userId, count) {
 async function labelEdges(userId, edges) {
   const ids = [...new Set(edges.flatMap((edge) => [edge.fromId, edge.toId]))];
   const entities = ids.length ? await prisma.entity.findMany({ where: { userId, id: { in: ids } } }) : [];
-  const names = new Map(entities.map((entity) => [entity.id, entity.name]));
-  return edges.map((edge) => ({
+  const byId = new Map(entities.map((entity) => [entity.id, entity]));
+  const self = entities.find((entity) => entity.isSelf) || await prisma.entity.findFirst({ where: { userId, isSelf: true } });
+  const ordered = edges.slice().sort((left, right) => edgeOrder(left, self?.id) - edgeOrder(right, self?.id) || String(left.createdAt || "").localeCompare(String(right.createdAt || "")));
+  return ordered.map((edge) => ({
     id: edge.id,
-    line: `${names.get(edge.fromId) || "Someone"} → ${phraseFor(edge.type, "out")} → ${names.get(edge.toId) || "someone"}`,
+    line: describeRelationshipLine({
+      type: edge.type,
+      from: byId.get(edge.fromId) || { id: edge.fromId, name: "Someone" },
+      to: byId.get(edge.toId) || { id: edge.toId, name: "someone" },
+      selfId: self?.id,
+      attributes: edge.attributes,
+    }),
     category: edge.category,
   }));
+}
+
+function edgeOrder(edge, selfId) {
+  if (edge.type === "parent_of" && edge.toId === selfId) return 0;
+  if (edge.type === "lives_at") return 1;
+  if (edge.type === "sibling_of") return 2;
+  if (edge.type === "spouse_of") return 3;
+  if (edge.type === "parent_of" && edge.fromId === selfId) return 4;
+  return 5;
 }
 
 function looksRelational(text) {

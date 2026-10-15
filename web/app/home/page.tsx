@@ -736,7 +736,7 @@ function RelationshipCard({
       {!resolved ? (
         <div className="mt-3 flex gap-3 text-sm">
           <button type="button" disabled={busy || selected.length === 0} onClick={() => onConfirm(selected)} className="text-[#7F77DD] disabled:opacity-60">
-            Confirm
+            {selected.length === edges.length ? "Confirm all" : "Confirm"}
           </button>
           <button type="button" disabled={busy} onClick={onDismiss} className="text-[#6B6963]">
             Dismiss

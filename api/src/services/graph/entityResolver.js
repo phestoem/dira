@@ -23,27 +23,58 @@ export function normalizeName(value) {
   return text.replace(/\s+/g, " ").trim();
 }
 
+export function chooseSelfName({ profileName, handle, eventNames = [], current } = {}) {
+  const profile = String(profileName || "").trim();
+  if (profile.split(/\s+/).filter(Boolean).length >= 2) return profile;
+  const ranked = eventNames
+    .filter((item) => item?.name && normalizeName(item.name).split(" ").length >= 2)
+    .slice()
+    .sort((left, right) => (right.count || 0) - (left.count || 0) || wordCount(right.name) - wordCount(left.name));
+  if (ranked[0]?.name) return ranked[0].name.trim();
+  if (profile) return profile;
+  const present = String(current || "").trim();
+  return present || String(handle || "").trim() || "Me";
+}
+
 export async function getOrCreateSelf(userId) {
   const existing = await prisma.entity.findFirst({
     where: { userId, isSelf: true, status: { not: "archived" } },
   });
-  if (existing) return existing;
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  const name = user?.name?.trim() || "Me";
-  return prisma.entity.create({
-    data: {
-      userId,
-      name,
-      entityType: "person",
-      kind: "self",
-      isSelf: true,
-      normalizedName: normalizeName(name),
-      aliases: ["me", "i", "mimi"],
-      attributes: { email: user?.email || null },
-      space: "personal",
-      status: "active",
-    },
-  });
+  const profile = user?.name?.trim() || "";
+  const weak = !existing || wordCount(existing.name) < 2;
+  let best = wordCount(profile) >= 2 ? profile : "";
+  if (!best && weak) {
+    const found = await namesSeenAsSelf(userId, [profile, user?.handle, existing?.name]);
+    best = chooseSelfName({ profileName: profile, handle: user?.handle, eventNames: found, current: existing?.name });
+  }
+  if (!best) best = profile || existing?.name || "Me";
+  const aliases = mergeAliases(existing?.aliases, [user?.handle, existing?.name, "me", "i", "mimi"]);
+  if (!existing) {
+    return prisma.entity.create({
+      data: {
+        userId,
+        name: best,
+        entityType: "person",
+        kind: "self",
+        isSelf: true,
+        normalizedName: normalizeName(best),
+        aliases,
+        attributes: { email: user?.email || null },
+        space: "personal",
+        status: "active",
+      },
+    });
+  }
+  const data = {};
+  if (weak && wordCount(best) >= 2 && normalizeName(best) !== normalizeName(existing.name)) {
+    data.name = best;
+    data.normalizedName = normalizeName(best);
+  }
+  const nextAliases = mergeAliases(data.name ? [existing.name, ...aliases] : aliases, []);
+  if (nextAliases.join("\n") !== (existing.aliases || []).join("\n")) data.aliases = nextAliases;
+  if (!Object.keys(data).length) return existing;
+  return prisma.entity.update({ where: { id: existing.id }, data });
 }
 
 export async function resolveEntity(userId, input, options = {}) {
@@ -289,6 +320,51 @@ function kinshipOf(name) {
 
 function isSelfName(name) {
   return /^(i|me|myself|mimi|self)$/i.test(name.trim());
+}
+
+function wordCount(value) {
+  return String(value || "").trim().split(/\s+/).filter(Boolean).length;
+}
+
+function mergeAliases(existing, extra) {
+  const seen = new Set();
+  const out = [];
+  for (const item of [...(existing || []), ...(extra || [])]) {
+    const text = String(item || "").trim();
+    const key = normalizeName(text);
+    if (!text || !key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(text);
+  }
+  return out.slice(0, 40);
+}
+
+async function namesSeenAsSelf(userId, seeds) {
+  const roots = seeds.map((seed) => normalizeName(seed).split(" ")[0]).filter((seed) => seed && seed.length >= 3);
+  if (!roots.length) return [];
+  const events = await prisma.event.findMany({
+    where: { userId, status: { not: "archived" } },
+    select: { title: true, understoodMeaning: true, fullText: true, people: true },
+  });
+  const counts = new Map();
+  const note = (name) => {
+    const text = String(name || "").trim();
+    if (wordCount(text) < 2) return;
+    const first = normalizeName(text).split(" ")[0];
+    if (!roots.includes(first)) return;
+    const key = normalizeName(text);
+    const current = counts.get(key) || { name: text, count: 0 };
+    current.count += 1;
+    if (text.length > current.name.length) current.name = text;
+    counts.set(key, current);
+  };
+  for (const event of events) {
+    const people = Array.isArray(event.people) ? event.people : [];
+    for (const person of people) note(typeof person === "string" ? person : person?.name);
+    const blob = [event.title, event.understoodMeaning, String(event.fullText || "").slice(0, 4000)].filter(Boolean).join("\n");
+    for (const match of blob.matchAll(/\b[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+){1,3}\b/gu)) note(match[0]);
+  }
+  return [...counts.values()];
 }
 
 function cleanType(value) {

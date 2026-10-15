@@ -2,7 +2,7 @@ import { normalizeName } from "./entityResolver.js";
 import { categoryOf, inverseOf, normalizeType, typeMeta } from "./relationshipTypes.js";
 
 const ROLE_WORDS = ["I", "me", "my", "mimi", "yangu", "the individual", "the user", "the owner", "the occupier", "the buyer"];
-const KINSHIP_WORD = /\b(mother|father|sister|brother|son|daughter|wife|husband|mama|baba|dada|kaka|mtoto|mke|mume|parents|children)\b/i;
+const KINSHIP_WORD = /\b(mothers?|fathers?|sisters?|brothers?|sons?|daughters?|wives|husbands?|wife|mama|baba|dada|kaka|mtoto|mke|mume|parents|children)\b/i;
 const PLACEHOLDER_ROLES = {
   wife: ["spouse"],
   husband: ["spouse"],
@@ -201,7 +201,8 @@ export function dropReason(triple, context = {}) {
   if (isGenericNode(subject) || isGenericNode(object)) return "generic-node";
   const aligned = alignPredicate(triple?.subject?.type, triple?.predicate, triple?.object?.type);
   if (aligned.reason) return aligned.reason;
-  if (categoryOf(aligned.type) === "family" && !KINSHIP_WORD.test(String(triple?.evidence || ""))) return "unsupported-family";
+  const evidence = `${triple?.evidence || ""} ${context.message || ""}`;
+  if (categoryOf(aligned.type) === "family" && !KINSHIP_WORD.test(evidence)) return "unsupported-family";
   if (subject && object && normalizeName(subject) === normalizeName(object)) return "same-node";
   return null;
 }

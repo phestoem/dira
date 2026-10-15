@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { prisma } from "../src/prisma.js";
-import { mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
+import { chooseSelfName, mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
+import { describeRelationshipLine, isRelationshipStatement, parseFamilyStatement } from "../src/services/graph/familyStatement.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
 import { stripEntityIds } from "../src/services/graph/reset.js";
@@ -24,6 +25,81 @@ test("graph reset drops entity ids and keeps names", () => {
   assert.equal(places.list[0].name, "Mbeya");
   assert.equal(places.list[0].role, "location");
   assert.equal(places.list[0].entityId, undefined);
+});
+
+const FAMILY_MESSAGE = "My family: my father Enock Mwakyusa passed away on 25 April 2004 and my mother Froidah Biniala Kyando lives in our family home in Mbeya. My sisters are Jeni, Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda Goodluck Mambosho. My children are Careen (my eldest daughter, born before my marriage), Patrick, Presley, Powell and Prisha.";
+
+test("a family introduction expands into kinship edges", () => {
+  assert.equal(isRelationshipStatement(FAMILY_MESSAGE), true);
+  assert.equal(isRelationshipStatement("Who are my sisters?"), false);
+  const parsed = parseFamilyStatement(FAMILY_MESSAGE);
+  const prepared = prepareTriples(parsed.triples, {
+    selfAliases: buildSelfAliasSet({ names: ["Phesto Enock Mwakyusa"], aliases: ["phesto"] }),
+    selfName: "Phesto Enock Mwakyusa",
+    relatives: [],
+    message: FAMILY_MESSAGE,
+  });
+  const kept = prepared.kept;
+  const parents = kept.filter((triple) => triple.predicate === "parent_of" && triple.object?.type === "self");
+  const children = kept.filter((triple) => triple.predicate === "parent_of" && triple.subject?.type === "self");
+  const siblings = kept.filter((triple) => triple.predicate === "sibling_of");
+  const spouses = kept.filter((triple) => triple.predicate === "spouse_of");
+  const homes = kept.filter((triple) => triple.predicate === "lives_at");
+  assert.equal(parents.length, 2);
+  assert.equal(siblings.length, 4);
+  assert.equal(spouses.length, 1);
+  assert.equal(children.length, 5);
+  assert.equal(homes.length, 1);
+  assert.deepEqual(siblings.map((triple) => triple.subject.name).sort(), [
+    "Jeni Enock Mwakyusa",
+    "Leah Enock Mwakyusa",
+    "Neema Enock Mwakyusa",
+    "Zenah Enock Mwakyusa",
+  ]);
+  assert.equal(spouses[0].subject.name, "Zelda Goodluck Mambosho");
+  assert.equal(homes[0].object.name, "Mbeya");
+  assert.equal(parsed.entityFacts.find((fact) => fact.name === "Enock Mwakyusa").deathDate, "2004-04-25");
+  const careen = children.find((triple) => triple.object.name === "Careen");
+  assert.equal(careen.object.kind, "daughter");
+  assert.equal(careen.attributes.birthOrder, 1);
+  assert.equal(kept.some((triple) => [triple.subject?.name, triple.object?.name].includes("Careen") && [triple.subject?.name, triple.object?.name].includes("Zelda Goodluck Mambosho")), false);
+  assert.equal(dropReason({
+    subject: { name: "Jeni Enock Mwakyusa", type: "person" },
+    predicate: "sibling_of",
+    object: { name: "me", type: "self" },
+    evidence: "",
+  }, { message: FAMILY_MESSAGE }), null);
+  const you = { id: "self", name: "you" };
+  assert.equal(describeRelationshipLine({
+    type: "parent_of",
+    from: { id: "enock", name: "Enock Mwakyusa", kind: "father", deathDate: "2004-04-25" },
+    to: you,
+    selfId: "self",
+  }), "Enock Mwakyusa — father of you (passed 25 Apr 2004)");
+  assert.equal(describeRelationshipLine({
+    type: "sibling_of",
+    from: { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sister" },
+    to: you,
+    selfId: "self",
+  }), "Jeni Enock Mwakyusa — your sister");
+  assert.equal(describeRelationshipLine({
+    type: "spouse_of",
+    from: { id: "zelda", name: "Zelda Goodluck Mambosho", kind: "wife" },
+    to: you,
+    selfId: "self",
+  }), "Zelda Goodluck Mambosho — your wife");
+  assert.equal(describeRelationshipLine({
+    type: "parent_of",
+    from: you,
+    to: { id: "careen", name: "Careen", kind: "daughter" },
+    selfId: "self",
+    attributes: { birthOrder: 1 },
+  }), "Careen — your daughter (eldest)");
+  assert.equal(chooseSelfName({
+    profileName: "phesto",
+    handle: "phesto",
+    eventNames: [{ name: "Phesto Enock Mwakyusa", count: 2 }],
+  }), "Phesto Enock Mwakyusa");
 });
 
 test("normalizeType maps kinship words and work roles", () => {

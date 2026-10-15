@@ -203,7 +203,7 @@ export async function commitTriples(userId, triples, options = {}) {
   const result = { created: 0, updated: 0, suggested: 0, conflicts: [], dropped: [], reviewQuestions: [], createdEntities: [] };
   const self = await getOrCreateSelf(userId);
   const quality = options.quality || await loadQualityContext(userId, self);
-  const prepared = prepareTriples(triples, quality);
+  const prepared = prepareTriples(triples, { ...quality, message: options.message || "" });
   result.reviewQuestions = prepared.reviewQuestions;
   await rememberSelfSpellings(self, prepared.selfSpellings);
   result.dropped = prepared.dropped;
@@ -605,6 +605,11 @@ async function applyEntityFacts(userId, facts, source) {
       conflicts.push(await conflictSuggestion(userId, entity, "deathDate", entity.deathDate, death, source));
     }
     if (fact.kind && !entity.kind) data.kind = String(fact.kind).slice(0, 40);
+    if (fact.birthOrder && !(isObject(entity.attributes) && entity.attributes.birthOrder)) {
+      const attributes = isObject(entity.attributes) ? { ...entity.attributes } : {};
+      attributes.birthOrder = fact.birthOrder;
+      data.attributes = attributes;
+    }
     if (Object.keys(data).length) await prisma.entity.update({ where: { id: entity.id }, data });
   }
   return conflicts.filter(Boolean);
