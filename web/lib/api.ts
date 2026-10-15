@@ -824,8 +824,25 @@ export async function getFamily(): Promise<FamilyTree> {
   return res.json() as Promise<FamilyTree>;
 }
 
+export type ReviewPerson = {
+  edgeId: string;
+  name: string;
+  relation: string;
+  evidence: string | null;
+};
+
+export type ReviewAsset = {
+  edgeId: string;
+  name: string;
+  owner: string;
+  relation: string;
+  evidence: string | null;
+};
+
 export async function getGraphSuggestions(): Promise<{
   relationships: GraphSuggestion[];
+  family: { title: string; people: ReviewPerson[] } | null;
+  assets: { title: string; items: ReviewAsset[] } | null;
   duplicates: Array<{ left: { id: string; name: string }; right: { id: string; name: string }; score: number }>;
   conflicts: GraphSuggestion[];
   count: number;
@@ -834,6 +851,8 @@ export async function getGraphSuggestions(): Promise<{
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<{
     relationships: GraphSuggestion[];
+    family: { title: string; people: ReviewPerson[] } | null;
+    assets: { title: string; items: ReviewAsset[] } | null;
     duplicates: Array<{ left: { id: string; name: string }; right: { id: string; name: string }; score: number }>;
     conflicts: GraphSuggestion[];
     count: number;

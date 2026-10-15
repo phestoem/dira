@@ -10,6 +10,7 @@ import {
 } from "../services/graph/graphQuery.js";
 import { commitTriples } from "../services/graph/relationshipExtractor.js";
 import { categoryOf, listRelationshipTypes, normalizeType } from "../services/graph/relationshipTypes.js";
+import { groupSuggestions } from "../services/graph/graphQuality.js";
 import { rebuildGraph } from "../services/graph/rebuild.js";
 
 export default async function graphRoutes(fastify) {
@@ -64,11 +65,16 @@ export default async function graphRoutes(fastify) {
     ]);
     const conflicts = edges.filter((edge) => edge.label === "conflict" || edge.attributes?.conflictWith);
     const relationships = edges.filter((edge) => edge.label !== "conflict" && !edge.attributes?.conflictWith);
+    const self = await prisma.entity.findFirst({ where: { userId: request.userId, isSelf: true }, select: { name: true } });
+    const grouped = groupSuggestions(await decorate(request.userId, relationships), self?.name || "");
+    const decoratedConflicts = await decorate(request.userId, conflicts);
     return {
-      relationships: await decorate(request.userId, relationships),
+      relationships: grouped.relationships,
+      family: grouped.family,
+      assets: grouped.assets,
       duplicates,
-      conflicts: await decorate(request.userId, conflicts),
-      count: relationships.length + duplicates.length + conflicts.length,
+      conflicts: decoratedConflicts,
+      count: grouped.count + duplicates.length + decoratedConflicts.length,
     };
   });
 

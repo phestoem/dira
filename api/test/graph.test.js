@@ -4,6 +4,7 @@ import { prisma } from "../src/prisma.js";
 import { mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
+import { alignPredicate, applySupersession, buildSelfAliasSet, dedupeProposedNames, groupSuggestions, mentionsSelf, prepareTriples } from "../src/services/graph/graphQuality.js";
 import { absorbDroppedPayment, commitTriples, deterministicEdgePlans, dropReason, extractWithRetry, graphExtractProvider, headerDelayFrom, retryDelayMs } from "../src/services/graph/relationshipExtractor.js";
 import { isSensitive, normalizeType } from "../src/services/graph/relationshipTypes.js";
 
@@ -30,11 +31,15 @@ test("amounts, dates and unknown predicates are not nodes", () => {
     predicate: "dated",
     object: { name: "12 May 2024", type: "other" },
   }), "date-as-node");
-  assert.equal(dropReason({
+  const birth = prepareTriples([{
     subject: { name: "Ada", type: "person" },
     predicate: "born",
     object: { name: "2004", type: "other" },
-  }), "date-as-node");
+    evidence: "born in 2004",
+  }]);
+  assert.equal(birth.kept.length, 0);
+  assert.equal(birth.entityFacts[0].name, "Ada");
+  assert.equal(birth.entityFacts[0].birthDate, "2004-01-01");
   assert.equal(dropReason({
     subject: { name: "Ada", type: "self" },
     predicate: "hasTotalContractValue",
@@ -56,6 +61,75 @@ test("amounts, dates and unknown predicates are not nodes", () => {
   assert.equal(absorbed, true);
   assert.equal(plans.find((plan) => plan.type === "paid").attributes.amount, 2399500);
   assert.equal(plans.find((plan) => plan.type === "paid").attributes.currency, "TSH");
+});
+
+test("graph rebuild quality rules keep self, family and places honest", () => {
+  const aliases = buildSelfAliasSet({ names: ["Phesto Enock Mwakyusa", "Phesto Mwakyusa"] });
+  assert.equal(mentionsSelf("Phesto Enock Mwakayusa", aliases), true);
+  assert.equal(mentionsSelf("Phesto Mwakyusa", aliases), true);
+  const selfOwned = prepareTriples([{
+    subject: { name: "Phesto Enock Mwakayusa", type: "person" },
+    predicate: "owns",
+    object: { name: "Plot P9104", type: "property" },
+    evidence: "registered occupier",
+    confidence: 0.9,
+  }], { selfAliases: aliases, selfName: "Phesto Enock Mwakyusa", relatives: [] });
+  assert.equal(selfOwned.kept[0].subject.type, "self");
+  assert.equal(selfOwned.kept[0].subject.name, "Phesto Enock Mwakyusa");
+
+  const surname = prepareTriples([{
+    subject: { name: "Amina Mwakyusa", type: "person" },
+    predicate: "sibling_of",
+    object: { name: "Phesto Mwakyusa", type: "person" },
+    evidence: "Amina Mwakyusa appears on the same title",
+  }], { selfAliases: aliases, selfName: "Phesto Enock Mwakyusa", relatives: [] });
+  assert.equal(surname.dropped[0].reason, "unsupported-family");
+
+  const wife = prepareTriples([{
+    subject: { name: "wife", type: "person" },
+    predicate: "spouse_of",
+    object: { name: "me", type: "self" },
+    evidence: "my wife",
+  }], {
+    selfAliases: aliases,
+    selfName: "Phesto Enock Mwakyusa",
+    relatives: [{ role: "spouse", name: "Neema", id: "spouse-1" }],
+  });
+  assert.equal(wife.kept[0].subject.name, "Neema");
+  assert.equal(wife.reviewQuestions.length, 0);
+
+  const unknownWife = prepareTriples([{
+    subject: { name: "wife", type: "person" },
+    predicate: "spouse_of",
+    object: { name: "me", type: "self" },
+    evidence: "my wife",
+  }], { selfAliases: aliases, selfName: "Phesto Enock Mwakyusa", relatives: [] });
+  assert.equal(unknownWife.dropped[0].reason, "unresolved-kinship");
+  assert.match(unknownWife.reviewQuestions[0], /Who is 'wife'/);
+
+  assert.equal(alignPredicate("person", "has_participant", "project").type, "participant_in");
+  assert.equal(normalizeType("married").type, "spouse_of");
+  assert.equal(normalizeType("alioa").type, "spouse_of");
+
+  let places = [];
+  places = applySupersession(places, { fromName: "Jimny", toName: "Dar es Salaam", type: "located_in", at: "2019-01-01" });
+  places = applySupersession(places, { fromName: "Jimny", toName: "Mbeya", type: "located_in", at: "2024-01-01" });
+  assert.equal(places[0].validTo, "2024-01-01");
+  assert.equal(places[1].validTo, null);
+
+  const names = dedupeProposedNames(["land in Ntabha, Mbeya", "existing plot in Ntabha"]);
+  assert.equal(names.get("land in Ntabha, Mbeya"), "Ntabha plot");
+  assert.equal(names.get("existing plot in Ntabha"), "Ntabha plot");
+
+  const grouped = groupSuggestions([
+    { id: "1", category: "family", type: "spouse_of", fromName: "Phesto", toName: "Neema" },
+    { id: "2", category: "family", type: "parent_of", fromName: "Mara", toName: "Phesto" },
+    { id: "3", category: "ownership", type: "owns", fromName: "Phesto", toName: "Plot P9104" },
+    { id: "4", category: "work", type: "supervises", fromName: "Burton", toName: "Mbeya Home" },
+  ], "Phesto");
+  assert.equal(grouped.count, 3);
+  assert.equal(grouped.family.people.length, 2);
+  assert.equal(grouped.assets.items[0].name, "Plot P9104");
 });
 
 test("graph extraction backs off on rate limits", async () => {

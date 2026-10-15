@@ -1,8 +1,9 @@
 import { prisma } from "../../prisma.js";
-import { getOrCreateSelf, resolveEntity } from "./entityResolver.js";
+import { getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
+import { buildSelfAliasSet, dropReason, fullNameFromProfile, prepareTriples as refineTriples, relativesFromEdges } from "./graphQuality.js";
 import { categoryOf, isSensitive, isSymmetric, listRelationshipTypes, normalizeType } from "./relationshipTypes.js";
-import { normalizeName } from "./entityResolver.js";
 
+const ROLE_ALIAS = new Set(["i", "me", "my", "mimi", "yangu", "the individual", "the user", "the owner", "the occupier", "the buyer"]);
 const GROQ_MODEL = "qwen/qwen3.8-27b";
 const OPENAI_MODEL = "gpt-4o-mini";
 const BACKOFF_MS = [2000, 4000, 8000, 16000, 32000];
@@ -17,10 +18,15 @@ Rules:
 - Subjects and objects must be real-world things: a person, place, property, project, organisation, vehicle, or named asset (for example "Plot P9104").
 - Money amounts, dates, durations, percentages, quantities and statuses go in "attributes", never in subject or object.
 - Predicates must be one of: ${predicates}.
-  Synonyms are accepted: mama, mum, mother, dada, mke, mume, mtoto, fundi, msimamizi, ananunua, alinunua, supervises, owns, sent money to.
+  Synonyms are accepted: mama, mum, mother, dada, mke, mume, mtoto, fundi, msimamizi, ananunua, alinunua, supervises, owns, occupies, married, alioa, studies at, sold to, sent money to.
   If no listed predicate fits, omit the triple.
 - Prefer relationships between people, places and assets over describing a single event's properties.
-- "I", "me", "my", "mimi", "yangu" are type self.
+- The narrator is the SELF named in the user message. "I", "me", "my", "mimi", "yangu", and every spelling of that person's name are type self. Never map the narrator to any other person.
+- Only output a family relationship when the text states it explicitly. A shared surname or middle name is not evidence of any relationship.
+- Words such as wife, husband, parents, mother, father, children, sisters and family are not names. Use the person's name, or omit the triple.
+- Do not output generic activities (landscaping, purchase, renovation), money words (cash, payment, cost, fee), or identifier numbers (TIN, application, chassis) as subject or object. A named project such as "Kisarawe House Renovation" is allowed.
+- "issued" is administrative. Omit it.
+- A death or birth is an entityFact (deathDate or birthDate), never a triple.
 - Do not invent family links that were not said.
 - A death does not end a family edge. Put the date on entityFacts.deathDate.
 - Selling, moving out, or a role ending sets validTo.
@@ -39,11 +45,14 @@ export async function extractTriples(text, context = {}) {
   const body = String(text || "").trim();
   if (body.length < 8) return { triples: [], entityFacts: [] };
   const known = Array.isArray(context.known) ? context.known.slice(0, 40) : [];
+  const selfName = context.selfName || "me";
+  const others = known.filter((item) => !item.isSelf && normalizeName(item.name) !== normalizeName(selfName));
   const user = [
-    context.selfName ? `Self: ${context.selfName}` : "",
+    `SELF (the narrator, 'I/me'): ${selfName}`,
+    "Never map the narrator to any other person in the list.",
     context.today ? `Today: ${context.today}` : "",
     context.title ? `Title: ${context.title}` : "",
-    known.length ? `Known: ${known.map((item) => `${item.name} (${item.entityType})`).join("; ")}` : "",
+    others.length ? `Known: ${others.map((item) => `${item.name} (${item.entityType})`).join("; ")}` : "",
     body.slice(0, 3500),
   ].filter(Boolean).join("\n");
   try {
@@ -85,31 +94,15 @@ export async function extractWithRetry(run, sleepFn = sleep) {
   throw last;
 }
 
-export function dropReason(triple) {
-  const subject = sideName(triple?.subject);
-  const object = sideName(triple?.object);
-  if (isDateName(subject) || isDateName(object)) return "date-as-node";
-  if (isMoneyName(subject) || isMoneyName(object)) return "amount-as-node";
-  if (isQuantityName(subject) || isQuantityName(object)) return "quantity-as-node";
-  if (isStatusName(subject) || isStatusName(object)) return "status-as-node";
-  if (!normalizeType(triple?.predicate)) return "unknown-predicate";
-  if (subject && object && normalizeName(subject) === normalizeName(object)) return "same-node";
-  return null;
-}
+export { dropReason };
 
-export function prepareTriples(triples) {
-  const kept = [];
-  const dropped = [];
-  for (const triple of Array.isArray(triples) ? triples : []) {
-    const reason = dropReason(triple);
-    if (!reason) {
-      kept.push(triple);
-      continue;
-    }
-    dropped.push({ ...triple, reason });
-    console.debug(`[graph] dropped triple (${reason}): ${sideName(triple.subject)} —${triple.predicate}→ ${sideName(triple.object)}`);
+export function prepareTriples(triples, context = {}) {
+  const prepared = refineTriples(triples, context);
+  for (const triple of prepared.dropped) {
+    if (triple.silent) continue;
+    console.debug(`[graph] dropped triple (${triple.reason}): ${sideName(triple.subject)} —${triple.predicate}→ ${sideName(triple.object)}`);
   }
-  return { kept, dropped };
+  return prepared;
 }
 
 export function moneyValue(triple) {
@@ -207,9 +200,12 @@ export function absorbDroppedPayment(plans, triple, event, selfName) {
 
 export async function commitTriples(userId, triples, options = {}) {
   const source = options.source || "intake";
-  const result = { created: 0, updated: 0, suggested: 0, conflicts: [], dropped: [] };
+  const result = { created: 0, updated: 0, suggested: 0, conflicts: [], dropped: [], reviewQuestions: [], createdEntities: [] };
   const self = await getOrCreateSelf(userId);
-  const prepared = prepareTriples(triples);
+  const quality = options.quality || await loadQualityContext(userId, self);
+  const prepared = prepareTriples(triples, quality);
+  result.reviewQuestions = prepared.reviewQuestions;
+  await rememberSelfSpellings(self, prepared.selfSpellings);
   result.dropped = prepared.dropped;
   for (const triple of prepared.dropped) {
     if (triple.reason === "amount-as-node" && options.evidenceEventId) {
@@ -220,6 +216,8 @@ export async function commitTriples(userId, triples, options = {}) {
     const subject = await resolveSide(userId, triple.subject, self);
     const object = await resolveSide(userId, triple.object, self);
     if (!subject.entity || !object.entity) continue;
+    if (subject.matchedBy === "created") result.createdEntities.push({ id: subject.entity.id, name: subject.entity.name });
+    if (object.matchedBy === "created") result.createdEntities.push({ id: object.entity.id, name: object.entity.name });
     if (subject.entity.id === object.entity.id) {
       console.debug(`[graph] dropped triple (same-node): ${sideName(triple.subject)} —${triple.predicate}→ ${sideName(triple.object)}`);
       result.dropped.push({ ...triple, reason: "same-node" });
@@ -227,9 +225,10 @@ export async function commitTriples(userId, triples, options = {}) {
     }
     const normalized = normalizeType(triple.predicate);
     if (!normalized) continue;
+    const reverse = triple._reverse != null ? Boolean(triple._reverse) : normalized.reverse;
     let from = subject;
     let to = object;
-    if (normalized.reverse) [from, to] = [to, from];
+    if (reverse) [from, to] = [to, from];
     if (isSymmetric(normalized.type) && from.entity.id > to.entity.id) [from, to] = [to, from];
     const ambiguous = subject.matchedBy === "ambiguous" || object.matchedBy === "ambiguous";
     const sensitive = isSensitive(normalized.type);
@@ -237,6 +236,7 @@ export async function commitTriples(userId, triples, options = {}) {
     if (options.forceStatus === "suggested" || options.forceStatus === "confirmed") status = options.forceStatus;
     else if (source === "user" && !ambiguous) status = "confirmed";
     else if (source === "journal") status = "suggested";
+    else if (normalized.category === "family" && source !== "user" && source !== "conversation") status = "suggested";
     else if (!sensitive && !ambiguous && Number(triple.confidence) >= 0.85) status = "confirmed";
     const saved = await upsertEdge(userId, {
       fromKind: "entity",
@@ -253,13 +253,15 @@ export async function commitTriples(userId, triples, options = {}) {
       evidenceEventId: options.evidenceEventId || null,
       evidenceText: clip(triple.evidence, 300),
       attributes: isObject(triple.attributes) ? triple.attributes : {},
+      occurredAt: options.occurredAt || null,
+      correction: Boolean(options.correction),
     });
     if (!saved) continue;
     if (saved.created) result.created += 1;
     else result.updated += 1;
     if (saved.edge.status === "suggested") result.suggested += 1;
   }
-  const factConflicts = await applyEntityFacts(userId, options.entityFacts || [], source);
+  const factConflicts = await applyEntityFacts(userId, [...(options.entityFacts || []), ...prepared.entityFacts], source);
   result.conflicts.push(...factConflicts);
   console.log(
     `[graph] committed ${result.created + result.updated} edges (${result.created + result.updated - result.suggested} confirmed, ${result.suggested} suggested) source=${source} event=${options.evidenceEventId || "-"}`,
@@ -403,10 +405,55 @@ export async function retireEdges(userId, kind, id) {
 
 async function resolveSide(userId, side, self) {
   if (!side || typeof side !== "object") return { entity: null, matchedBy: "none" };
-  if (side.type === "self" || /^(i|me|my|mimi)$/i.test(String(side.name || "").trim())) {
+  if (side.type === "self" || /^(i|me|my|mimi|self)$/i.test(String(side.name || "").trim())) {
     return { entity: self, matchedBy: "self" };
   }
+  if (side.entityId) {
+    const entity = await prisma.entity.findFirst({ where: { id: side.entityId, userId, status: { not: "archived" } } });
+    if (entity) return { entity, matchedBy: "id" };
+  }
   return resolveEntity(userId, { name: side.name, entityType: side.type, kind: side.kind });
+}
+
+export async function loadQualityContext(userId, self) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { name: true, handle: true } });
+  const profile = await prisma.event.findFirst({
+    where: {
+      userId,
+      status: { not: "archived" },
+      OR: [
+        { title: { contains: "cv", mode: "insensitive" } },
+        { title: { contains: "curriculum", mode: "insensitive" } },
+        { title: { contains: "profile", mode: "insensitive" } },
+        { title: { contains: "resume", mode: "insensitive" } },
+      ],
+    },
+    orderBy: { createdAt: "asc" },
+  });
+  const aliases = buildSelfAliasSet({
+    names: [user?.name, user?.handle, self?.name, fullNameFromProfile(profile)].filter(Boolean),
+    aliases: self?.aliases || [],
+  });
+  const edges = self?.id ? await prisma.relationship.findMany({
+    where: { userId, status: "confirmed", category: "family", OR: [{ fromId: self.id }, { toId: self.id }] },
+  }) : [];
+  const ids = [...new Set(edges.flatMap((edge) => [edge.fromId, edge.toId]))];
+  const people = ids.length ? await prisma.entity.findMany({ where: { userId, id: { in: ids } }, select: { id: true, name: true } }) : [];
+  return {
+    selfAliases: aliases,
+    selfName: self?.name || user?.name || "Me",
+    relatives: relativesFromEdges(edges, self?.id, new Map(people.map((person) => [person.id, person.name]))),
+  };
+}
+
+async function rememberSelfSpellings(self, spellings) {
+  if (!self?.id || !spellings?.length) return;
+  const existing = new Set((self.aliases || []).map((item) => normalizeName(item)));
+  const extra = spellings.filter((name) => name && !existing.has(normalizeName(name)) && !ROLE_ALIAS.has(normalizeName(name)));
+  if (!extra.length) return;
+  const aliases = [...(self.aliases || []), ...extra].slice(0, 40);
+  await prisma.entity.update({ where: { id: self.id }, data: { aliases } });
+  self.aliases = aliases;
 }
 
 async function upsertEdge(userId, input) {
@@ -446,6 +493,7 @@ async function upsertEdge(userId, input) {
       },
     });
     maybeNotify(userId, edge, false);
+    await closeSuperseded(userId, { ...input, edgeId: edge.id });
     return { edge, created: true };
   }
   const ended = Boolean(input.validTo) && !existing.validTo;
@@ -461,7 +509,32 @@ async function upsertEdge(userId, input) {
     },
   });
   if (ended) maybeNotify(userId, edge, true);
+  await closeSuperseded(userId, { ...input, edgeId: edge.id });
   return { edge, created: false };
+}
+
+async function closeSuperseded(userId, input) {
+  if (!["located_in", "lives_at", "owns"].includes(input.type) || input.validTo) return;
+  const where = {
+    userId,
+    type: input.type,
+    status: { not: "rejected" },
+    validTo: null,
+    id: { not: input.edgeId },
+  };
+  if (input.type === "owns") {
+    where.toId = input.toId;
+    where.fromId = { not: input.fromId };
+  } else {
+    where.fromId = input.fromId;
+    where.toId = { not: input.toId };
+  }
+  const previous = await prisma.relationship.findMany({ where });
+  const at = input.validFrom || input.occurredAt || new Date();
+  for (const edge of previous) {
+    if (!input.correction && edge.validFrom && new Date(edge.validFrom) > new Date(at)) continue;
+    await prisma.relationship.update({ where: { id: edge.id }, data: { validTo: new Date(at) } });
+  }
 }
 
 function maybeNotify(userId, edge, ended) {

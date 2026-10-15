@@ -1,5 +1,6 @@
 import { prisma } from "../../prisma.js";
-import { findDuplicateCandidates, getOrCreateSelf, resolveEntity } from "./entityResolver.js";
+import { findDuplicateCandidates, getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
+import { applySupersession, dedupeProposedNames, isCorrectionEvent } from "./graphQuality.js";
 import {
   absorbDroppedPayment,
   anchorEventEdges,
@@ -8,10 +9,11 @@ import {
   deterministicEdgePlans,
   extractTriples,
   extractWithRetry,
+  loadQualityContext,
   markGraphExtracted,
   prepareTriples,
 } from "./relationshipExtractor.js";
-import { isSensitive, normalizeType } from "./relationshipTypes.js";
+import { categoryOf, isSensitive, normalizeType } from "./relationshipTypes.js";
 
 export async function catchUpGraphExtractions() {
   const users = await prisma.user.findMany({ select: { id: true } });
@@ -40,12 +42,14 @@ export async function rebuildGraph(userId, options = {}) {
     proposed: [],
     dropped: [],
     skipped: [],
+    reviewQuestions: [],
     counts: {
       eventsProcessed: 0,
       eventsSkipped: 0,
       triplesProposed: 0,
       triplesDropped: 0,
       newEntities: 0,
+      droppedByReason: {},
     },
   };
   const newNames = new Set();
@@ -53,7 +57,11 @@ export async function rebuildGraph(userId, options = {}) {
   if (!dryRun) await getOrCreateSelf(userId);
   const events = await loadRecords("event", userId, onlyMissing, budget);
   if (budget != null) budget -= events.length;
-  const self = await prisma.entity.findFirst({ where: { userId, isSelf: true }, select: { id: true, name: true } });
+  const self = await prisma.entity.findFirst({ where: { userId, isSelf: true }, select: { id: true, name: true, aliases: true } });
+  const quality = await loadQualityContext(userId, self);
+  const seenNames = [];
+  const createdIds = new Map();
+  let ledger = [];
   const known = await prisma.entity.findMany({
     where: { userId, status: { not: "archived" }, mergedIntoId: null },
     select: { name: true, entityType: true },
@@ -63,37 +71,53 @@ export async function rebuildGraph(userId, options = {}) {
   for (let index = 0; index < events.length; index += 1) {
     const event = events[index];
     try {
-      const plans = deterministicEdgePlans(event, self?.name);
+      const plans = deterministicEdgePlans(event, quality.selfName || self?.name);
       const extracted = await extractWithRetry(() => extractTriples(eventText(event), {
-        selfName: self?.name,
+        selfName: quality.selfName,
         today: new Date().toISOString().slice(0, 10),
         title: event.title,
         known,
       }));
-      const prepared = prepareTriples(extracted.triples);
-      for (const triple of prepared.dropped) absorbDroppedPayment(plans, triple, event, self?.name);
+      const prepared = prepareTriples(extracted.triples, quality);
+      noteQuestions(report, prepared.reviewQuestions);
+      canonize(prepared.kept, seenNames);
+      for (const triple of prepared.dropped) absorbDroppedPayment(plans, triple, event, quality.selfName || self?.name);
       if (dryRun) {
         noteDropped(report, prepared.dropped);
-        report.proposed.push(...plans);
+        for (const plan of plans) {
+          const proposal = presentPlan(plan);
+          report.proposed.push(proposal);
+          ledger = trackSupersession(ledger, proposal, event);
+        }
         for (const triple of prepared.kept) {
           const proposal = await describeTriple(userId, triple, self, newNames, { source: "backfill", evidenceEventId: event.id });
           if (proposal.reason) {
             noteDropped(report, [{ ...triple, reason: proposal.reason }]);
             continue;
           }
-          report.proposed.push({ eventId: event.id, ...proposal });
+          const row = { eventId: event.id, ...proposal };
+          report.proposed.push(row);
+          ledger = trackSupersession(ledger, row, event);
           report.counts.triplesProposed += 1;
-          await tally(report, userId, proposal, true);
+          await tally(report, userId, row, true);
         }
         for (const plan of plans) await tally(report, userId, plan, true);
       } else {
+        noteDropped(report, prepared.dropped);
+        noteQuestions(report, prepared.reviewQuestions);
+        await renameCreated(userId, seenNames, createdIds);
         await anchorEventEdges(userId, event);
-        const committed = await commitTriples(userId, extracted.triples, {
+        const committed = await commitTriples(userId, prepared.kept, {
           source: "backfill",
           evidenceEventId: event.id,
           title: event.title,
-          entityFacts: extracted.entityFacts,
+          entityFacts: [...(extracted.entityFacts || []), ...prepared.entityFacts],
+          quality,
+          occurredAt: event.occurredAt || null,
+          correction: isCorrectionEvent(event),
         });
+        for (const item of committed.createdEntities || []) createdIds.set(item.name, item.id);
+        noteQuestions(report, committed.reviewQuestions);
         addCounts(report, committed);
         await markGraphExtracted(userId, "event", event.id);
       }
@@ -145,11 +169,13 @@ export async function rebuildGraph(userId, options = {}) {
     const entry = journal[index];
     try {
       const extracted = await extractWithRetry(() => extractTriples(String(entry.rawContent || "").slice(0, 3000), {
-        selfName: self?.name,
+        selfName: quality.selfName,
         today: new Date().toISOString().slice(0, 10),
         known,
       }));
-      const prepared = prepareTriples(extracted.triples);
+      const prepared = prepareTriples(extracted.triples, quality);
+      noteQuestions(report, prepared.reviewQuestions);
+      canonize(prepared.kept, seenNames);
       noteDropped(report, prepared.dropped);
       if (dryRun) {
         for (const triple of prepared.kept) {
@@ -166,7 +192,8 @@ export async function rebuildGraph(userId, options = {}) {
         const committed = await commitTriples(userId, prepared.kept, {
           source: "journal",
           forceStatus: "suggested",
-          entityFacts: extracted.entityFacts,
+          entityFacts: [...(extracted.entityFacts || []), ...prepared.entityFacts],
+          quality,
         });
         addCounts(report, committed);
         await markGraphExtracted(userId, "diary", entry.id);
@@ -194,16 +221,23 @@ export async function rebuildGraph(userId, options = {}) {
 async function describeTriple(userId, triple, self, newNames, meta) {
   const normalized = normalizeType(triple.predicate);
   if (!normalized) return { reason: "unknown-predicate" };
-  const subject = await resolveSide(userId, triple.subject, self, true);
-  const object = await resolveSide(userId, triple.object, self, true);
+  const reverse = triple._reverse != null ? Boolean(triple._reverse) : normalized.reverse;
+  const statedSubject = reverse ? triple.object : triple.subject;
+  const statedObject = reverse ? triple.subject : triple.object;
+  const subject = await resolveSide(userId, statedSubject, self, true);
+  const object = await resolveSide(userId, statedObject, self, true);
   if (subject.entity && object.entity && subject.entity.id === object.entity.id) return { reason: "same-node" };
-  rememberNew(newNames, subject, triple.subject);
-  rememberNew(newNames, object, triple.object);
+  rememberNew(newNames, subject, statedSubject);
+  rememberNew(newNames, object, statedObject);
   const ambiguous = subject.matchedBy === "ambiguous" || object.matchedBy === "ambiguous";
   const status = proposedStatus(triple, meta.source, normalized.type, ambiguous);
   return {
     kind: "extracted",
     ...triple,
+    subject: statedSubject,
+    object: statedObject,
+    fromName: statedSubject?.name || null,
+    toName: statedObject?.name || null,
     type: normalized.type,
     status,
     resolvedSubject: { existingEntityId: subject.entity?.id || "new" },
@@ -250,6 +284,7 @@ async function tally(report, userId, proposal, dryRun) {
 
 function proposedStatus(triple, source, type, ambiguous) {
   if (source === "journal" || source === "conversation") return "suggested";
+  if (categoryOf(type) === "family" && source !== "user" && source !== "conversation") return "suggested";
   if (source === "user" && !ambiguous) return "confirmed";
   if (!isSensitive(type) && !ambiguous && Number(triple.confidence) >= 0.85) return "confirmed";
   return "suggested";
@@ -262,15 +297,82 @@ function rememberNew(names, resolved, side) {
 }
 
 function noteDropped(report, dropped) {
-  report.counts.triplesDropped += dropped.length;
   for (const triple of dropped) {
-    if (report.dropped.length >= 20) break;
+    const reason = triple.reason || "unknown";
+    report.counts.droppedByReason[reason] = (report.counts.droppedByReason[reason] || 0) + 1;
+    report.counts.triplesDropped += 1;
+    if (triple.silent || report.dropped.length >= 20) continue;
     report.dropped.push({
-      reason: triple.reason,
+      reason,
       predicate: triple.predicate || null,
       subject: triple.subject?.name || null,
       object: triple.object?.name || null,
     });
+  }
+}
+
+function noteQuestions(report, questions) {
+  for (const question of questions || []) {
+    if (question && !report.reviewQuestions.includes(question)) report.reviewQuestions.push(question);
+  }
+}
+
+function canonize(triples, seenNames) {
+  const incoming = [];
+  for (const triple of triples) {
+    if (triple.subject?.type !== "self" && triple.subject?.name) incoming.push(triple.subject.name);
+    if (triple.object?.type !== "self" && triple.object?.name) incoming.push(triple.object.name);
+  }
+  const map = dedupeProposedNames([...seenNames, ...incoming]);
+  for (const name of incoming) seenNames.push(name);
+  for (const triple of triples) {
+    if (triple.subject?.type !== "self" && map.has(triple.subject?.name)) triple.subject.name = map.get(triple.subject.name);
+    if (triple.object?.type !== "self" && map.has(triple.object?.name)) triple.object.name = map.get(triple.object.name);
+  }
+}
+
+function presentPlan(plan) {
+  return {
+    ...plan,
+    kind: "deterministic",
+    status: "confirmed",
+    fromName: plan.fromName || null,
+    toName: plan.toName || null,
+    type: plan.type,
+    subject: plan.fromName ? { name: plan.fromName } : null,
+    object: plan.toName ? { name: plan.toName } : null,
+  };
+}
+
+function trackSupersession(ledger, proposal, event) {
+  const next = applySupersession(ledger, {
+    fromName: proposal.fromName || proposal.subject?.name,
+    toName: proposal.toName || proposal.object?.name,
+    type: proposal.type,
+    at: event?.occurredAt ? new Date(event.occurredAt).toISOString().slice(0, 10) : proposal.validFrom || null,
+    validFrom: proposal.validFrom || null,
+    validTo: proposal.validTo || null,
+    correction: isCorrectionEvent(event),
+    proposal,
+  });
+  for (const edge of next) {
+    if (edge.proposal) edge.proposal.validTo = edge.validTo || null;
+  }
+  return next;
+}
+
+async function renameCreated(userId, seenNames, createdIds) {
+  const map = dedupeProposedNames(seenNames);
+  for (const [from, to] of map) {
+    if (!from || from === to) continue;
+    const id = createdIds.get(from);
+    if (!id) continue;
+    await prisma.entity.update({
+      where: { id },
+      data: { name: to, normalizedName: normalizeName(to) },
+    });
+    createdIds.delete(from);
+    createdIds.set(to, id);
   }
 }
 
@@ -296,7 +398,7 @@ async function loadRecords(kind, userId, onlyMissing, budget) {
   if (onlyMissing) where.graphExtractedAt = null;
   const query = {
     where,
-    orderBy: { createdAt: "asc" },
+    orderBy: kind === "event" ? [{ occurredAt: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }] : { createdAt: "asc" },
     ...(budget != null ? { take: budget } : {}),
   };
   if (kind === "event") return prisma.event.findMany(query);

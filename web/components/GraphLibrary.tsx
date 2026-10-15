@@ -14,6 +14,8 @@ import {
   type EntityRecord,
   type FamilyPerson,
   type GraphSuggestion,
+  type ReviewAsset,
+  type ReviewPerson,
 } from "@/lib/api";
 
 const COLOR: Record<string, string> = {
@@ -101,6 +103,8 @@ export function GraphPanel() {
 
 export function ReviewPanel() {
   const [relationships, setRelationships] = useState<GraphSuggestion[]>([]);
+  const [family, setFamily] = useState<{ title: string; people: ReviewPerson[] } | null>(null);
+  const [assets, setAssets] = useState<{ title: string; items: ReviewAsset[] } | null>(null);
   const [duplicates, setDuplicates] = useState<Array<{ left: { id: string; name: string }; right: { id: string; name: string } }>>([]);
   const [conflicts, setConflicts] = useState<GraphSuggestion[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -109,6 +113,8 @@ export function ReviewPanel() {
     getGraphSuggestions()
       .then((page) => {
         setRelationships(page.relationships);
+        setFamily(page.family);
+        setAssets(page.assets);
         setDuplicates(page.duplicates);
         setConflicts(page.conflicts);
       })
@@ -120,6 +126,50 @@ export function ReviewPanel() {
   if (error) return <p className="mt-6 text-sm text-red-300/85">{error}</p>;
   return (
     <div className="mt-6 space-y-6">
+      {family ? (
+        <section className="rounded-lg border border-[#2A2A28] px-3 py-3">
+          <h2 className="text-sm" style={{ color: COLOR.family }}>{family.title}</h2>
+          <ul className="mt-3 space-y-3">
+            {["spouse", "parent", "child", "sibling", "relative"].map((relation) => {
+              const people = family.people.filter((person) => person.relation === relation);
+              if (!people.length) return null;
+              return (
+                <li key={relation}>
+                  <p className="text-xs uppercase tracking-wide text-[#6B6963]">{relation}</p>
+                  <ul className="mt-1 space-y-2 border-l border-[#2A2A28] pl-3">
+                    {people.map((person) => (
+                      <li key={person.edgeId} className="text-sm text-[#F5F3EE]">
+                        {person.name}
+                        <div className="mt-1 flex gap-3 text-xs">
+                          <button type="button" className="text-[#7F77DD]" onClick={() => void confirmGraphRelationship(person.edgeId).then(load)}>Confirm</button>
+                          <button type="button" className="text-[#6B6963]" onClick={() => void rejectGraphRelationship(person.edgeId).then(load)}>Fix</button>
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
+      {assets ? (
+        <section className="rounded-lg border border-[#2A2A28] px-3 py-3">
+          <h2 className="text-sm" style={{ color: COLOR.ownership }}>{assets.title}</h2>
+          <ul className="mt-3 space-y-2">
+            {assets.items.map((item) => (
+              <li key={item.edgeId} className="text-sm text-[#F5F3EE]">
+                {item.name}
+                <span className="text-[#6B6963]"> · {item.relation}</span>
+                <div className="mt-1 flex gap-3 text-xs">
+                  <button type="button" className="text-[#7F77DD]" onClick={() => void confirmGraphRelationship(item.edgeId).then(load)}>Confirm</button>
+                  <button type="button" className="text-[#6B6963]" onClick={() => void rejectGraphRelationship(item.edgeId).then(load)}>Fix</button>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
       <section>
         <h2 className="text-sm text-[#6B6963]">Suggested connections</h2>
         <ul className="mt-3 space-y-2">
