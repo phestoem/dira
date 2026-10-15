@@ -52,7 +52,7 @@ export default async function journalRoutes(fastify) {
         console.error("[vision-detect] failed:", err.message);
       }
     });
-    scheduleExtraction(userId, content, { source: "journal", forceStatus: "suggested" });
+    scheduleExtraction(userId, content, { source: "journal", forceStatus: "suggested", diaryEntryId: entry.id });
 
     return {
       id: entry.id,

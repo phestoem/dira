@@ -75,6 +75,7 @@ export default async function graphRoutes(fastify) {
   fastify.post("/graph/relationships", { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const body = request.body || {};
     const normalized = normalizeType(body.type);
+    if (!normalized) return reply.code(400).send({ error: "Unknown relationship type" });
     const committed = await commitTriples(request.userId, [{
       subject: { name: body.fromName, type: body.fromType || "person" },
       predicate: normalized.type,
@@ -94,7 +95,13 @@ export default async function graphRoutes(fastify) {
     if (text.length < 8) return reply.code(400).send({ error: "Say who is connected" });
     const { extractTriples } = await import("../services/graph/relationshipExtractor.js");
     const self = await getOrCreateSelf(request.userId);
-    const extracted = await extractTriples(text, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
+    let extracted;
+    try {
+      extracted = await extractTriples(text, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
+    } catch (err) {
+      const busy = err.status === 429;
+      return reply.code(busy ? 503 : 502).send({ error: busy ? "DIRA is busy right now. Send that again." : "Could not read that connection" });
+    }
     return commitTriples(request.userId, extracted.triples, { source: "user", entityFacts: extracted.entityFacts });
   });
 
@@ -105,6 +112,7 @@ export default async function graphRoutes(fastify) {
     const data = {};
     if (body.type) {
       const normalized = normalizeType(body.type);
+      if (!normalized) return reply.code(400).send({ error: "Unknown relationship type" });
       data.type = normalized.type;
       data.category = categoryOf(normalized.type);
     }
@@ -172,8 +180,14 @@ export default async function graphRoutes(fastify) {
   });
 
   fastify.post("/graph/rebuild", { preHandler: [fastify.authenticate] }, async (request) => {
-    const dryRun = request.body?.dryRun !== false;
-    return rebuildGraph(request.userId, { dryRun });
+    const body = request.body || {};
+    const dryRun = body.dryRun !== false;
+    const force = body.force === true;
+    return rebuildGraph(request.userId, {
+      dryRun,
+      force,
+      onlyMissing: force ? false : body.onlyMissing !== false,
+    });
   });
 }
 

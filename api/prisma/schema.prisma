@@ -137,6 +137,7 @@ model Event {
   fullText            String?
   // original file path or reference
   sourceFile          String?
+  graphExtractedAt    DateTime?
   createdAt           DateTime  @default(now())
   updatedAt           DateTime  @updatedAt
 
@@ -179,6 +180,7 @@ model Vision {
   attributes         Json                         @default("{}")
   altimetrixNotified Boolean                      @default(false)
   space              String                       @default("personal")
+  graphExtractedAt   DateTime?
   createdAt          DateTime                     @default(now())
   updatedAt          DateTime                     @updatedAt
 
@@ -205,8 +207,9 @@ model DiaryEntry {
   emotionalTone        String?
   isPrivate            Boolean  @default(true)
   sharedWithAltimetrix Boolean  @default(false)
-  occurredAt           DateTime @default(now())
-  createdAt            DateTime @default(now())
+  occurredAt           DateTime  @default(now())
+  graphExtractedAt     DateTime?
+  createdAt            DateTime  @default(now())
 
   user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   inputResults InputQueue[] @relation("InputResultDiary")

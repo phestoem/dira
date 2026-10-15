@@ -90,7 +90,7 @@ const SYNONYMS = [
   [/^(knows)$/i, "knows", false],
   [/^(planned for|plan for)$/i, "planned_for", false],
   [/^(inspired by)$/i, "inspired_by", false],
-  [/^(related to|linked to)$/i, "related_to", false],
+  [/^(related to|linked to|related)$/i, "related_to", false],
 ];
 
 const PHRASE = {
@@ -164,7 +164,7 @@ export function normalizeType(raw) {
   for (const [pattern, type, reverse] of SYNONYMS) {
     if (pattern.test(text)) return { type, reverse, ...publicMeta(type) };
   }
-  return { type: "related_to", reverse: false, ...publicMeta("related_to") };
+  return null;
 }
 
 export function inverseOf(type) {

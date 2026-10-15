@@ -21,6 +21,7 @@ import queueRoutes from "./routes/queue.js";
 import digestRoutes from "./routes/digest.js";
 import graphRoutes from "./routes/graph.js";
 import { runScheduledDigests } from "./services/digestService.js";
+import { catchUpGraphExtractions } from "./services/graph/rebuild.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
 
@@ -53,6 +54,9 @@ cron.schedule("0 * * * *", () => {
   console.log("[digest] running daily digest...");
   runScheduledDigests().catch((err) => {
     console.error("[digest] run failed:", err.message);
+  });
+  catchUpGraphExtractions().catch((err) => {
+    console.error("[graph-rebuild] catch-up failed:", err.message);
   });
 }, { timezone: "Europe/Helsinki" });
 

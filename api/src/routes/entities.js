@@ -168,7 +168,7 @@ export async function linkEntityToTarget(userId, entityId, input) {
     if (targetId === entity.id) throw httpError("Cannot link an entity to itself", 400);
     const target = await ownEntity(userId, targetId);
     if (!target) throw httpError("Target not found", 404);
-    const normalized = normalizeType(relationship);
+    const normalized = normalizeType(relationship) || normalizeType("related_to");
     const duplicate = await prisma.relationship.findFirst({
       where: {
         userId,

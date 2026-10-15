@@ -454,7 +454,7 @@ async function applyActionPlan(plan, affectedIds, userId) {
         prisma.entity.findFirst({ where: { id: op.toId, userId } }),
       ]);
       if (!from || !to || from.id === to.id) continue;
-      const normalized = normalizeType(op.relationshipType);
+      const normalized = normalizeType(op.relationshipType) || normalizeType("related_to");
       const duplicate = await prisma.relationship.findFirst({
         where: {
           userId,

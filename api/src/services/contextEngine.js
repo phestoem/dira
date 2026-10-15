@@ -3,7 +3,7 @@ import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { getAltimetrixContext } from "./altimetrixBridge.js";
 import { expandGraphNames } from "./graph/entityResolver.js";
-import { anchorVision } from "./graph/relationshipExtractor.js";
+import { anchorVision, markGraphExtracted } from "./graph/relationshipExtractor.js";
 import {
   extractFromCsv,
   extractFromExcel,
@@ -724,7 +724,9 @@ export async function detectVisionInJournalEntry(entry, userId) {
   });
   console.log("[vision-detect] created vision:", result.title, "from journal entry:", entry.id);
   setImmediate(() => {
-    anchorVision(userId, vision).catch((err) => console.error("[graph] vision anchor failed:", err.message));
+    anchorVision(userId, vision)
+      .then(() => markGraphExtracted(userId, "vision", vision.id))
+      .catch((err) => console.error("[graph] vision anchor failed:", err.message));
   });
   setImmediate(() => {
     enrichVision(vision, userId, result.location).catch((err) => {

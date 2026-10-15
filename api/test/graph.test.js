@@ -4,7 +4,7 @@ import { prisma } from "../src/prisma.js";
 import { mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
-import { commitTriples } from "../src/services/graph/relationshipExtractor.js";
+import { absorbDroppedPayment, commitTriples, deterministicEdgePlans, dropReason, extractWithRetry, graphExtractProvider, headerDelayFrom, retryDelayMs } from "../src/services/graph/relationshipExtractor.js";
 import { isSensitive, normalizeType } from "../src/services/graph/relationshipTypes.js";
 
 test("normalizeType maps kinship words and work roles", () => {
@@ -16,6 +16,75 @@ test("normalizeType maps kinship words and work roles", () => {
   assert.equal(normalizeType("supervises").reverse, false);
   assert.equal(isSensitive("parent_of"), true);
   assert.equal(isSensitive("supervises"), false);
+});
+
+test("amounts, dates and unknown predicates are not nodes", () => {
+  assert.equal(normalizeType("hasTotalContractValue"), null);
+  assert.equal(dropReason({
+    subject: { name: "Electrical Works", type: "project" },
+    predicate: "hasTotalContractValue",
+    object: { name: "2,399,500 TSH", type: "asset" },
+  }), "amount-as-node");
+  assert.equal(dropReason({
+    subject: { name: "Plot P9104", type: "property" },
+    predicate: "dated",
+    object: { name: "12 May 2024", type: "other" },
+  }), "date-as-node");
+  assert.equal(dropReason({
+    subject: { name: "Ada", type: "person" },
+    predicate: "born",
+    object: { name: "2004", type: "other" },
+  }), "date-as-node");
+  assert.equal(dropReason({
+    subject: { name: "Ada", type: "self" },
+    predicate: "hasTotalContractValue",
+    object: { name: "Mbeya Home", type: "property" },
+  }), "unknown-predicate");
+  assert.equal(dropReason({
+    subject: { name: "Burton", type: "person" },
+    predicate: "supervises",
+    object: { name: "Mbeya Home", type: "property" },
+  }), null);
+
+  const event = { id: "event-1", title: "Electrical Works", people: [], places: [], financials: {} };
+  const plans = deterministicEdgePlans(event, "Ada");
+  const absorbed = absorbDroppedPayment(plans, {
+    subject: { name: "Electrical Works", type: "project" },
+    predicate: "hasTotalContractValue",
+    object: { name: "2,399,500 TSH", type: "asset" },
+  }, event, "Ada");
+  assert.equal(absorbed, true);
+  assert.equal(plans.find((plan) => plan.type === "paid").attributes.amount, 2399500);
+  assert.equal(plans.find((plan) => plan.type === "paid").attributes.currency, "TSH");
+});
+
+test("graph extraction backs off on rate limits", async () => {
+  const previous = process.env.GRAPH_EXTRACT_PROVIDER;
+  delete process.env.GRAPH_EXTRACT_PROVIDER;
+  assert.equal(graphExtractProvider(), "openai");
+  process.env.GRAPH_EXTRACT_PROVIDER = "groq";
+  assert.equal(graphExtractProvider(), "groq");
+  if (previous == null) delete process.env.GRAPH_EXTRACT_PROVIDER;
+  else process.env.GRAPH_EXTRACT_PROVIDER = previous;
+  assert.equal(retryDelayMs({ retryAfter: 5000 }, 1), 5000);
+  assert.equal(retryDelayMs({ status: 429 }, 1), 2000);
+  assert.equal(retryDelayMs({ status: 429 }, 2), 4000);
+  assert.equal(retryDelayMs({ status: 429 }, 3), 8000);
+  assert.equal(retryDelayMs({ status: 429 }, 4), 16000);
+  assert.equal(retryDelayMs({ status: 429 }, 5), 32000);
+  assert.equal(headerDelayFrom(new Headers({ "retry-after": "3" })), 3000);
+  assert.equal(headerDelayFrom(new Headers({ "x-ratelimit-reset-requests": "6s" })), 6000);
+
+  let calls = 0;
+  const waits = [];
+  await assert.rejects(() => extractWithRetry(() => {
+    calls += 1;
+    const error = new Error("rate");
+    error.status = 429;
+    throw error;
+  }, async (ms) => { waits.push(ms); }));
+  assert.equal(calls, 5);
+  assert.deepEqual(waits, [2000, 4000, 8000, 16000]);
 });
 
 test("assemblePaths stops at depth and does not loop", () => {
@@ -162,6 +231,7 @@ async function databaseReady() {
     await prisma.$queryRaw`SELECT 1`;
     await prisma.$queryRaw`SELECT "isSelf" FROM entities LIMIT 1`;
     await prisma.$queryRaw`SELECT "fromKind" FROM relationships LIMIT 1`;
+    await prisma.$queryRaw`SELECT "graphExtractedAt" FROM events LIMIT 1`;
     return true;
   } catch {
     return false;

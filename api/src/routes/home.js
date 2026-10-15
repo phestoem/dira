@@ -575,16 +575,22 @@ async function saveJournal(userId, content) {
       console.error("[vision-detect] failed:", err.message);
     }
   });
-  scheduleExtraction(userId, content, { source: "journal", forceStatus: "suggested" });
+  scheduleExtraction(userId, content, { source: "journal", forceStatus: "suggested", diaryEntryId: entry.id });
   return entry;
 }
 
 async function runRelationshipAdd(userId, routing, payload) {
   const self = await getOrCreateSelf(userId);
-  const extracted = await extractTriples(payload.message, {
-    selfName: self.name,
-    today: new Date().toISOString().slice(0, 10),
-  });
+  let extracted;
+  try {
+    extracted = await extractTriples(payload.message, {
+      selfName: self.name,
+      today: new Date().toISOString().slice(0, 10),
+    });
+  } catch (err) {
+    console.error("[graph] relationship extract failed:", err.message);
+    return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
+  }
   const committed = await commitTriples(userId, extracted.triples, {
     source: "conversation",
     forceStatus: "suggested",
@@ -596,7 +602,13 @@ async function runRelationshipAdd(userId, routing, payload) {
 
 async function runRelationshipChange(userId, routing, payload) {
   const self = await getOrCreateSelf(userId);
-  const extracted = await extractTriples(payload.message, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
+  let extracted;
+  try {
+    extracted = await extractTriples(payload.message, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
+  } catch (err) {
+    console.error("[graph] relationship extract failed:", err.message);
+    return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
+  }
   const proposals = [];
   for (const triple of extracted.triples) {
     const saved = await commitTriples(userId, [triple], { source: "conversation", forceStatus: "suggested" });

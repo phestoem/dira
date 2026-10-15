@@ -1,20 +1,39 @@
 import { prisma } from "../../prisma.js";
 import { getOrCreateSelf, resolveEntity } from "./entityResolver.js";
-import { categoryOf, isSensitive, isSymmetric, normalizeType } from "./relationshipTypes.js";
+import { categoryOf, isSensitive, isSymmetric, listRelationshipTypes, normalizeType } from "./relationshipTypes.js";
+import { normalizeName } from "./entityResolver.js";
 
 const GROQ_MODEL = "qwen/qwen3.8-27b";
+const OPENAI_MODEL = "gpt-4o-mini";
+const BACKOFF_MS = [2000, 4000, 8000, 16000, 32000];
+const MAX_EXTRACT_ATTEMPTS = 5;
 
-const EXTRACT_PROMPT = `Extract relationship triples that are actually stated in the text.
+function extractPrompt() {
+  const predicates = listRelationshipTypes().map((item) => item.type).join(", ");
+  return `Extract relationship triples that are actually stated in the text.
 Return JSON only:
 { "triples": [{ "subject": { "name": "", "type": "person|place|property|project|organisation|asset|vehicle|self" }, "predicate": "", "object": { "name": "", "type": "" }, "validFrom": null, "validTo": null, "attributes": {}, "confidence": 0.5, "evidence": "" }], "entityFacts": [{ "name": "", "birthDate": null, "deathDate": null, "kind": null }] }
 Rules:
+- Subjects and objects must be real-world things: a person, place, property, project, organisation, vehicle, or named asset (for example "Plot P9104").
+- Money amounts, dates, durations, percentages, quantities and statuses go in "attributes", never in subject or object.
+- Predicates must be one of: ${predicates}.
+  Synonyms are accepted: mama, mum, mother, dada, mke, mume, mtoto, fundi, msimamizi, ananunua, alinunua, supervises, owns, sent money to.
+  If no listed predicate fits, omit the triple.
+- Prefer relationships between people, places and assets over describing a single event's properties.
 - "I", "me", "my", "mimi", "yangu" are type self.
 - Do not invent family links that were not said.
 - A death does not end a family edge. Put the date on entityFacts.deathDate.
 - Selling, moving out, or a role ending sets validTo.
 - Money transfers set attributes.amount and attributes.currency.
 - At most 15 triples.
-- Work in English or Swahili.`;
+- Work in English or Swahili.
+
+Bad: { "subject": { "name": "Electrical Works", "type": "project" }, "predicate": "hasTotalContractValue", "object": { "name": "2,399,500 TSH", "type": "asset" } }
+Bad: { "subject": { "name": "Plot P9104", "type": "property" }, "predicate": "dated", "object": { "name": "12 May 2024", "type": "other" } }
+Good: { "subject": { "name": "Burton", "type": "person" }, "predicate": "supervises", "object": { "name": "Mbeya Home", "type": "property" } }
+Good: { "subject": { "name": "me", "type": "self" }, "predicate": "owns", "object": { "name": "Plot P9104", "type": "property" } }
+Good: { "subject": { "name": "me", "type": "self" }, "predicate": "sent_money_to", "object": { "name": "Makoba", "type": "person" }, "attributes": { "amount": 50000, "currency": "TSH" } }`;
+}
 
 export async function extractTriples(text, context = {}) {
   const body = String(text || "").trim();
@@ -28,26 +47,186 @@ export async function extractTriples(text, context = {}) {
     body.slice(0, 3500),
   ].filter(Boolean).join("\n");
   try {
-    const raw = await completeJson(EXTRACT_PROMPT, user);
+    const raw = await completeJson(extractPrompt(), user);
     const parsed = parseJson(raw);
     const triples = Array.isArray(parsed?.triples) ? parsed.triples.slice(0, 15) : [];
     const entityFacts = Array.isArray(parsed?.entityFacts) ? parsed.entityFacts.slice(0, 15) : [];
     return { triples, entityFacts };
   } catch (err) {
-    console.error("[graph] extract failed:", err.message);
-    return { triples: [], entityFacts: [] };
+    if (err.status !== 429) console.error("[graph] extract failed:", err.message);
+    throw err;
   }
+}
+
+export function graphExtractProvider() {
+  return String(process.env.GRAPH_EXTRACT_PROVIDER || "openai").trim().toLowerCase() === "groq" ? "groq" : "openai";
+}
+
+export function retryDelayMs(error, attempt) {
+  const headerWait = headerDelayMs(error);
+  if (headerWait != null) return Math.min(headerWait, 60000);
+  const index = Math.min(Math.max(Number(attempt) || 1, 1), BACKOFF_MS.length) - 1;
+  return BACKOFF_MS[index];
+}
+
+export async function extractWithRetry(run, sleepFn = sleep) {
+  let last;
+  for (let attempt = 1; attempt <= MAX_EXTRACT_ATTEMPTS; attempt += 1) {
+    try {
+      return await run();
+    } catch (err) {
+      last = err;
+      if (err?.status !== 429 || attempt === MAX_EXTRACT_ATTEMPTS) throw err;
+      const wait = retryDelayMs(err, attempt);
+      console.warn(`[graph] rate limited, waiting ${Math.round(wait / 1000)}s (attempt ${attempt}/${MAX_EXTRACT_ATTEMPTS})`);
+      await sleepFn(wait);
+    }
+  }
+  throw last;
+}
+
+export function dropReason(triple) {
+  const subject = sideName(triple?.subject);
+  const object = sideName(triple?.object);
+  if (isDateName(subject) || isDateName(object)) return "date-as-node";
+  if (isMoneyName(subject) || isMoneyName(object)) return "amount-as-node";
+  if (isQuantityName(subject) || isQuantityName(object)) return "quantity-as-node";
+  if (isStatusName(subject) || isStatusName(object)) return "status-as-node";
+  if (!normalizeType(triple?.predicate)) return "unknown-predicate";
+  if (subject && object && normalizeName(subject) === normalizeName(object)) return "same-node";
+  return null;
+}
+
+export function prepareTriples(triples) {
+  const kept = [];
+  const dropped = [];
+  for (const triple of Array.isArray(triples) ? triples : []) {
+    const reason = dropReason(triple);
+    if (!reason) {
+      kept.push(triple);
+      continue;
+    }
+    dropped.push({ ...triple, reason });
+    console.debug(`[graph] dropped triple (${reason}): ${sideName(triple.subject)} —${triple.predicate}→ ${sideName(triple.object)}`);
+  }
+  return { kept, dropped };
+}
+
+export function moneyValue(triple) {
+  const attributes = isObject(triple?.attributes) ? triple.attributes : {};
+  const stated = Number(attributes.amount);
+  if (Number.isFinite(stated) && stated > 0) {
+    return { amount: stated, currency: attributes.currency || currencyIn(sideName(triple.object)) || currencyIn(sideName(triple.subject)) || "TSH" };
+  }
+  return moneyFromName(sideName(triple?.object)) || moneyFromName(sideName(triple?.subject));
+}
+
+export function eventLikeProject(triple, eventTitle) {
+  const type = String(triple?.subject?.type || "").toLowerCase();
+  const name = sideName(triple?.subject);
+  if (type === "project" || type === "event") return true;
+  return Boolean(eventTitle && name && normalizeName(name) === normalizeName(eventTitle));
+}
+
+export function selfIsPayer(triple) {
+  const attributes = isObject(triple?.attributes) ? triple.attributes : {};
+  const payer = attributes.payer || attributes.paidBy;
+  if (!payer) return true;
+  return /^(self|i|me|my|mimi)$/i.test(String(payer).trim());
+}
+
+export function deterministicEdgePlans(event, selfName) {
+  if (!event?.id) return [];
+  const plans = [];
+  for (const person of Array.isArray(event.people) ? event.people : []) {
+    const name = typeof person === "string" ? person : person?.name;
+    if (!name) continue;
+    plans.push({
+      kind: "deterministic",
+      type: "participant_in",
+      eventId: event.id,
+      fromName: name,
+      toName: event.title,
+      toKind: "event",
+      toId: event.id,
+      attributes: { role: person?.role || "mentioned" },
+    });
+  }
+  for (const place of Array.isArray(event.places) ? event.places : []) {
+    const name = typeof place === "string" ? place : place?.name;
+    if (!name) continue;
+    plans.push({
+      kind: "deterministic",
+      type: "happened_at",
+      eventId: event.id,
+      fromName: event.title,
+      fromKind: "event",
+      fromId: event.id,
+      toName: name,
+      attributes: {},
+    });
+  }
+  const financial = event.financials && typeof event.financials === "object" ? event.financials : {};
+  const amount = Number(financial.amount ?? financial.totalAmount);
+  if (Number.isFinite(amount) && amount > 0) {
+    plans.push({
+      kind: "deterministic",
+      type: "paid",
+      eventId: event.id,
+      fromName: selfName || "self",
+      toName: event.title,
+      toKind: "event",
+      toId: event.id,
+      attributes: { amount, currency: financial.currency || "TSH" },
+    });
+  }
+  return plans;
+}
+
+export function absorbDroppedPayment(plans, triple, event, selfName) {
+  if (!eventLikeProject(triple, event?.title) || !selfIsPayer(triple)) return false;
+  const money = moneyValue(triple);
+  if (!money) return false;
+  const paid = plans.find((plan) => plan.kind === "deterministic" && plan.type === "paid" && plan.eventId === event.id);
+  if (paid) {
+    if (!paid.attributes?.amount) paid.attributes = { ...paid.attributes, ...money };
+    return true;
+  }
+  plans.push({
+    kind: "deterministic",
+    type: "paid",
+    eventId: event.id,
+    fromName: selfName || "self",
+    toName: event.title,
+    toKind: "event",
+    toId: event.id,
+    attributes: money,
+  });
+  return true;
 }
 
 export async function commitTriples(userId, triples, options = {}) {
   const source = options.source || "intake";
-  const result = { created: 0, updated: 0, suggested: 0, conflicts: [] };
+  const result = { created: 0, updated: 0, suggested: 0, conflicts: [], dropped: [] };
   const self = await getOrCreateSelf(userId);
-  for (const triple of Array.isArray(triples) ? triples : []) {
+  const prepared = prepareTriples(triples);
+  result.dropped = prepared.dropped;
+  for (const triple of prepared.dropped) {
+    if (triple.reason === "amount-as-node" && options.evidenceEventId) {
+      await attachPaymentIfNeeded(userId, triple, options, self);
+    }
+  }
+  for (const triple of prepared.kept) {
     const subject = await resolveSide(userId, triple.subject, self);
     const object = await resolveSide(userId, triple.object, self);
-    if (!subject.entity || !object.entity || subject.entity.id === object.entity.id) continue;
+    if (!subject.entity || !object.entity) continue;
+    if (subject.entity.id === object.entity.id) {
+      console.debug(`[graph] dropped triple (same-node): ${sideName(triple.subject)} —${triple.predicate}→ ${sideName(triple.object)}`);
+      result.dropped.push({ ...triple, reason: "same-node" });
+      continue;
+    }
     const normalized = normalizeType(triple.predicate);
+    if (!normalized) continue;
     let from = subject;
     let to = object;
     if (normalized.reverse) [from, to] = [to, from];
@@ -154,17 +333,26 @@ export function scheduleExtraction(userId, text, options = {}) {
         take: 40,
         orderBy: { updatedAt: "desc" },
       });
-      const extracted = await extractTriples(text, {
+      const extracted = await extractWithRetry(() => extractTriples(text, {
         selfName: self?.name,
         today: new Date().toISOString().slice(0, 10),
         title: options.title,
         known,
-      });
+      }));
       await commitTriples(userId, extracted.triples, { ...options, entityFacts: extracted.entityFacts });
+      await markScheduled(userId, options);
     } catch (err) {
       console.error("[graph] schedule failed:", err.message);
     }
   });
+}
+
+export async function markGraphExtracted(userId, kind, id) {
+  if (!userId || !id) return;
+  const data = { graphExtractedAt: new Date() };
+  if (kind === "event") await prisma.event.updateMany({ where: { id, userId }, data });
+  else if (kind === "vision") await prisma.vision.updateMany({ where: { id, userId }, data });
+  else if (kind === "diary") await prisma.diaryEntry.updateMany({ where: { id, userId }, data });
 }
 
 export async function anchorVision(userId, vision) {
@@ -374,9 +562,141 @@ async function conflictSuggestion(userId, entity, field, current, incoming, sour
   }).catch(() => null);
 }
 
+async function attachPaymentIfNeeded(userId, triple, options, self) {
+  if (!eventLikeProject(triple, options.title || options.eventTitle) || !selfIsPayer(triple) || !self?.id) return;
+  const money = moneyValue(triple);
+  if (!money) return;
+  const existing = await prisma.relationship.findFirst({
+    where: {
+      userId,
+      fromKind: "entity",
+      fromId: self.id,
+      toKind: "event",
+      toId: options.evidenceEventId,
+      type: "paid",
+    },
+  });
+  if (!existing) {
+    await upsertEdge(userId, {
+      fromKind: "entity",
+      fromId: self.id,
+      toKind: "event",
+      toId: options.evidenceEventId,
+      type: "paid",
+      category: "financial",
+      status: "confirmed",
+      source: options.source || "intake",
+      confidence: 0.8,
+      evidenceEventId: options.evidenceEventId,
+      attributes: money,
+    });
+    return;
+  }
+  const attributes = isObject(existing.attributes) ? existing.attributes : {};
+  if (attributes.amount || attributes.total) return;
+  await prisma.relationship.update({
+    where: { id: existing.id },
+    data: { attributes: { ...attributes, ...money } },
+  });
+}
+
+function sideName(side) {
+  if (!side) return "";
+  if (typeof side === "string") return side.trim();
+  return String(side.name || "").trim();
+}
+
+function isMoneyName(name) {
+  const text = String(name || "").trim();
+  if (!text) return false;
+  if (/^[\d.,\s]+(TSH|TZS|EUR|USD|KES)?$/i.test(text) && /\d/.test(text)) return true;
+  if (/^(TSH|TZS|EUR|USD|KES)\s*[\d.,\s]+$/i.test(text)) return true;
+  return /^\d/.test(text) && /\b(TSH|TZS|EUR|USD|KES)\b/i.test(text);
+}
+
+function isDateName(name) {
+  const text = String(name || "").trim();
+  if (/^\d{4}$/.test(text)) return true;
+  if (/^\d{4}-\d{2}-\d{2}/.test(text)) return true;
+  if (/^\d{1,2}[\/.\-]\d{1,2}[\/.\-]\d{2,4}$/.test(text)) return true;
+  return /^(?:\d{1,2}\s+)?(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)(?:\s+\d{1,2})?(?:,?\s+\d{4})?$/i.test(text);
+}
+
+function isQuantityName(name) {
+  return /^\d[\d.,]*\s*(%|percent|kg|g|m|sqm|m2|bags|units|pcs|hrs|hours|days)?$/i.test(String(name || "").trim());
+}
+
+function isStatusName(name) {
+  return /^(completed|complete|pending|active|cancelled|canceled|paid|unpaid|done|approved|rejected|ongoing|dormant)$/i.test(String(name || "").trim());
+}
+
+function moneyFromName(name) {
+  const text = String(name || "").trim();
+  const match = text.match(/([\d][\d.,\s]*)\s*(TSH|TZS|EUR|USD|KES)?/i) || text.match(/(TSH|TZS|EUR|USD|KES)\s*([\d][\d.,\s]*)/i);
+  if (!match) return null;
+  const amountText = /\d/.test(match[1]) ? match[1] : match[2];
+  const currency = /\d/.test(match[1]) ? match[2] : match[1];
+  const amount = parseAmount(amountText);
+  if (!Number.isFinite(amount)) return null;
+  return { amount, currency: (currency || "TSH").toUpperCase() };
+}
+
+function currencyIn(name) {
+  const match = String(name || "").match(/\b(TSH|TZS|EUR|USD|KES)\b/i);
+  return match ? match[1].toUpperCase() : null;
+}
+
+function parseAmount(text) {
+  let num = String(text || "").replace(/\s/g, "");
+  if (num.includes(",") && num.includes(".")) {
+    if (num.lastIndexOf(",") > num.lastIndexOf(".")) num = num.replace(/\./g, "").replace(",", ".");
+    else num = num.replace(/,/g, "");
+  } else if ((num.match(/,/g) || []).length > 1 || (num.match(/\./g) || []).length > 1) {
+    num = num.replace(/[.,]/g, "");
+  } else {
+    num = num.replace(/,/g, "");
+  }
+  const amount = Number(num);
+  return Number.isFinite(amount) ? amount : null;
+}
+
 async function completeJson(system, user) {
+  if (graphExtractProvider() === "groq") return completeWithGroq(system, user);
+  try {
+    return await completeWithOpenAI(system, user);
+  } catch (err) {
+    if (err.status === 429) throw err;
+    console.error("[graph] openai extract failed, trying groq:", err.message);
+    return completeWithGroq(system, user);
+  }
+}
+
+async function completeWithOpenAI(system, user) {
+  const key = usableKey(process.env.OPENAI_API_KEY);
+  if (!key) throw new Error("OpenAI key is not configured");
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      temperature: 0.2,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+    signal: AbortSignal.timeout(20000),
+  });
+  if (response.status === 429) throw rateLimitError("OpenAI", response);
+  if (!response.ok) throw new Error(`OpenAI graph status ${response.status}`);
+  const data = await response.json();
+  return String(data.choices?.[0]?.message?.content || "");
+}
+
+async function completeWithGroq(system, user) {
   const key = usableKey(process.env.GROQ_API_KEY);
-  if (!key) return "{\"triples\":[]}";
+  if (!key) throw new Error("Groq key is not configured");
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
@@ -391,9 +711,60 @@ async function completeJson(system, user) {
     }),
     signal: AbortSignal.timeout(20000),
   });
+  if (response.status === 429) throw rateLimitError("Groq", response);
   if (!response.ok) throw new Error(`Groq graph status ${response.status}`);
   const data = await response.json();
   return String(data.choices?.[0]?.message?.content || "").replace(/<think>[\s\S]*?<\/think>/gi, "");
+}
+
+function rateLimitError(provider, response) {
+  const error = new Error(`${provider} graph status 429`);
+  error.status = 429;
+  error.retryAfter = headerDelayFrom(response.headers);
+  return error;
+}
+
+function headerDelayMs(error) {
+  if (Number.isFinite(error?.retryAfter) && error.retryAfter > 0) return error.retryAfter;
+  return null;
+}
+
+export function headerDelayFrom(headers) {
+  if (!headers?.get) return null;
+  const retryAfter = parseWait(headers.get("retry-after"));
+  if (retryAfter != null) return retryAfter;
+  for (const name of ["x-ratelimit-reset", "x-ratelimit-reset-requests", "x-ratelimit-reset-tokens"]) {
+    const parsed = parseWait(headers.get(name));
+    if (parsed != null) return parsed;
+  }
+  return null;
+}
+
+function parseWait(value) {
+  if (value == null || value === "") return null;
+  const text = String(value).trim();
+  const numeric = Number(text);
+  if (Number.isFinite(numeric)) {
+    if (numeric > 1e12) return Math.max(0, numeric - Date.now());
+    if (numeric > 1e9) return Math.max(0, numeric * 1000 - Date.now());
+    return Math.max(0, Math.ceil(numeric * 1000));
+  }
+  const date = Date.parse(text);
+  if (Number.isFinite(date) && /[a-z]/i.test(text) && text.includes(",")) return Math.max(0, date - Date.now());
+  const match = text.match(/^(?:(\d+)h)?(?:(\d+)m)?(?:(\d+(?:\.\d+)?)s)?$/i);
+  if (!match || (match[1] == null && match[2] == null && match[3] == null)) return null;
+  const ms = (Number(match[1] || 0) * 3600 + Number(match[2] || 0) * 60 + Number(match[3] || 0)) * 1000;
+  return ms > 0 ? Math.ceil(ms) : null;
+}
+
+async function markScheduled(userId, options) {
+  if (options.evidenceEventId) await markGraphExtracted(userId, "event", options.evidenceEventId);
+  if (options.diaryEntryId) await markGraphExtracted(userId, "diary", options.diaryEntryId);
+  if (options.visionId) await markGraphExtracted(userId, "vision", options.visionId);
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function parseJson(raw) {
