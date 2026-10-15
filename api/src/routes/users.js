@@ -1,11 +1,32 @@
 import { prisma } from "../prisma.js";
 import { fetchAltimetrixNudge, syncPendingEvents } from "../services/altimetrixBridge.js";
+import { digestSettings } from "../services/digestService.js";
 
 export default async function userRoutes(fastify) {
   fastify.get("/users/me", { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const user = await prisma.user.findUnique({ where: { id: request.userId } });
     if (!user) return reply.code(404).send({ error: "not found" });
     return presentUser(user);
+  });
+
+  fastify.patch("/users/me", { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const user = await prisma.user.findUnique({ where: { id: request.userId } });
+    if (!user) return reply.code(404).send({ error: "not found" });
+    const incoming = request.body?.settings;
+    if (!incoming || typeof incoming !== "object" || Array.isArray(incoming)) {
+      return reply.code(400).send({ error: "settings is required" });
+    }
+    const current = user.settings && typeof user.settings === "object" && !Array.isArray(user.settings) ? user.settings : {};
+    const next = { ...current };
+    if (typeof incoming.digestEnabled === "boolean") next.digestEnabled = incoming.digestEnabled;
+    if (typeof incoming.digestTime === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(incoming.digestTime)) {
+      next.digestTime = incoming.digestTime;
+    }
+    const updated = await prisma.user.update({
+      where: { id: user.id },
+      data: { settings: next },
+    });
+    return presentUser(updated);
   });
 
   fastify.patch("/users/me/altimetrix", { preHandler: [fastify.authenticate] }, async (request, reply) => {
@@ -61,5 +82,6 @@ function presentUser(user) {
     email: user.email,
     createdAt: user.createdAt,
     altimetrixUserId: user.altimetrixUserId,
+    settings: digestSettings(user.settings),
   };
 }

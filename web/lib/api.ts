@@ -1,5 +1,10 @@
 import { clearTokens, getAccessToken, getRefreshToken } from "./auth";
 
+export type DigestSettings = {
+  digestEnabled: boolean;
+  digestTime: string;
+};
+
 export type DiraUser = {
   id: string;
   handle: string;
@@ -7,6 +12,15 @@ export type DiraUser = {
   email: string;
   createdAt?: string;
   altimetrixUserId?: string | null;
+  settings?: DigestSettings;
+};
+
+export type DigestPreview = {
+  upcomingBirthdays: Array<{ name: string; date: string; daysAway: number }>;
+  upcomingEvents: Array<{ title: string; date: string; daysAway: number }>;
+  pendingQueue: number;
+  dormantVisions: Array<{ title: string; daysSinceTouch: number }>;
+  hasAnything: boolean;
 };
 
 export type IntakeSpace = "personal" | "family" | "professional" | "vision";
@@ -107,6 +121,15 @@ async function parseError(res: Response): Promise<string> {
 
 export async function getMe(): Promise<DiraUser> {
   const res = await apiFetch("/users/me");
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<DiraUser>;
+}
+
+export async function updateDigestSettings(settings: DigestSettings): Promise<DiraUser> {
+  const res = await apiFetch("/users/me", {
+    method: "PATCH",
+    body: JSON.stringify({ settings }),
+  });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<DiraUser>;
 }

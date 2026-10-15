@@ -2,6 +2,7 @@ import "dotenv/config";
 import { mkdirSync } from "fs";
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
+import cron from "node-cron";
 import corsPlugin from "./plugins/cors.js";
 import authPlugin from "./plugins/auth.js";
 import authRoutes from "./routes/auth.js";
@@ -17,6 +18,8 @@ import advisorRoutes from "./routes/advisor.js";
 import homeRoutes from "./routes/home.js";
 import emailRoutes from "./routes/email.js";
 import queueRoutes from "./routes/queue.js";
+import digestRoutes from "./routes/digest.js";
+import { runScheduledDigests } from "./services/digestService.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
 
@@ -42,6 +45,14 @@ await app.register(advisorRoutes);
 await app.register(homeRoutes);
 await app.register(emailRoutes);
 await app.register(queueRoutes);
+await app.register(digestRoutes);
+
+cron.schedule("0 * * * *", () => {
+  console.log("[digest] running daily digest...");
+  runScheduledDigests().catch((err) => {
+    console.error("[digest] run failed:", err.message);
+  });
+}, { timezone: "Europe/Helsinki" });
 
 app.get("/health", async () => ({
   status: "ok",

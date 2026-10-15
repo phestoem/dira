@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getMe, linkAltimetrix, logout, syncAltimetrix } from "@/lib/api";
+import { getMe, linkAltimetrix, logout, syncAltimetrix, updateDigestSettings } from "@/lib/api";
 import { clearTokens, getUser, saveUser, type StoredUser } from "@/lib/auth";
 
 export default function AccountPage() {
@@ -15,6 +15,10 @@ export default function AccountPage() {
   const [syncing, setSyncing] = useState(false);
   const [bridgeNote, setBridgeNote] = useState<string | null>(null);
   const [bridgeError, setBridgeError] = useState<string | null>(null);
+  const [digestEnabled, setDigestEnabled] = useState(true);
+  const [digestTime, setDigestTime] = useState("07:00");
+  const [digestSaving, setDigestSaving] = useState(false);
+  const [digestNote, setDigestNote] = useState<string | null>(null);
 
   useEffect(() => {
     setUser(getUser());
@@ -23,6 +27,8 @@ export default function AccountPage() {
       .then((me) => {
         if (cancelled) return;
         setAltimetrixUserId(me.altimetrixUserId || null);
+        setDigestEnabled(me.settings?.digestEnabled !== false);
+        setDigestTime(me.settings?.digestTime || "07:00");
         saveUser(me);
       })
       .catch(() => {
@@ -82,6 +88,22 @@ export default function AccountPage() {
     }
   }
 
+  async function saveDigest(enabled: boolean, time: string) {
+    setDigestEnabled(enabled);
+    setDigestTime(time);
+    setDigestSaving(true);
+    setDigestNote(null);
+    try {
+      const me = await updateDigestSettings({ digestEnabled: enabled, digestTime: time });
+      setDigestEnabled(me.settings?.digestEnabled !== false);
+      setDigestTime(me.settings?.digestTime || time);
+    } catch (err) {
+      setDigestNote(err instanceof Error ? err.message : "Could not save the morning digest.");
+    } finally {
+      setDigestSaving(false);
+    }
+  }
+
   const memberSince = user?.createdAt ? formatDate(user.createdAt) : "";
 
   return (
@@ -136,6 +158,39 @@ export default function AccountPage() {
         )}
         {bridgeNote ? <p className="mt-4 text-sm text-[#6B6963]">{bridgeNote}</p> : null}
         {bridgeError ? <p className="mt-4 text-sm text-red-300/85">{bridgeError}</p> : null}
+      </section>
+
+      <div className="my-10 h-px bg-[#2A2A28]" />
+
+      <section>
+        <h2 className="text-sm text-[#F5F3EE]">Morning digest</h2>
+        <div className="mt-4 flex items-center justify-between gap-4">
+          <p className="text-sm text-[#6B6963]">Email a short brief of what is coming up.</p>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={digestEnabled}
+            aria-label="Morning digest"
+            disabled={digestSaving}
+            onClick={() => void saveDigest(!digestEnabled, digestTime)}
+            className={`relative h-6 w-11 shrink-0 rounded-full border border-[#2A2A28] disabled:opacity-60 ${digestEnabled ? "bg-[#3C3489]" : "bg-[#161614]"}`}
+          >
+            <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-[#F5F3EE] transition-all ${digestEnabled ? "left-6" : "left-0.5"}`} />
+          </button>
+        </div>
+        <label className="mt-4 flex items-center justify-between gap-4 text-sm text-[#6B6963]">
+          Time
+          <input
+            type="time"
+            value={digestTime}
+            disabled={digestSaving || !digestEnabled}
+            onChange={(event) => void saveDigest(digestEnabled, event.target.value || "07:00")}
+            className="bg-transparent text-sm text-[#F5F3EE] disabled:opacity-40"
+            style={{ colorScheme: "dark" }}
+          />
+        </label>
+        <p className="mt-3 text-xs text-[#6B6963]">Helsinki time. Default is 7:00.</p>
+        {digestNote ? <p className="mt-3 text-sm text-red-300/85">{digestNote}</p> : null}
       </section>
 
       <div className="my-10 h-px bg-[#2A2A28]" />
