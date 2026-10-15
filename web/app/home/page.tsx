@@ -49,6 +49,7 @@ type Turn = {
   resolved?: boolean;
   restored?: boolean;
   reopenQueueId?: string;
+  retryText?: string;
 };
 
 type LastConfirmed = {
@@ -161,7 +162,7 @@ export default function HomePage() {
       setMessages((current) =>
         current.map((turn) =>
           turn.id === pending.id
-            ? { ...turn, busy: false, text: message }
+            ? { ...turn, busy: false, text: message, retryText: text }
             : turn,
         ),
       );
@@ -183,6 +184,23 @@ export default function HomePage() {
     } catch (err) {
       const message = err instanceof Error ? err.message : "Couldn't finish that.";
       setMessages((current) => current.map((turn) => (turn.id === pending.id ? { ...turn, busy: false, text: message } : turn)));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retry(turnId: string, text: string) {
+    if (busy || !text.trim()) return;
+    const history = historyFrom(messagesRef.current.filter((turn) => turn.id !== turnId));
+    setMessages((current) => current.map((turn) => (turn.id === turnId ? { id: turn.id, role: "dira", busy: true } : turn)));
+    setBusy(true);
+    try {
+      const response = await homeInput(text, null, history, lastActionRef.current);
+      lastActionRef.current = toLastAction(response);
+      setMessages((current) => current.map((turn) => (turn.id === turnId ? { ...turn, busy: false, response } : turn)));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "DIRA couldn't take that in just now.";
+      setMessages((current) => current.map((turn) => (turn.id === turnId ? { ...turn, busy: false, text: message, retryText: text } : turn)));
     } finally {
       setBusy(false);
     }
@@ -349,12 +367,12 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="mx-auto flex w-full max-w-2xl flex-col gap-4 px-5 pb-[120px] pt-8">
-            {messages.map((turn, index) => (
+            {messages.map((turn) => (
               <Message
                 key={turn.id}
                 turn={turn}
-                sourceFact={earlierFact(messages, index)}
                 busy={busy}
+                onRetry={(turnId, text) => void retry(turnId, text)}
                 onConfirm={(space, occurredAt) => {
                   const content = asUnderstanding(turn.response?.result.content);
                   const queueId = turn.reopenQueueId || content?.queueId || "";
@@ -455,18 +473,10 @@ export default function HomePage() {
   );
 }
 
-function earlierFact(turns: Turn[], index: number) {
-  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
-    const text = turns[cursor].role === "user" ? turns[cursor].text || "" : "";
-    if (/\b(?:born|birth|died|married|bought|paid)\b/i.test(text) && /\b(?:19|20)\d{2}\b/.test(text)) return text;
-  }
-  return "";
-}
-
 function Message({
   turn,
-  sourceFact = "",
   busy,
+  onRetry,
   onConfirm,
   onDismiss,
   onOption,
@@ -474,8 +484,8 @@ function Message({
   onUndo,
 }: {
   turn: Turn;
-  sourceFact?: string;
   busy: boolean;
+  onRetry: (turnId: string, text: string) => void;
   onConfirm: (space: IntakeSpace, occurredAt: string | null) => void;
   onDismiss: () => void;
   onOption: (intent: string) => void;
@@ -506,6 +516,11 @@ function Message({
     return (
       <div className="dira-in ml-4 max-w-[90%]">
         <DiraMarkdown text={turn.text} />
+        {turn.retryText ? (
+          <button type="button" onClick={() => onRetry(turn.id, turn.retryText || "")} disabled={busy} className="mt-2 text-sm text-[#3C3489] disabled:opacity-60">
+            Try again
+          </button>
+        ) : null}
       </div>
     );
   }
@@ -523,7 +538,6 @@ function Message({
         onConfirm={onConfirm}
         onDismiss={onDismiss}
         onOption={onOption}
-        sourceFact={sourceFact}
       />
       {unsure && !accepted ? (
         <p className="mt-2 text-[11px] text-[#4A4A48]">
@@ -557,7 +571,6 @@ function ResponseBody({
   onConfirm,
   onDismiss,
   onOption,
-  sourceFact = "",
 }: {
   response: HomeResponse;
   resolved: boolean;
@@ -566,7 +579,6 @@ function ResponseBody({
   onConfirm: (space: IntakeSpace, occurredAt: string | null) => void;
   onDismiss: () => void;
   onOption: (intent: string) => void;
-  sourceFact?: string;
 }) {
   const { result } = response;
   if (result.type === "understanding") {
@@ -640,7 +652,6 @@ function ResponseBody({
   }
   const answer = asAnswer(result.content);
   const reply = answer?.reply || messageOf(result.content) || result.confirmationText || "";
-  const offer = saveOfferFromReply(reply, sourceFact);
   return (
     <div>
       <DiraMarkdown text={reply} />
@@ -654,48 +665,9 @@ function ResponseBody({
           ))}
         </div>
       ) : null}
-      {offer ? <SaveOffer offer={offer} /> : result.extractedFacts?.length ? <FactChips facts={result.extractedFacts.slice(0, 2)} /> : null}
+      {result.extractedFacts?.length ? <FactChips facts={result.extractedFacts.slice(0, 2)} /> : null}
     </div>
   );
-}
-
-function saveOfferFromReply(reply: string, sourceFact = ""): { label: string; content: string } | null {
-  if (!/(?:should I|shall I|do you want me to|want me to|please confirm(?: if you want me to)?)\s+(?:add|save|record|create|log|store)\b/i.test(reply)) return null;
-  const plain = reply.replace(/\*\*/g, "").replace(/\s+/g, " ");
-  const asked = plain.match(/(?:should I|shall I|do you want me to|want me to)\s+(?:add|save|record|create|log|store)\b([\s\S]{0,220}?)(?:\?|$)/i);
-  const confirm = plain.match(/please confirm\b([\s\S]{0,200}?)(?:\?|$)/i);
-  const raw = asked?.[1] || confirm?.[1] || "";
-  const subject = raw
-    .replace(/^.*?\bfor\s+/i, "")
-    .replace(/^(?:if you want me to\s+)?(?:add|save|record|create|log|store)\s+/i, "")
-    .replace(/^(?:a|an|the)\s+(?:new\s+)?(?:event|record|note)\s+(?:for\s+)?/i, "")
-    .replace(/\bnow$/i, "")
-    .replace(/[?.]+$/g, "")
-    .trim();
-  const vague = !/\b(?:19|20)\d{2}\b/.test(subject) && /^(?:her|his|their|its|the|this|that|a|an|it)\b/i.test(subject);
-  const content = (vague && sourceFact.trim().length >= 10 ? sourceFact.trim() : subject).slice(0, 180);
-  if (content.length < 8) return null;
-  return { label: (subject || content).slice(0, 90), content: content.length >= 10 ? content : `${content}. Save this event.` };
-}
-
-function SaveOffer({ offer }: { offer: { label: string; content: string } }) {
-  const [phase, setPhase] = useState<"open" | "saving" | "saved" | "gone">("open");
-
-  async function save() {
-    if (phase !== "open") return;
-    setPhase("saving");
-    try {
-      const intake = await submitText(offer.content);
-      await confirmIntake(intake.queueId, "personal");
-      setPhase("saved");
-    } catch {
-      setPhase("open");
-    }
-  }
-
-  if (phase === "gone") return null;
-  if (phase === "saved") return <p className="mt-3 text-sm text-[#6B6963]">Saved ✓</p>;
-  return <ConfirmRow busy={phase === "saving"} confirmLabel="Save" onConfirm={() => void save()} onDismiss={() => setPhase("gone")} />;
 }
 
 type ChipPhase = "open" | "fading" | "saving" | "saved";

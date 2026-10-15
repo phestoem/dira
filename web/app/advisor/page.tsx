@@ -75,7 +75,7 @@ export default function AdvisorPage() {
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : "The advisor could not answer just now.";
-      setError(/taking a moment/i.test(message) ? "Taking a moment..." : message);
+      setError(message);
     } finally {
       window.clearTimeout(timer);
       setSending(false);
@@ -170,7 +170,7 @@ export default function AdvisorPage() {
           </div>
         )}
         {sending ? (
-          <p className="mx-auto mt-6 max-w-2xl text-[14px] text-[#6B6963]">{slow ? "Taking a moment..." : "…"}</p>
+          <p className="mx-auto mt-6 max-w-2xl text-[14px] text-[#6B6963]">{slow ? "Still working." : "…"}</p>
         ) : null}
         {error ? <p className="mx-auto mt-4 max-w-2xl text-[14px] text-red-300/85">{error}</p> : null}
         <div ref={bottomRef} />

@@ -11,7 +11,7 @@ import {
   understandFile,
   understandText,
 } from "../services/contextEngine.js";
-import { extractConversationalFacts, previousExchangeFrom, resolveOfferedSave, routeIntent } from "../services/intentRouter.js";
+import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 
@@ -49,21 +49,18 @@ export default async function homeRoutes(fastify) {
       if (!message && !payload.file) {
         return reply.code(400).send({ error: "Say something, or attach a file." });
       }
-      if (message && !payload.file) {
-        const offered = resolveOfferedSave(message, payload.history);
-        if (offered?.action === "decline") {
-          return answerResponse(
-            { intent: "question", confidence: 0.95, interpretation: "Leave the offered event unsaved.", action: "proceed" },
-            "Okay. I won't save that.",
-            false,
-          );
-        }
-        if (offered?.action === "save") {
-          return await saveOfferedFact(request.userId, offered.content);
-        }
-      }
       const routing = await routeIntent(message, request.userId, payload.file, payload.history, payload.lastAction);
-      console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2));
+      console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2), routing.followUp?.action || "none");
+      if (message && !payload.file && routing.followUp?.action === "decline") {
+        return answerResponse(
+          { intent: "question", confidence: 0.95, interpretation: "Leave that unsaved.", action: "proceed" },
+          "Okay. I won't save that.",
+          false,
+        );
+      }
+      if (message && !payload.file && routing.followUp?.action === "accept" && routing.followUp.fact) {
+        return await saveOfferedFact(request.userId, routing.followUp.fact);
+      }
       if (routing.action === "clarify") {
         return await clarifyResponse(request.userId, routing, payload);
       }
@@ -271,12 +268,10 @@ async function intakeResponse(userId, routing, queueId, result) {
 
 async function runQuestion(userId, routing, payload) {
   const messages = advisorMessages(payload.history, payload.message);
-  const factsPromise = routing.intent === "question"
-    ? extractConversationalFacts(payload.message).catch((err) => {
-        console.error("[home] fact extract failed:", err.message);
-        return [];
-      })
-    : Promise.resolve([]);
+  const factsPromise = extractConversationalFacts(payload.message).catch((err) => {
+    console.error("[home] fact extract failed:", err.message);
+    return [];
+  });
   const [reply, facts] = await Promise.all([chat(messages, userId), factsPromise]);
   return {
     sessionId: null,

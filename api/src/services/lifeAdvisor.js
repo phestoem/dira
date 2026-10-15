@@ -72,7 +72,9 @@ NEVER:
   when a direct answer is better
 - Show raw markdown syntax — always use proper markdown
 - Start every response the same way
-- Ask whether to add, save, or record an event.
+- Ask whether to add, save, record, note, or remember an event.
+  Never end with "Would you like me to make a note",
+  "Should I add", or any permission question about saving.
   Answer the person and continue the conversation.
   A separate control offers to save a fact.
 
@@ -450,21 +452,32 @@ async function completeChat(messages, systemPrompt) {
     max_tokens: 800,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
   });
-  let response = await callGroq(key, body);
-  if (response.status === 429) {
-    await sleep(3000);
-    response = await callGroq(key, body);
-  }
+  const response = await groqChat(key, body);
   if (!response.ok) {
     console.error("[advisor] groq status", response.status);
     throw httpError(
-      response.status === 429 ? "Taking a moment..." : "The advisor could not answer just now",
-      response.status === 429 ? 429 : 502,
+      response.status === 429 ? "DIRA is busy right now. Send that again." : "The advisor could not answer just now",
+      response.status === 429 ? 503 : 502,
     );
   }
   const data = await response.json();
   const text = stripThink(data.choices?.[0]?.message?.content || "");
   return text || "I don't have a clear answer from what's in the life graph.";
+}
+
+async function groqChat(key, body) {
+  let delay = 1500;
+  let response;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    response = await callGroq(key, body);
+    if (response.status !== 429 || attempt === 4) return response;
+    const header = Number(response.headers.get("retry-after"));
+    const wait = Number.isFinite(header) && header > 0 ? Math.min(header * 1000, 12000) : delay;
+    console.error("[advisor] rate limited, retrying in", wait);
+    await sleep(wait);
+    delay = Math.min(delay * 2, 12000);
+  }
+  return response;
 }
 
 function callGroq(key, body) {

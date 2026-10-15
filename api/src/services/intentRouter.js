@@ -64,8 +64,19 @@ Return JSON:
     financialMention: boolean,
     datesMentioned: boolean,
     emotionalTone: "neutral" | "reflective" | "practical"
+  },
+  followUp: {
+    action: "accept" | "decline" | "none",
+    fact: string
   }
 }
+
+followUp reads the conversation, not a fixed phrase.
+The previous DIRA response may hint that a life fact should be saved, noted, remembered, added, or updated, in whatever wording it used.
+accept: the latest message agrees or tells DIRA to go ahead with that hint. fact is the specific life fact from the conversation, as a sentence. Never "this" or "that" alone.
+decline: the latest message refuses that hint.
+none: a new question, a different subject, or ordinary conversation. A question about what is already recorded is none.
+If unsure, none.
 
 alternatives has at most 2 other readings.
 
@@ -308,26 +319,41 @@ async function completeRouter(user) {
 async function completeWithGroq(user) {
   const key = usableKey(process.env.GROQ_API_KEY);
   if (!key) throw new Error("No model key is configured");
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${key}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: GROQ_MODEL,
-      temperature: 0.1,
-      max_tokens: 500,
-      messages: [
-        { role: "system", content: `${ROUTER_PROMPT}\nReturn JSON only.` },
-        { role: "user", content: user },
-      ],
-    }),
-    signal: AbortSignal.timeout(20000),
+  const body = JSON.stringify({
+    model: GROQ_MODEL,
+    temperature: 0.1,
+    max_tokens: 700,
+    messages: [
+      { role: "system", content: `${ROUTER_PROMPT}\nReturn JSON only.` },
+      { role: "user", content: user },
+    ],
   });
+  let delay = 1500;
+  let response;
+  for (let attempt = 0; attempt < 4; attempt += 1) {
+    response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${key}`,
+        "Content-Type": "application/json",
+      },
+      body,
+      signal: AbortSignal.timeout(20000),
+    });
+    if (response.status !== 429 || attempt === 3) break;
+    const header = Number(response.headers.get("retry-after"));
+    const wait = Number.isFinite(header) && header > 0 ? Math.min(header * 1000, 8000) : delay;
+    console.error("[router] rate limited, retrying in", wait);
+    await sleep(wait);
+    delay = Math.min(delay * 2, 8000);
+  }
   if (!response.ok) throw new Error(`Groq router status ${response.status}`);
   const data = await response.json();
   return stripThink(data.choices?.[0]?.message?.content || "");
+}
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function normalize(parsed) {
@@ -347,7 +373,15 @@ function normalize(parsed) {
     interpretation: textOr(parsed.interpretation, labelFor(intent)),
     alternatives,
     extractedData: normalizeExtracted(parsed.extractedData),
+    followUp: normalizeFollowUp(parsed.followUp),
   };
+}
+
+function normalizeFollowUp(value) {
+  const action = value?.action === "accept" || value?.action === "decline" ? value.action : "none";
+  const fact = textOr(value?.fact, "").replace(/\s+/g, " ").slice(0, 180);
+  if (action === "accept" && (fact.length < 12 || /^(this|that|it)\b/i.test(fact))) return { action: "none", fact: "" };
+  return { action, fact };
 }
 
 function decide(classified) {
@@ -606,92 +640,16 @@ Names, dates, and places are facts.
 Opinions and questions are not facts.
 Return { "facts": [] } if nothing specific.`;
 
-const SAVE_OFFER = /(?:should i|shall i|do you want me to|want me to|please confirm(?: if you want me to)?)\s+(?:add|save|record|create|log|store)\b/i;
-
-export function resolveOfferedSave(message, history) {
-  const text = String(message || "").trim();
-  const last = lastAssistantText(history);
-  if (!last || !SAVE_OFFER.test(last)) return null;
-  if (declinesOfferedSave(text)) return { action: "decline" };
-  if (!acceptsOfferedSave(text)) return null;
-  const content = factFromOffer(last, history);
-  if (content.length < 10) return null;
-  return { action: "save", content };
-}
-
-function acceptsOfferedSave(text) {
-  if (!text || text.length > 140 || /\?/.test(text)) return false;
-  if (/\b(but|actually|instead|change|except|wait)\b/i.test(text)) return false;
-  return /^(?:yes|yeah|yep|yup|ok|okay|sure|please|confirm)(?:[.!]|$|\s)/i.test(text)
-    || /^(?:go ahead|do it|please do|yes please|add it|save it|create it|record it)\b/i.test(text);
-}
-
-function declinesOfferedSave(text) {
-  return /^(?:no|nope|nah|not now|don'?t|do not|skip|never mind|leave it|cancel)(?:[.!]|$|\s+(?:thanks|thank you))?$/i.test(text);
-}
-
-function lastAssistantText(history) {
-  const items = Array.isArray(history) ? history : [];
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (item?.role === "assistant" && typeof item.content === "string" && item.content.trim()) return item.content;
-  }
-  return "";
-}
-
-function factFromOffer(assistant, history) {
-  const subject = offerSubject(assistant);
-  if (subject && !vagueOffer(subject)) return subject.slice(0, 180);
-  const earlier = earlierStatedFact(history);
-  if (earlier) return earlier;
-  return subject.length >= 10 ? subject.slice(0, 180) : "";
-}
-
-function offerSubject(text) {
-  const plain = String(text || "").replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
-  const asked = plain.match(/(?:should i|shall i|do you want me to|want me to)\s+(?:add|save|record|create|log|store)\b([\s\S]{0,220}?)(?:\?|$)/i);
-  if (asked) return trimOfferSubject(asked[1]);
-  const confirm = plain.match(/please confirm\b([\s\S]{0,200}?)(?:\?|$)/i);
-  return confirm ? trimOfferSubject(confirm[1]) : "";
-}
-
-function trimOfferSubject(raw) {
-  return String(raw || "")
-    .replace(/^.*?\bfor\s+/i, "")
-    .replace(/^(?:if you want me to\s+)?(?:add|save|record|create|log|store)\s+/i, "")
-    .replace(/^(?:a|an|the)\s+(?:new\s+)?(?:event|record|note)\s+(?:for\s+)?/i, "")
-    .replace(/\bnow$/i, "")
-    .replace(/[?.]+$/g, "")
-    .trim();
-}
-
-function vagueOffer(subject) {
-  if (/\b(?:19|20)\d{2}\b/.test(subject)) return false;
-  return /^(?:her|his|their|its|the|this|that|a|an|it)\b/i.test(subject);
-}
-
-function earlierStatedFact(history) {
-  const items = Array.isArray(history) ? history : [];
-  for (let index = items.length - 1; index >= 0; index -= 1) {
-    const item = items[index];
-    if (!item || item.role !== "user" || typeof item.content !== "string") continue;
-    const text = item.content.trim();
-    if (!text || acceptsOfferedSave(text) || declinesOfferedSave(text) || /\?$/.test(text)) continue;
-    const stated = heuristicFacts(text)[0]?.fact || "";
-    if (stated) return stated;
-    if (text.length >= 12 && /\b(?:born|birth|died|married|bought|paid)\b/i.test(text) && /\b(?:19|20)\d{2}\b/.test(text)) {
-      return text.slice(0, 180);
-    }
-  }
-  return "";
-}
-
 export async function extractConversationalFacts(message) {
   const text = String(message || "").trim();
   if (text.length < 12) return [];
-  const raw = await completeFacts(text.slice(0, 4000));
-  const parsed = parseFactList(raw)
-    .filter((fact) => fact.confidence > 0.75);
+  let parsed = [];
+  try {
+    const raw = await completeFacts(text.slice(0, 4000));
+    parsed = parseFactList(raw).filter((fact) => fact.confidence > 0.75);
+  } catch (err) {
+    console.error("[router] fact extract failed:", err.message);
+  }
   const facts = (parsed.length ? parsed : heuristicFacts(text)).slice(0, 2);
   console.log("[router] conversational facts:", facts.length);
   return facts;
@@ -769,19 +727,24 @@ const MONTH = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?
 const STOP_NAME = new Set(["our", "my", "the", "a", "an", "her", "his", "their", "daughter", "son", "child", "wife", "husband", "born", "was", "were", "in", "at", "on"]);
 
 function heuristicFacts(text) {
-  const date = text.match(new RegExp(`\\b${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,)?\\s+\\d{4}\\b|\\b\\d{1,2}[/.\\-]\\d{1,2}[/.\\-]\\d{2,4}\\b`, "i"));
-  if (!date || !/\b(born|birth|died|married|moved|bought|purchased|paid|signed)\b/i.test(text)) return [];
+  const dated = text.match(new RegExp(`\\b${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,)?\\s+\\d{4}\\b|\\b\\d{1,2}[/.\\-]\\d{1,2}[/.\\-]\\d{2,4}\\b`, "i"));
+  const monthDay = text.match(new RegExp(`\\b${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?\\b`, "i"));
+  const year = text.match(/\b(?:19|20)\d{2}\b/);
+  const when = (dated?.[0] || (monthDay && year ? `${monthDay[0].replace(/(\d)(st|nd|rd|th)/i, "$1")}, ${year[0]}` : "")).trim();
+  const life = /\b(born|birth|died|married|moved|bought|purchased|paid|signed)\b/i.test(text)
+    || /\b(?:got|had)\s+(?:our|my)\s+(?:daughter|son|child)\b/i.test(text);
+  if (!when || !life) return [];
   const name = properName(text);
   const place = text.match(/\b(?:in|at)\s+([A-Z][\p{L}'’-]{2,}(?:\s+[A-Z][\p{L}'’-]{2,}){0,2})/u);
-  const when = date[0].replace(/(\d)(st|nd|rd|th)/i, "$1");
-  const where = place?.[1] || "";
+  const where = place?.[1] && !/^\d/.test(place[1]) ? place[1] : "";
   const fact = [[name, bornVerb(text), when].filter(Boolean).join(" "), where].filter(Boolean).join(", ").slice(0, 160);
-  const title = fact;
   if (fact.length < 12) return [];
-  return [{ fact, category: "event", suggestedTitle: title.slice(0, 80), confidence: 0.9 }];
+  return [{ fact, category: "event", suggestedTitle: fact.slice(0, 80), confidence: 0.9 }];
 }
 
 function properName(text) {
+  const child = text.match(/\b(?:daughter|son|child|wife|husband)\s+([A-Z][\p{L}'’-]{2,})/u);
+  if (child && !STOP_NAME.has(child[1].toLowerCase())) return child[1];
   const beforeBorn = text.match(/\b([A-Z][\p{L}'’-]{2,})\b(?=[^.?!]{0,40}\bborn\b)/u);
   if (beforeBorn && !STOP_NAME.has(beforeBorn[1].toLowerCase())) return beforeBorn[1];
   const words = text.match(/\b[A-Z][\p{L}'’-]{2,}\b/gu) || [];
@@ -789,7 +752,7 @@ function properName(text) {
 }
 
 function bornVerb(text) {
-  if (/\bborn\b|\bbirth\b/i.test(text)) return "born";
+  if (/\bborn\b|\bbirth\b/i.test(text) || /\b(?:got|had)\s+(?:our|my)\s+(?:daughter|son|child)\b/i.test(text)) return "born";
   if (/\bdied\b/i.test(text)) return "died";
   if (/\bmarried\b/i.test(text)) return "married";
   if (/\bmoved\b/i.test(text)) return "moved";
