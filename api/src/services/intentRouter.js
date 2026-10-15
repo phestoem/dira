@@ -39,6 +39,15 @@ Look at conversationHistory to understand what
 they are referring to. Do not treat it as a new
 standalone input.
 
+When the previous DIRA response was a factual
+answer (question intent), the next message is
+about THAT answer. Short factual follow-ups are
+clarifications, not new events. Classify as
+correction, not intake_text, when the follow-up
+contains 'but', 'actually', 'no', 'wait', a date
+or fact that contradicts the previous answer,
+'today is', 'it is now', or 'currently'.
+
 Return JSON:
 {
   intent: string,
@@ -85,6 +94,11 @@ Tent Camping Plans in Tuliza Nafsi.
 'Not that, I meant the tent spots are part of the landscaping'
 → intent: correction, confidence: 0.9
    The previous exchange is the subject, not a new event.
+
+DIRA just answered a question about a date.
+'But today is the 15th'
+→ intent: correction, confidence: 0.9
+   This corrects the previous answer, not a new event.
 
 The interpretation string is shown to the user.
 Follow these format rules for that wording.
@@ -153,7 +167,7 @@ details include... the chassis number is...'
 
 Be direct. Use the right format. Let the data speak.`;
 
-export async function routeIntent(input, userId, attachedFile, history) {
+export async function routeIntent(input, userId, attachedFile, history, lastAction) {
   const text = String(input || "").trim();
   const fileAttached = Boolean(attachedFile);
   if (!text && fileAttached) {
@@ -172,7 +186,7 @@ export async function routeIntent(input, userId, attachedFile, history) {
   });
   let classified;
   try {
-    classified = await classify(text, snapshot, attachedFile, history);
+    classified = await classify(text, snapshot, attachedFile, history, lastAction);
   } catch (err) {
     console.error("[router] classifier fallback:", err.message);
     classified = heuristic(text, fileAttached);
@@ -183,6 +197,7 @@ export async function routeIntent(input, userId, attachedFile, history) {
     classified.extractedData.mentionsFile = true;
   }
   applyConversationCorrection(classified, text, history, fileAttached);
+  applyAnswerFollowUp(classified, text, history, lastAction, fileAttached);
   return decide(classified);
 }
 
@@ -235,9 +250,10 @@ async function loadSnapshot(userId, fileAttached) {
   };
 }
 
-async function classify(text, snapshot, attachedFile, history) {
+async function classify(text, snapshot, attachedFile, history, lastAction) {
   const prior = previousExchangeFrom(history);
   const correcting = isConversationCorrection(text) && prior.lastResponse;
+  const answerFollowUp = lastResponseWasAnswer(history, lastAction);
   const user = [
     `File attached: ${attachedFile ? "yes" : "no"}`,
     `Recent events: ${snapshot.recentEvents.join("; ") || "none"}`,
@@ -251,6 +267,14 @@ async function classify(text, snapshot, attachedFile, history) {
           "The latest message corrects the previous exchange. Do not treat it as a new standalone input.",
           `Previous DIRA response: ${prior.lastResponse.slice(0, 700)}`,
           `That exchange was about: ${prior.about || "the previous reply"}`,
+        ].join("\n")
+      : "",
+    answerFollowUp
+      ? [
+          "",
+          "The previous DIRA response was a factual answer to a question.",
+          "A short factual follow-up corrects that answer. Classify it as correction, not intake_text.",
+          "That includes but, actually, no, wait, a contradicting date or fact, 'today is', 'it is now', and 'currently'.",
         ].join("\n")
       : "",
     "",
@@ -441,6 +465,89 @@ function applyConversationCorrection(classified, text, history, fileAttached) {
 function isConversationCorrection(text) {
   return /\b(i meant|not that|i was referring to|the previous)\b/i.test(String(text || ""));
 }
+
+function applyAnswerFollowUp(classified, text, history, lastAction, fileAttached) {
+  if (fileAttached || !lastResponseWasAnswer(history, lastAction)) return;
+  const prior = previousExchangeFrom(history);
+  if (!clarifiesPreviousAnswer(text, prior.lastResponse)) return;
+  classified.extractedData.isCorrecting = true;
+  classified.extractedData.datesMentioned = classified.extractedData.datesMentioned || dateTokens(text).length > 0;
+  if (classified.intent === "correction") return;
+  if (classified.intent !== "intake_text" && classified.intent !== "unclear" && classified.intent !== "journal") return;
+  classified.intent = "correction";
+  classified.confidence = Math.max(classified.confidence, 0.88);
+  classified.interpretation = prior.about
+    ? `You're correcting the previous answer about ${prior.about}.`
+    : "You're correcting the previous answer.";
+}
+
+function lastResponseWasAnswer(history, lastAction) {
+  const prior = previousExchangeFrom(history);
+  if (!prior.lastResponse) return false;
+  if (/^title:|save it\?/im.test(prior.lastResponse)) return false;
+  if (lastAction?.intent === "question") return true;
+  if (lastAction?.intent === "correction" && !/confirm\?|shall i /i.test(prior.lastResponse)) return true;
+  if (lastAction?.intent) return false;
+  return /\?/.test(prior.priorUser) || /^(how|what|when|where|why|which|who|did|have|has|is|am|can|could)\b/i.test(prior.priorUser.trim());
+}
+
+function clarifiesPreviousAnswer(text, lastResponse) {
+  const trimmed = String(text || "").trim();
+  if (!trimmed || isFreshQuestion(trimmed)) return false;
+  if (CURRENT_FACT.test(trimmed)) return wordCount(trimmed) <= 40;
+  if (LEADING_CUE.test(trimmed)) return !looksLikeNewEvent(trimmed) || CURRENT_FACT.test(trimmed);
+  if (ANSWER_CUE.test(trimmed) && wordCount(trimmed) <= 16 && !looksLikeNewEvent(trimmed)) return true;
+  return wordCount(trimmed) <= 16 && !looksLikeNewEvent(trimmed) && contradictsAnswer(trimmed, lastResponse);
+}
+
+function isFreshQuestion(text) {
+  if (CURRENT_FACT.test(text)) return false;
+  const rest = text.replace(/^(but|actually|no|wait|and)[,:\s]+/i, "").trim();
+  if (/\?\s*$/.test(text) && !dateTokens(text).length) return true;
+  return /^(how|what|when|where|why|which|who|did|have|has|is|am|can|could)\b/i.test(rest);
+}
+
+function contradictsAnswer(text, lastResponse) {
+  const followDates = dateTokens(text);
+  const answerDates = dateTokens(lastResponse);
+  if (followDates.length && answerDates.some((date) => !followDates.includes(date)) && followDates.some((date) => !answerDates.includes(date))) {
+    return true;
+  }
+  if (followDates.length) return true;
+  const answerNumbers = new Set(numberTokens(lastResponse));
+  return numberTokens(text).some((value) => value.length >= 2 && !answerNumbers.has(value));
+}
+
+function dateTokens(text) {
+  const source = String(text || "").toLowerCase();
+  const months = "january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec";
+  const patterns = [
+    /\b\d{4}-\d{2}-\d{2}\b/g,
+    /\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b/g,
+    new RegExp(`\\b(?:${months})\\b(?:\\s+\\d{1,2})?(?:,?\\s+\\d{4})?`, "g"),
+    new RegExp(`\\b\\d{1,2}(?:st|nd|rd|th)?\\s+(?:of\\s+)?(?:${months})\\b`, "g"),
+    /\b(?:19|20)\d{2}\b/g,
+    /\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|today|yesterday|tomorrow)\b/g,
+  ];
+  const found = patterns.flatMap((pattern) => source.match(pattern) || []);
+  return [...new Set(found.map((item) => item.replace(/\s+/g, " ").trim()))];
+}
+
+function numberTokens(text) {
+  return [...new Set((String(text || "").match(/\d[\d,.]*/g) || []).map((item) => item.replace(/,/g, "")))];
+}
+
+function looksLikeNewEvent(text) {
+  return /\b(i bought|i purchased|i paid|i spent|i sold|i signed|i met|i went|receipt|invoice)\b/i.test(text);
+}
+
+function wordCount(text) {
+  return String(text || "").trim().split(/\s+/).filter(Boolean).length;
+}
+
+const ANSWER_CUE = /\b(but|actually|no|wait)\b/i;
+const LEADING_CUE = /^(but|actually|no|wait)\b/i;
+const CURRENT_FACT = /\b(today is|it is now|it'?s now|currently)\b/i;
 
 function conversationItems(history) {
   return (Array.isArray(history) ? history : [])

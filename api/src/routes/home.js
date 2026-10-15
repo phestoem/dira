@@ -49,7 +49,7 @@ export default async function homeRoutes(fastify) {
       if (!message && !payload.file) {
         return reply.code(400).send({ error: "Say something, or attach a file." });
       }
-      const routing = await routeIntent(message, request.userId, payload.file, payload.history);
+      const routing = await routeIntent(message, request.userId, payload.file, payload.history, payload.lastAction);
       console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2));
       if (routing.action === "clarify") {
         return await clarifyResponse(request.userId, routing, payload);
@@ -653,6 +653,9 @@ function publicRouting(routing) {
 
 function previousWasQuestion(lastAction, prior) {
   if (lastAction?.intent === "question") return true;
+  if (lastAction?.intent === "correction" && prior.lastResponse && !/title:|save it\?|confirm\?|shall i /i.test(prior.lastResponse)) {
+    return true;
+  }
   if (lastAction?.intent) return false;
   if (!prior.lastResponse) return false;
   return !/title:|save it\?|confirm\?/i.test(prior.lastResponse);
