@@ -76,7 +76,7 @@ test("a family introduction expands into kinship edges", () => {
     from: { id: "enock", name: "Enock Mwakyusa", kind: "father", deathDate: "2004-04-25" },
     to: you,
     selfId: "self",
-  }), "Enock Mwakyusa — father of you (passed 25 Apr 2004)");
+  }), "Enock Mwakyusa — your father (passed 25 Apr 2004)");
   assert.equal(describeRelationshipLine({
     type: "sibling_of",
     from: { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sister" },
@@ -154,6 +154,115 @@ test("my father's family tree stays inside recorded facts", () => {
   assert.match(review.evidenceText, /1978-02-17/);
   assert.match(review.evidenceText, /1978-05-12/);
   assert.equal(answerPeopleQuestion(question, context), delivered.reply);
+});
+
+test("events answer wife, parents and sister births before an edge exists", () => {
+  const sisters = [
+    { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sister" },
+    { id: "leah", name: "Leah Enock Mwakyusa", kind: "sister" },
+    { id: "neema", name: "Neema Enock Mwakyusa", kind: "sister" },
+    { id: "zenah", name: "Zenah Enock Mwakyusa", kind: "sister" },
+  ];
+  const context = buildPeopleContext({
+    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
+    people: [{ id: "self", name: "Phesto Enock Mwakyusa", kind: "self" }, ...sisters],
+    edges: sisters.map((person) => ({
+      id: `edge-${person.id}`,
+      type: "sibling_of",
+      status: "confirmed",
+      fromId: person.id,
+      toId: "self",
+      fromName: person.name,
+      toName: "Phesto Enock Mwakyusa",
+    })),
+    events: [
+      { id: "ev-wife", title: "Marriage", fullText: "Engagement and marriage to Zelda Goodluck Mambosho on 5 Aug 2006. Zelda joined me in Finland." },
+      { id: "ev-parents", title: "Parents", fullText: "My parents' marriage. My father Enock Mwakyusa was born in our home and passed away on 25 April 2004. My mother is Froidah Biniala Kyando." },
+      { id: "ev-three", title: "Sisters", fullText: "Jeni 4 Dec 1980, Leah 14 Dec 1983, Neema 3 Dec 1987" },
+      { id: "ev-zenah", title: "Zenah", fullText: "Zenah Enock Mwakyusa was born on 3 February 1993." },
+    ],
+  });
+  assert.equal(isPeopleQuestion("who is my wife?"), true);
+  assert.equal(isPeopleQuestion("my parents?"), true);
+  assert.equal(isPeopleQuestion("sisters' birth dates"), true);
+  const wife = answerPeopleQuestion("who is my wife?", context);
+  assert.match(wife, /Zelda Goodluck Mambosho/);
+  assert.match(wife, /5 Aug 2006/);
+  assert.match(wife, /From your records — confirm in Review to lock it in\./);
+  assert.equal(/not recorded/i.test(wife), false);
+  const parents = answerPeopleQuestion("my parents?", context);
+  assert.match(parents, /Enock Mwakyusa — your father/);
+  assert.match(parents, /25 Apr 2004/);
+  assert.match(parents, /Froidah Biniala Kyando — your mother/);
+  assert.match(parents, /From your records — confirm in Review to lock it in\./);
+  assert.equal(/not recorded/i.test(parents), false);
+  const births = answerPeopleQuestion("sisters' birth dates", context);
+  assert.match(births, /Jeni Enock Mwakyusa — 4 Dec 1980/);
+  assert.match(births, /Leah Enock Mwakyusa — 14 Dec 1983/);
+  assert.match(births, /Neema Enock Mwakyusa — 3 Dec 1987/);
+  assert.match(births, /Zenah Enock Mwakyusa — 3 Feb 1993/);
+  assert.match(births, /From your records — confirm in Review to lock it in\./);
+  assert.equal(/not recorded/i.test(births), false);
+  const grounded = groundAdvisorReply("Zelda Goodluck Mambosho married on 5 Aug 2006. Hermes Mwakyusa was born in 1987.", context);
+  assert.equal(grounded.reply.includes("Zelda Goodluck Mambosho"), true);
+  assert.equal(grounded.reply.includes("5 Aug 2006"), true);
+  assert.equal(grounded.reply.includes("Hermes"), false);
+  const missed = deliverPeopleAnswer("Your wife isn't recorded yet.", context, "who is my wife?");
+  assert.match(missed.reply, /Zelda Goodluck Mambosho/);
+  assert.equal(/not recorded/i.test(missed.reply), false);
+});
+
+const ANCHOR_MESSAGE = `My family: my father Enock Mwakyusa passed away
+on 25 April 2004 and my mother Froidah Biniala Kyando
+lives in our family home in Mbeya. My sisters are Jeni,
+Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda
+Goodluck Mambosho. My children are Careen (my eldest
+daughter, born before my marriage), Patrick, Presley,
+Powell and Prisha Neema.`;
+
+test("possessive kinship stays on you and keeps full names", () => {
+  const parsed = parseFamilyStatement(ANCHOR_MESSAGE);
+  const prepared = prepareTriples([
+    ...parsed.triples,
+    {
+      subject: { name: "Zelda Goodluck Mambosho", type: "person" },
+      predicate: "spouse_of",
+      object: { name: "Enock Mwakyusa", type: "person" },
+      evidence: ANCHOR_MESSAGE,
+    },
+  ], {
+    selfAliases: buildSelfAliasSet({ names: ["Phesto Enock Mwakyusa"], aliases: ["phesto"] }),
+    selfName: "Phesto Enock Mwakyusa",
+    relatives: [],
+    message: ANCHOR_MESSAGE,
+  });
+  const kept = prepared.kept;
+  const parents = kept.filter((triple) => triple.predicate === "parent_of" && triple.object?.type === "self");
+  const children = kept.filter((triple) => triple.predicate === "parent_of" && triple.subject?.type === "self");
+  const siblings = kept.filter((triple) => triple.predicate === "sibling_of");
+  const spouses = kept.filter((triple) => triple.predicate === "spouse_of");
+  assert.equal(parents.length, 2);
+  assert.deepEqual(parents.map((triple) => triple.subject.name).sort(), ["Enock Mwakyusa", "Froidah Biniala Kyando"]);
+  assert.equal(siblings.length, 4);
+  assert.equal(spouses.length, 1);
+  assert.equal(spouses[0].subject.name, "Zelda Goodluck Mambosho");
+  assert.equal(spouses[0].object.type, "self");
+  assert.equal(children.length, 5);
+  assert.deepEqual(children.map((triple) => triple.object.name).sort(), ["Careen", "Patrick", "Powell", "Presley", "Prisha Neema"]);
+  assert.equal(kept.some((triple) => {
+    const names = [triple.subject?.name, triple.object?.name];
+    return names.includes("Zelda Goodluck Mambosho") && names.includes("Enock Mwakyusa");
+  }), false);
+  assert.equal(prepared.dropped.some((triple) => triple.reason === "possessive-mismatch"), true);
+  assert.equal(describeRelationshipLine({
+    type: "spouse_of",
+    from: { id: "zelda", name: "Zelda Goodluck Mambosho", kind: "wife" },
+    to: { id: "enock", name: "Enock Mwakyusa", kind: "father" },
+    selfId: "self",
+  }), "Zelda Goodluck Mambosho — wife of Enock Mwakyusa (your father)");
+  const hyphen = parseFamilyStatement("My children are Careen and Prisha - Neema.");
+  assert.equal(hyphen.triples.some((triple) => triple.object?.name === "Prisha Neema"), true);
+  assert.equal(hyphen.triples.some((triple) => String(triple.object?.name || "").includes(" - ")), false);
 });
 
 test("normalizeType maps kinship words and work roles", () => {

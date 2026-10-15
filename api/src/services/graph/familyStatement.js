@@ -20,11 +20,19 @@ export function parseFamilyStatement(text) {
   const triples = [];
   const entityFacts = [];
   const seen = new Set();
-  for (const sentence of String(text || "").split(/(?<=[.])\s+/)) {
-    readList(sentence, triples, entityFacts, seen);
-    for (const clause of sentence.split(/\s+\band\b\s+/i)) readPerson(clause, triples, entityFacts, seen);
+  const normalized = String(text || "").replace(/\s+/g, " ").trim();
+  for (const clause of kinshipClauses(normalized)) {
+    readList(clause, triples, entityFacts, seen);
+    readPerson(clause, triples, entityFacts, seen);
   }
   return { triples, entityFacts };
+}
+
+function kinshipClauses(text) {
+  const pattern = /\b(?:my|our)\s+(?:father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?)\b|\b(?:mke|mume)\s+wangu\b|\b(?:baba|mama)\s+yangu\b/gi;
+  const marks = [...String(text || "").matchAll(pattern)];
+  if (!marks.length) return [String(text || "").trim()].filter(Boolean);
+  return marks.map((mark, index) => text.slice(mark.index, marks[index + 1]?.index ?? text.length).trim()).filter(Boolean);
 }
 
 export function describeRelationshipLine({ type, from, to, selfId, attributes }) {
@@ -34,10 +42,16 @@ export function describeRelationshipLine({ type, from, to, selfId, attributes })
   const selfIsTo = selfId && right.id === selfId;
   const other = selfIsFrom ? right : left;
   if (type === "lives_at") return `${left.name} — lives in ${right.name}`;
-  if (type === "parent_of" && selfIsTo) return `${other.name} — ${parentWord(other)} of you${passed(other)}`;
+  if (type === "parent_of" && selfIsTo) return `${other.name} — your ${parentWord(other)}${passed(other)}`;
   if (type === "parent_of" && selfIsFrom) return `${other.name} — your ${childWord(other)}${eldest(other, attributes)}`;
+  if (type === "sibling_of" && !selfIsFrom && !selfIsTo) return `${left.name} — ${siblingWord(left)} of ${right.name}`;
   if (type === "sibling_of") return `${other.name} — your ${siblingWord(other)}`;
+  if (type === "spouse_of" && !selfIsFrom && !selfIsTo) {
+    const hint = right?.kind === "father" ? " (your father)" : right?.kind === "mother" ? " (your mother)" : "";
+    return `${left.name} — ${spouseWord(left)} of ${right.name}${hint}`;
+  }
   if (type === "spouse_of") return `${other.name} — your ${spouseWord(other)}`;
+  if (!selfIsFrom && !selfIsTo && type === "parent_of") return `${left.name} — parent of ${right.name}`;
   return `${left.name} — ${String(type || "related").replaceAll("_", " ")} — ${right.name}`;
 }
 
@@ -87,6 +101,27 @@ function readList(sentence, triples, facts, seen) {
 }
 
 function readPerson(clause, triples, facts, seen) {
+  const swahiliSpouse = clause.match(/\b(mke|mume)\s+wangu(?:\s+ni)?\s+/i);
+  if (swahiliSpouse) {
+    const name = properName(clause.slice(swahiliSpouse.index + swahiliSpouse[0].length));
+    if (name) {
+      const kind = swahiliSpouse[1].toLowerCase() === "mke" ? "wife" : "husband";
+      addFact(facts, name, { kind });
+      addTriple(triples, seen, { subject: { name, type: "person", kind }, predicate: "spouse_of", object: SELF, evidence: clause.trim(), attributes: {}, confidence: 0.9 });
+      return;
+    }
+  }
+  const swahiliParent = clause.match(/\b(baba|mama)\s+yangu(?:\s+ni)?\s+/i);
+  if (swahiliParent) {
+    const name = properName(clause.slice(swahiliParent.index + swahiliParent[0].length));
+    if (name) {
+      const kind = swahiliParent[1].toLowerCase() === "mama" ? "mother" : "father";
+      const deathDate = spokenDate(clause);
+      addFact(facts, name, { kind, deathDate });
+      addTriple(triples, seen, { subject: { name, type: "person", kind }, predicate: "parent_of", object: SELF, evidence: clause.trim(), attributes: {}, confidence: 0.9 });
+      return;
+    }
+  }
   const named = matchNamedRole(clause);
   if (named) {
     const name = named.name;
@@ -156,8 +191,13 @@ function matchNamedRole(text) {
 }
 
 function properName(text) {
-  const match = String(text || "").match(/^([\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+)*)/u);
-  return match ? match[1].trim() : "";
+  const source = tidyName(text);
+  const match = source.match(/^([\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+)*)/u);
+  return match ? tidyName(match[1]) : "";
+}
+
+function tidyName(name) {
+  return String(name || "").replace(/\s+-\s+/g, " ").replace(/\s+/g, " ").trim();
 }
 
 function splitPeople(text) {
@@ -176,20 +216,20 @@ function splitPeople(text) {
     }
     current += char;
   }
-  if (current.trim()) items.push(current.trim().replace(/[.]$/, ""));
-  return items;
+  if (current.trim()) items.push(tidyName(current.trim().replace(/[.]$/, "")));
+  return items.filter(Boolean);
 }
 
 function readNote(item) {
-  const match = String(item || "").trim().match(/^(.*?)\s*\((.*)\)\s*$/);
-  if (!match) return { name: String(item || "").trim(), note: "" };
-  return { name: match[1].trim(), note: match[2].trim() };
+  const match = tidyName(item).match(/^(.*?)\s*\((.*)\)\s*$/);
+  if (!match) return { name: tidyName(item), note: "" };
+  return { name: tidyName(match[1]), note: match[2].trim() };
 }
 
 function shareSurname(people) {
   if (people.length < 2) return people;
   const last = people[people.length - 1].name.split(/\s+/).filter(Boolean);
-  if (last.length < 2) return people;
+  if (last.length < 3) return people;
   const single = people.slice(0, -1).every((person) => person.name.split(/\s+/).length === 1);
   if (!single) return people;
   const surname = last.slice(1).join(" ");

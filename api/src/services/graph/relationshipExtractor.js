@@ -22,6 +22,7 @@ Rules:
   If no listed predicate fits, omit the triple.
 - Prefer relationships between people, places and assets over describing a single event's properties.
 - The narrator is the SELF named in the user message. "I", "me", "my", "mimi", "yangu", and every spelling of that person's name are type self. Never map the narrator to any other person.
+- Possessive kinship ("my wife", "my husband", "my father", "my mother", "my children", "mke wangu", "baba yangu") always connects that person to the narrator, one clause at a time. Never attach "my wife" to another person mentioned nearby. Keep every word of a name ("Zelda Goodluck Mambosho", "Prisha Neema").
 - Only output a family relationship when the text states it explicitly. A shared surname or middle name is not evidence of any relationship.
 - Words such as wife, husband, parents, mother, father, children, sisters and family are not names. Use the person's name, or omit the triple.
 - Do not output generic activities (landscaping, purchase, renovation), money words (cash, payment, cost, fee), or identifier numbers (TIN, application, chassis) as subject or object. A named project such as "Kisarawe House Renovation" is allowed.

@@ -2,7 +2,7 @@ import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
-import { answerPeopleQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts } from "./graph/peopleGrounding.js";
+import { answerPeopleQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts, usesRecordedAnswer } from "./graph/peopleGrounding.js";
 
 const MODEL = "qwen/qwen3.8-27b";
 const FACT_MODEL = "gpt-4o-mini";
@@ -414,7 +414,7 @@ async function graphContext(userId, text) {
 async function answerPeople(userId, question) {
   const context = await loadPeopleContext(userId);
   await persistConflicts(userId, context.conflicts);
-  if (/\bfamily tree\b/i.test(question)) {
+  if (usesRecordedAnswer(question)) {
     return { reply: answerPeopleQuestion(question, context), sourceIds: context.facts.map((fact) => `${fact.source.type}:${fact.source.id}`) };
   }
   let modelText = "";

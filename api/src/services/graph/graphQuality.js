@@ -202,6 +202,7 @@ export function dropReason(triple, context = {}) {
   const aligned = alignPredicate(triple?.subject?.type, triple?.predicate, triple?.object?.type);
   if (aligned.reason) return aligned.reason;
   const evidence = `${triple?.evidence || ""} ${context.message || ""}`;
+  if (possessiveMismatch(triple, aligned.type, evidence, context)) return "possessive-mismatch";
   if (categoryOf(aligned.type) === "family" && !KINSHIP_WORD.test(evidence)) return "unsupported-family";
   if (subject && object && normalizeName(subject) === normalizeName(object)) return "same-node";
   return null;
@@ -337,6 +338,22 @@ function applyMarriageDate(triple) {
   if (normalized?.type !== "spouse_of" || triple.validFrom) return triple;
   const date = dateIn(triple.evidence) || triple.attributes?.date || null;
   return date ? { ...triple, validFrom: date } : triple;
+}
+
+function possessiveMismatch(triple, type, evidence, context) {
+  if (type !== "spouse_of") return false;
+  if (!/\b(my|our)\s+(wife|husband)\b|\b(mke|mume)\s+wangu\b/i.test(evidence || "")) return false;
+  return !sideIsSelf(triple?.subject, context) && !sideIsSelf(triple?.object, context);
+}
+
+function sideIsSelf(side, context) {
+  if (!side) return false;
+  if (String(side.type || "").toLowerCase() === "self") return true;
+  const name = normalizeName(side.name);
+  if (!name) return false;
+  if (/^(i|me|myself|mimi|self)$/.test(name)) return true;
+  if (context?.selfName && normalizeName(context.selfName) === name) return true;
+  return (context?.selfAliases || []).some((alias) => normalizeName(alias) === name);
 }
 
 function lifeFactOf(triple) {
