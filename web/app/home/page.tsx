@@ -4,9 +4,11 @@ import Link from "next/link";
 import { Children, cloneElement, FormEvent, isValidElement, ReactNode, useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import QueuePanel from "@/components/QueuePanel";
 import {
   archiveEvent,
   getAdvisorSuggestions,
+  getQueue,
   homeConfirm,
   homeInput,
   type CommandRecord,
@@ -15,6 +17,7 @@ import {
   type HomeResponse,
   type IntakeFinancial,
   type IntakeSpace,
+  type QueueItem,
 } from "@/lib/api";
 
 const ACCEPT = ".xlsx,.xls,.csv,.pdf,.jpg,.jpeg,.png";
@@ -68,6 +71,8 @@ export default function HomePage() {
   const [busy, setBusy] = useState(false);
   const [recording, setRecording] = useState(false);
   const [suggestions, setSuggestions] = useState<string[]>(FALLBACK_SUGGESTIONS);
+  const [queue, setQueue] = useState<QueueItem[]>([]);
+  const [queueOpen, setQueueOpen] = useState(false);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -76,6 +81,27 @@ export default function HomePage() {
   useEffect(() => {
     scrollerRef.current?.scrollTo({ top: scrollerRef.current.scrollHeight });
   }, [messages, busy]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const loadQueue = () => {
+      getQueue()
+        .then((items) => {
+          if (!cancelled) setQueue(items);
+        })
+        .catch(() => {
+          /* The banner stays hidden when the queue cannot be read. */
+        });
+    };
+    loadQueue();
+    const timer = window.setInterval(loadQueue, 60000);
+    window.addEventListener("focus", loadQueue);
+    return () => {
+      cancelled = true;
+      window.clearInterval(timer);
+      window.removeEventListener("focus", loadQueue);
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -217,6 +243,18 @@ export default function HomePage() {
   return (
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       <div ref={scrollerRef} className="flex-1 overflow-y-auto">
+        {queue.length > 0 ? (
+          <div className="sticky top-3 z-10 flex justify-center px-4">
+            <button
+              type="button"
+              onClick={() => setQueueOpen(true)}
+              className="rounded-full px-3 py-1.5 text-xs text-[#F5F3EE]"
+              style={{ background: "#1A1A2E", border: "1px solid #3C3489" }}
+            >
+              {queue.length} {queue.length === 1 ? "item" : "items"} waiting for review
+            </button>
+          </div>
+        ) : null}
         {messages.length === 0 ? (
           <div className="flex h-full flex-col items-center justify-center px-6 pb-[120px] text-center">
             <CompassMark />
@@ -260,6 +298,15 @@ export default function HomePage() {
           </div>
         )}
       </div>
+
+      <QueuePanel
+        open={queueOpen}
+        items={queue}
+        onClose={() => setQueueOpen(false)}
+        onChanged={() => {
+          getQueue().then(setQueue).catch(() => setQueue([]));
+        }}
+      />
 
       <form onSubmit={onSubmit} className="fixed inset-x-0 bottom-14 z-40 px-3 pb-3 sm:px-4">
         {file ? (

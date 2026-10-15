@@ -15,6 +15,8 @@ import userRoutes from "./routes/users.js";
 import commandRoutes from "./routes/commands.js";
 import advisorRoutes from "./routes/advisor.js";
 import homeRoutes from "./routes/home.js";
+import emailRoutes from "./routes/email.js";
+import queueRoutes from "./routes/queue.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
 
@@ -38,6 +40,8 @@ await app.register(userRoutes);
 await app.register(commandRoutes);
 await app.register(advisorRoutes);
 await app.register(homeRoutes);
+await app.register(emailRoutes);
+await app.register(queueRoutes);
 
 app.get("/health", async () => ({
   status: "ok",

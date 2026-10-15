@@ -260,7 +260,7 @@ export async function createEventFromUnderstanding(userId, understoodInput, enti
         understoodMeaning: understood.summary,
         eventType,
         space,
-        source: queue?.contentType === "text" ? "manual" : "file",
+        source: queue?.source === "email" ? "email" : queue?.contentType === "text" ? "manual" : "file",
         rawSourceRef: queue?.filePath || null,
         financials,
         people,

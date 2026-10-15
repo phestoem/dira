@@ -715,3 +715,39 @@ export async function saveJournal(content: string, occurredAt?: string): Promise
   if (!res.ok) throw new Error(await parseError(res));
   return res.json() as Promise<JournalEntry>;
 }
+
+export type QueueItem = {
+  id: string;
+  source: string;
+  processingStatus: string;
+  understoodAs: string | null;
+  createdAt: string;
+  ready: boolean;
+  title: string | null;
+  summary: string | null;
+  altimetrixContext: string | null;
+  suggestedSpace: IntakeSpace | string | null;
+  needsClarification: string | null;
+};
+
+export async function getQueue(): Promise<QueueItem[]> {
+  const res = await apiFetch("/queue");
+  if (!res.ok) throw new Error(await parseError(res));
+  const data = (await res.json()) as { items?: QueueItem[] };
+  return Array.isArray(data.items) ? data.items : [];
+}
+
+export async function confirmQueueItem(id: string, space?: IntakeSpace): Promise<unknown> {
+  const res = await apiFetch(`/queue/${id}/confirm`, {
+    method: "POST",
+    body: JSON.stringify(space ? { space } : {}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json();
+}
+
+export async function dismissQueueItem(id: string): Promise<{ success: boolean }> {
+  const res = await apiFetch(`/queue/${id}/dismiss`, { method: "POST" });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ success: boolean }>;
+}
