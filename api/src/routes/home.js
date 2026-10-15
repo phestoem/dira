@@ -11,7 +11,7 @@ import {
   understandFile,
   understandText,
 } from "../services/contextEngine.js";
-import { previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
+import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 
@@ -185,7 +185,13 @@ async function intakeResponse(userId, routing, queueId, result) {
 
 async function runQuestion(userId, routing, payload) {
   const messages = advisorMessages(payload.history, payload.message);
-  const reply = await chat(messages, userId);
+  const factsPromise = routing.intent === "question"
+    ? extractConversationalFacts(payload.message).catch((err) => {
+        console.error("[home] fact extract failed:", err.message);
+        return [];
+      })
+    : Promise.resolve([]);
+  const [reply, facts] = await Promise.all([chat(messages, userId), factsPromise]);
   return {
     sessionId: null,
     routing: publicRouting(routing),
@@ -193,6 +199,7 @@ async function runQuestion(userId, routing, payload) {
     result: {
       type: "answer",
       content: { reply: reply.reply, contextUsed: reply.contextUsed },
+      extractedFacts: facts,
       confirmationRequired: false,
       confirmationText: null,
     },

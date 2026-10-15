@@ -645,6 +645,13 @@ export type HomeClarification = {
   description: string;
 };
 
+export type ConversationalFact = {
+  fact: string;
+  category: "person" | "date" | "place" | "event" | "financial";
+  suggestedTitle: string;
+  confidence: number;
+};
+
 export type HomeResponse = {
   sessionId: string | null;
   routing: HomeRouting;
@@ -654,6 +661,7 @@ export type HomeResponse = {
     content: unknown;
     confirmationRequired: boolean;
     confirmationText: string | null;
+    extractedFacts?: ConversationalFact[];
   };
   clarificationOptions: HomeClarification[] | null;
 };

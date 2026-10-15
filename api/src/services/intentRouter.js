@@ -598,6 +598,81 @@ function stripThink(text) {
   return String(text || "").replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
 }
 
+const FACT_CATEGORIES = new Set(["person", "date", "place", "event", "financial"]);
+const FACT_PROMPT = `Extract any specific biographical or life facts from this message. Return JSON:
+{ "facts": [{ "fact": string, "category": "person" | "date" | "place" | "event" | "financial", "suggestedTitle": string, "confidence": 0-1 }] }
+Only return facts that are specific and saveable.
+Names, dates, and places are facts.
+Opinions and questions are not facts.
+Return { "facts": [] } if nothing specific.`;
+
+export async function extractConversationalFacts(message) {
+  const text = String(message || "").trim();
+  if (text.length < 12) return [];
+  const raw = await completeFacts(text.slice(0, 4000));
+  const facts = parseFactList(raw)
+    .filter((fact) => fact.confidence > 0.75)
+    .slice(0, 2);
+  console.log("[router] conversational facts:", facts.length);
+  return facts;
+}
+
+async function completeFacts(text) {
+  const openaiKey = usableKey(process.env.OPENAI_API_KEY);
+  if (openaiKey) {
+    const client = new OpenAI({ apiKey: openaiKey, timeout: 12000 });
+    const response = await client.chat.completions.create({
+      model: OPENAI_MODEL,
+      temperature: 0,
+      max_tokens: 300,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: FACT_PROMPT },
+        { role: "user", content: text },
+      ],
+    });
+    return response.choices?.[0]?.message?.content || "";
+  }
+  const key = usableKey(process.env.GROQ_API_KEY);
+  if (!key) return "{\"facts\":[]}";
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      temperature: 0,
+      max_tokens: 300,
+      messages: [
+        { role: "system", content: `${FACT_PROMPT}\nReturn JSON only.` },
+        { role: "user", content: text },
+      ],
+    }),
+    signal: AbortSignal.timeout(12000),
+  });
+  if (!response.ok) throw new Error(`Groq fact status ${response.status}`);
+  const data = await response.json();
+  return stripThink(data.choices?.[0]?.message?.content || "");
+}
+
+function parseFactList(raw) {
+  const parsed = parseJson(raw);
+  const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.facts) ? parsed.facts : [];
+  return list.map(normalizeConversationalFact).filter(Boolean);
+}
+
+function normalizeConversationalFact(item) {
+  if (!item || typeof item !== "object") return null;
+  const fact = textOr(item.fact, "").replace(/\s+/g, " ").slice(0, 160);
+  const category = FACT_CATEGORIES.has(item.category) ? item.category : "";
+  const confidence = clamp(item.confidence);
+  if (!fact || !category || !Number.isFinite(Number(item.confidence))) return null;
+  const suggestedTitle = textOr(item.suggestedTitle, fact).replace(/\s+/g, " ").slice(0, 80);
+  return { fact, category, suggestedTitle, confidence };
+}
+
 function usableKey(value) {
   if (typeof value !== "string") return null;
   const key = value.trim();

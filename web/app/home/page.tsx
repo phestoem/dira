@@ -7,6 +7,7 @@ import remarkGfm from "remark-gfm";
 import QueuePanel from "@/components/QueuePanel";
 import {
   archiveEvent,
+  confirmIntake,
   confirmQueueItem,
   dismissQueueItem,
   getAdvisorSuggestions,
@@ -14,8 +15,10 @@ import {
   homeConfirm,
   homeInput,
   reopenQueueItem,
+  submitText,
   type CommandRecord,
   type CommandResult,
+  type ConversationalFact,
   type HomeLastAction,
   type HomeResponse,
   type IntakeFinancial,
@@ -636,7 +639,93 @@ function ResponseBody({
           ))}
         </div>
       ) : null}
+      {result.extractedFacts?.length ? <FactChips facts={result.extractedFacts.slice(0, 2)} /> : null}
     </div>
+  );
+}
+
+type ChipPhase = "open" | "fading" | "saving" | "saved";
+
+function FactChips({ facts }: { facts: ConversationalFact[] }) {
+  const [chips, setChips] = useState(facts.map((fact, index) => ({ ...fact, key: `${index}-${fact.suggestedTitle}`, phase: "open" as ChipPhase })));
+
+  useEffect(() => {
+    const fadeTimer = window.setTimeout(() => {
+      setChips((current) => current.map((chip) => (chip.phase === "open" ? { ...chip, phase: "fading" } : chip)));
+    }, 60000);
+    const removeTimer = window.setTimeout(() => {
+      setChips((current) => current.filter((chip) => chip.phase === "saving" || chip.phase === "saved"));
+    }, 60200);
+    return () => {
+      window.clearTimeout(fadeTimer);
+      window.clearTimeout(removeTimer);
+    };
+  }, []);
+
+  function fade(key: string) {
+    setChips((current) => current.map((chip) => (chip.key === key ? { ...chip, phase: "fading" } : chip)));
+    window.setTimeout(() => {
+      setChips((current) => current.filter((chip) => chip.key !== key));
+    }, 200);
+  }
+
+  async function save(key: string) {
+    const chip = chips.find((item) => item.key === key);
+    if (!chip || chip.phase === "saving" || chip.phase === "saved") return;
+    setChips((current) => current.map((item) => (item.key === key ? { ...item, phase: "saving" } : item)));
+    try {
+      const content = chip.fact.trim().length >= 10 ? chip.fact : `${chip.suggestedTitle}. ${chip.fact}`;
+      const intake = await submitText(content);
+      await confirmIntake(intake.queueId, "personal");
+      setChips((current) => current.map((item) => (item.key === key ? { ...item, phase: "saved" } : item)));
+      window.setTimeout(() => fade(key), 900);
+    } catch {
+      setChips((current) => current.map((item) => (item.key === key ? { ...item, phase: "open" } : item)));
+    }
+  }
+
+  if (!chips.length) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-2">
+      {chips.map((chip) => (
+        <div
+          key={chip.key}
+          className="inline-flex max-w-full items-center gap-2"
+          style={{
+            background: "#161614",
+            border: "0.5px solid #2A2A28",
+            borderRadius: 20,
+            padding: "6px 12px",
+            fontSize: 12,
+            color: "#6B6963",
+            opacity: chip.phase === "fading" ? 0 : 1,
+            transition: "opacity 200ms ease",
+          }}
+        >
+          <BookmarkIcon />
+          <span className="min-w-0 truncate">{chip.phase === "saved" ? "Saved ✓" : `Save: ${chip.suggestedTitle || chip.fact}`}</span>
+          {chip.phase === "open" || chip.phase === "saving" ? (
+            <>
+              <button type="button" disabled={chip.phase === "saving"} onClick={() => void save(chip.key)} className="text-[#3C3489] disabled:opacity-60">
+                Save
+              </button>
+              <span>|</span>
+              <button type="button" disabled={chip.phase === "saving"} onClick={() => fade(chip.key)} className="disabled:opacity-60">
+                Skip
+              </button>
+            </>
+          ) : null}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function BookmarkIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+      <path d="M3 1.5h6a.5.5 0 0 1 .5.5v8.2L6 8.2 2.5 10.2V2A.5.5 0 0 1 3 1.5Z" stroke="#6B6963" strokeWidth="1" />
+    </svg>
   );
 }
 
