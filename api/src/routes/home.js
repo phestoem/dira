@@ -15,6 +15,7 @@ import { extractConversationalFacts, previousExchangeFrom, routeIntent } from ".
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 import { describeRelationshipLine, parseFamilyStatement } from "../services/graph/familyStatement.js";
+import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
 import { commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
 import { findPaths, getFamilyTree, getMoneyFlows, getNeighbors, serializeForPrompt, getSubgraph } from "../services/graph/graphQuery.js";
@@ -282,7 +283,7 @@ async function runQuestion(userId, routing, payload) {
     console.error("[home] fact extract failed:", err.message);
     return [];
   });
-  if (looksRelational(payload.message)) {
+  if (looksRelational(payload.message) && !isPeopleQuestion(payload.message)) {
     scheduleExtraction(userId, payload.message, { source: "conversation", forceStatus: "suggested", title: "conversation" });
   }
   const [reply, facts] = await Promise.all([chat(messages, userId), factsPromise]);
@@ -649,8 +650,12 @@ async function runRelationshipChange(userId, routing, payload) {
 }
 
 async function runGraphQuery(userId, routing, payload) {
-  const self = await getOrCreateSelf(userId);
   const text = payload.message;
+  if (isPeopleQuestion(text)) {
+    const reply = await chat(advisorMessages(payload.history, text), userId);
+    return answerResponse(routing, reply.reply, false);
+  }
+  const self = await getOrCreateSelf(userId);
   let data = "";
   if (/\bfamily tree|familia|ndugu|parents|siblings|children\b/i.test(text)) {
     const tree = await getFamilyTree(userId);

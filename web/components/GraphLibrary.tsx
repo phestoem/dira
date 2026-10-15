@@ -142,7 +142,7 @@ export function ReviewPanel() {
                         {person.name}
                         <div className="mt-1 flex gap-3 text-xs">
                           <button type="button" className="text-[#7F77DD]" onClick={() => void confirmGraphRelationship(person.edgeId).then(load)}>Confirm</button>
-                          <button type="button" className="text-[#6B6963]" onClick={() => void rejectGraphRelationship(person.edgeId).then(load)}>Fix</button>
+                          <button type="button" className="text-[#6B6963]" onClick={() => void rejectGraphRelationship(person.edgeId).then(load)}>Reject</button>
                         </div>
                       </li>
                     ))}
@@ -163,7 +163,7 @@ export function ReviewPanel() {
                 <span className="text-[#6B6963]"> · {item.relation}</span>
                 <div className="mt-1 flex gap-3 text-xs">
                   <button type="button" className="text-[#7F77DD]" onClick={() => void confirmGraphRelationship(item.edgeId).then(load)}>Confirm</button>
-                  <button type="button" className="text-[#6B6963]" onClick={() => void rejectGraphRelationship(item.edgeId).then(load)}>Fix</button>
+                  <button type="button" className="text-[#6B6963]" onClick={() => void rejectGraphRelationship(item.edgeId).then(load)}>Reject</button>
                 </div>
               </li>
             ))}

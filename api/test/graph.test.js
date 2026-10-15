@@ -3,6 +3,7 @@ import test from "node:test";
 import { prisma } from "../src/prisma.js";
 import { chooseSelfName, mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
 import { describeRelationshipLine, isRelationshipStatement, parseFamilyStatement } from "../src/services/graph/familyStatement.js";
+import { answerPeopleQuestion, buildPeopleContext, conflictEdgeData, deliverPeopleAnswer, groundAdvisorReply, isPeopleQuestion } from "../src/services/graph/peopleGrounding.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
 import { stripEntityIds } from "../src/services/graph/reset.js";
@@ -100,6 +101,59 @@ test("a family introduction expands into kinship edges", () => {
     handle: "phesto",
     eventNames: [{ name: "Phesto Enock Mwakyusa", count: 2 }],
   }), "Phesto Enock Mwakyusa");
+});
+
+test("my father's family tree stays inside recorded facts", () => {
+  const question = "my father's family tree";
+  assert.equal(isPeopleQuestion(question), true);
+  assert.equal(isRelationshipStatement(question), false);
+  const context = buildPeopleContext({
+    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
+    people: [
+      { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
+      { id: "enock", name: "Enock Mwakyusa", kind: "father", deathDate: "2004-04-25" },
+      { id: "froidah", name: "Froidah Biniala Kyando", kind: "mother" },
+      { id: "zelda", name: "Zelda Goodluck Mambosho", kind: "wife" },
+      { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sister" },
+      { id: "leah", name: "Leah Enock Mwakyusa", kind: "sister" },
+      { id: "neema", name: "Neema Enock Mwakyusa", kind: "sister" },
+      { id: "zenah", name: "Zenah Enock Mwakyusa", kind: "sister" },
+    ],
+    edges: [
+      { id: "e-father", type: "parent_of", status: "confirmed", fromId: "enock", toId: "self", fromName: "Enock Mwakyusa", toName: "Phesto Enock Mwakyusa" },
+      { id: "e-mother", type: "parent_of", status: "confirmed", fromId: "froidah", toId: "self", fromName: "Froidah Biniala Kyando", toName: "Phesto Enock Mwakyusa" },
+      { id: "e-wife", type: "spouse_of", status: "confirmed", fromId: "zelda", toId: "self", fromName: "Zelda Goodluck Mambosho", toName: "Phesto Enock Mwakyusa" },
+      { id: "e-asha", type: "sibling_of", status: "suggested", fromId: "asha", toId: "self", fromName: "Asha Mwakyusa", toName: "Phesto Enock Mwakyusa" },
+    ],
+    events: [
+      { id: "ev-feb", title: "Birth note", fullText: "Phesto Enock Mwakyusa was born on 17 February 1978." },
+      { id: "ev-may", title: "Later note", fullText: "Phesto Enock Mwakyusa born 12 May 1978." },
+    ],
+  });
+  const invented = "Your father's spouse is Hermes Mwakyusa (married 1980). Zelda Goodluck Mambosho, his child, was born 1987. You were born May 12, 1978. Jeni was born in 1980, Leah in 1982, Neema in 1984 and Zenah in 1986.";
+  const checked = groundAdvisorReply(invented, context);
+  assert.equal(checked.removed.includes("Hermes Mwakyusa"), true);
+  assert.equal(checked.reply.includes("Hermes"), false);
+  assert.equal(checked.reply.includes("1987"), false);
+  assert.equal(checked.reply.includes("1980"), false);
+  assert.equal(checked.reply.includes("1982"), false);
+  const delivered = deliverPeopleAnswer(invented, context, question);
+  assert.match(delivered.reply, /Your father's spouse: Froidah Biniala Kyando/);
+  assert.match(delivered.reply, /Your sisters' birth dates aren't recorded yet/);
+  assert.match(delivered.reply, /Zelda Goodluck Mambosho — your wife/);
+  assert.match(delivered.reply, /17 Feb 1978/);
+  assert.match(delivered.reply, /12 May 1978/);
+  assert.match(delivered.reply, /Which is right/);
+  assert.match(delivered.reply, /unconfirmed: Asha Mwakyusa/);
+  assert.equal(delivered.reply.includes("Hermes"), false);
+  assert.equal(delivered.reply.includes("1987"), false);
+  assert.equal(/Zelda[\s\S]{0,40}child|child[\s\S]{0,40}Zelda/i.test(delivered.reply), false);
+  assert.equal(context.conflicts.length, 1);
+  const review = conflictEdgeData("user-1", context.conflicts[0]);
+  assert.equal(review.label, "conflict");
+  assert.match(review.evidenceText, /1978-02-17/);
+  assert.match(review.evidenceText, /1978-05-12/);
+  assert.equal(answerPeopleQuestion(question, context), delivered.reply);
 });
 
 test("normalizeType maps kinship words and work roles", () => {

@@ -57,6 +57,11 @@ export default function LibraryPage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    const tab = new URLSearchParams(window.location.search).get("tab");
+    if (KINDS.some((item) => item.id === tab)) setKind(tab as Kind);
+  }, []);
+
+  useEffect(() => {
     const handle = setTimeout(() => setNeedle(search.trim()), 200);
     return () => clearTimeout(handle);
   }, [search]);

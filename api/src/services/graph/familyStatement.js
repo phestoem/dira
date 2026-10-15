@@ -1,3 +1,5 @@
+import { isPeopleQuestion } from "./peopleGrounding.js";
+
 const MONTHS = {
   january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
   july: 7, august: 8, september: 9, october: 10, november: 11, december: 12,
@@ -8,7 +10,7 @@ const SELF = { name: "me", type: "self" };
 
 export function isRelationshipStatement(text) {
   const value = String(text || "").trim();
-  if (!value || value.includes("?") || /^(who|how|what|where|when|why)\b/i.test(value)) return false;
+  if (!value || value.includes("?") || /^(who|how|what|where|when|why)\b/i.test(value) || isPeopleQuestion(value)) return false;
   const lower = value.toLowerCase();
   if (/\b(no longer|not my|sold the|amehama|si tena)\b/.test(lower)) return false;
   return /\b(my\s+(father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?|family)|is my\s+(father|mother|son|daughter|sister|brother|wife|husband)|supervises|anasimamia)\b/.test(lower);

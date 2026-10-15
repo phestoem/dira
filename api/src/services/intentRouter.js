@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { isRelationshipStatement } from "./graph/familyStatement.js";
+import { isPeopleQuestion } from "./graph/peopleGrounding.js";
 
 const OPENAI_MODEL = "gpt-4o-mini";
 const GROQ_MODEL = "qwen/qwen3.8-27b";
@@ -244,7 +245,12 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
   }
   applyConversationCorrection(classified, text, history, fileAttached);
   applyAnswerFollowUp(classified, text, history, lastAction, fileAttached);
-  if (!fileAttached && isRelationshipStatement(text) && !["relationship_change", "correction", "graph_query", "command"].includes(classified.intent)) {
+  if (!fileAttached && isPeopleQuestion(text) && !["relationship_change", "correction", "command"].includes(classified.intent)) {
+    classified.intent = "graph_query";
+    classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
+    classified.interpretation = "Answer from recorded family facts.";
+  }
+  if (!fileAttached && isRelationshipStatement(text) && !isPeopleQuestion(text) && !["relationship_change", "correction", "graph_query", "command"].includes(classified.intent)) {
     if (classified.intent !== "relationship_add") {
       classified.alternatives = [
         { intent: classified.intent, interpretation: classified.interpretation },
@@ -468,6 +474,14 @@ function heuristic(text, fileAttached) {
       intent: "graph_query",
       confidence: 0.8,
       interpretation: "Answer from the relationship graph.",
+      alternatives: [],
+    });
+  }
+  if (isPeopleQuestion(text)) {
+    return normalize({
+      intent: "graph_query",
+      confidence: 0.86,
+      interpretation: "Answer from recorded family facts.",
       alternatives: [],
     });
   }

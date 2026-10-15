@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
+import { answerPeopleQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts } from "./graph/peopleGrounding.js";
 
 const MODEL = "qwen/qwen3.8-27b";
 const FACT_MODEL = "gpt-4o-mini";
@@ -25,6 +26,10 @@ Your role:
 - Be direct and specific — you have real data, use it
 - Recommend concrete next steps when asked
 - Never make up data — only reference what you can see
+- Never state a name, date, relationship or place about a person
+  unless it appears in the provided context.
+  If it isn't recorded, say "not recorded yet".
+- Suggested connections may be mentioned only as "unconfirmed: …", never as fact.
 
 Your responses:
 - Match the format to the question
@@ -105,8 +110,12 @@ Be direct. Use the right format. Let the data speak.`;
 
 export async function chat(messages, userId) {
   const history = normalizeMessages(messages);
-  const context = await loadContext(userId);
   const latest = [...history].reverse().find((message) => message.role === "user")?.content || "";
+  if (isPeopleQuestion(latest)) {
+    const answered = await answerPeople(userId, latest);
+    return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
+  }
+  const context = await loadContext(userId);
   const graph = await graphContext(userId, latest);
   context.graphLines = graph.lines;
   context.familyLines = graph.family;
@@ -368,7 +377,9 @@ ${(context.familyLines || []).length ? `FAMILY:\n${context.familyLines.join("\n"
 
 Prefer confirmed graph edges for who-is-connected questions.
 Mention when a relationship has ended.
-Never state a suggested edge as fact. Say "I have an unconfirmed note that…" when one is useful.
+Never state a name, date, relationship or place about a person unless it appears above.
+If it isn't recorded, say "not recorded yet".
+Never state a suggested edge as fact. Say "unconfirmed: …" when one is useful.
 Speak about people who have died in the past tense, and leave them out of upcoming birthdays.
 
 FINANCIAL PICTURE:
@@ -398,6 +409,26 @@ async function graphContext(userId, text) {
     console.error("[graph] advisor context failed:", err.message);
     return { lines: [], family: [] };
   }
+}
+
+async function answerPeople(userId, question) {
+  const context = await loadPeopleContext(userId);
+  await persistConflicts(userId, context.conflicts);
+  if (/\bfamily tree\b/i.test(question)) {
+    return { reply: answerPeopleQuestion(question, context), sourceIds: context.facts.map((fact) => `${fact.source.type}:${fact.source.id}`) };
+  }
+  let modelText = "";
+  try {
+    modelText = await completeChat(
+      [{ role: "user", content: question }],
+      `${PEOPLE_PROMPT}\n\nCONTEXT:\n${peopleContextBlock(context) || "none recorded"}`,
+      { temperature: 0 },
+    );
+  } catch (err) {
+    console.error("[advisor] people answer failed:", err.message);
+    return { reply: answerPeopleQuestion(question, context), sourceIds: [] };
+  }
+  return deliverPeopleAnswer(modelText, context, question);
 }
 
 function familyLines(tree) {
@@ -498,14 +529,14 @@ function totalsText(rows) {
     .join("; ");
 }
 
-async function completeChat(messages, systemPrompt) {
+async function completeChat(messages, systemPrompt, options = {}) {
   const key = process.env.GROQ_API_KEY;
   if (!key || key.startsWith("your_")) {
     throw httpError("GROQ_API_KEY is not set", 503);
   }
   const body = JSON.stringify({
     model: MODEL,
-    temperature: 0.7,
+    temperature: options.temperature ?? 0.7,
     max_tokens: 800,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
   });

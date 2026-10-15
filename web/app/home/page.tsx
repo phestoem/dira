@@ -111,11 +111,13 @@ export default function HomePage() {
         .catch(() => {
           /* The banner stays hidden when the queue cannot be read. */
         });
+      getGraphSuggestions()
+        .then((page) => {
+          if (!cancelled) setConnectionCount(page.count || 0);
+        })
+        .catch(() => undefined);
     };
     loadQueue();
-    getGraphSuggestions().then((page) => {
-      if (!cancelled) setConnectionCount(page.count || 0);
-    }).catch(() => undefined);
     const timer = window.setInterval(loadQueue, 60000);
     window.addEventListener("focus", loadQueue);
     return () => {
@@ -192,6 +194,8 @@ export default function HomePage() {
       setMessages((current) => current.map((turn) => (turn.id === pending.id ? { ...turn, busy: false, text: message } : turn)));
     } finally {
       setBusy(false);
+      getGraphSuggestions().then((page) => setConnectionCount(page.count || 0)).catch(() => undefined);
+      getQueue().then(setQueue).catch(() => undefined);
     }
   }
 
@@ -342,16 +346,26 @@ export default function HomePage() {
     <div className="flex h-[calc(100dvh-3.5rem)] flex-col">
       <div ref={scrollerRef} className="flex-1 overflow-y-auto">
         {queue.length > 0 || connectionCount > 0 ? (
-          <div className="sticky top-3 z-10 flex justify-center px-4">
-            <button
-              type="button"
-              onClick={() => setQueueOpen(true)}
-              className="rounded-full px-3 py-1.5 text-xs text-[#F5F3EE]"
-              style={{ background: "#1A1A2E", border: "1px solid #3C3489" }}
-            >
-              {queue.length > 0 ? <span className="block">{queue.length} {queue.length === 1 ? "item" : "items"} waiting for review</span> : null}
-              {connectionCount > 0 ? <span className="block">{connectionCount} connections to confirm</span> : null}
-            </button>
+          <div className="sticky top-3 z-10 flex flex-col items-center gap-2 px-4">
+            {queue.length > 0 ? (
+              <button
+                type="button"
+                onClick={() => setQueueOpen(true)}
+                className="rounded-full px-3 py-1.5 text-xs text-[#F5F3EE]"
+                style={{ background: "#1A1A2E", border: "1px solid #3C3489" }}
+              >
+                {queue.length} {queue.length === 1 ? "item" : "items"} waiting for review
+              </button>
+            ) : null}
+            {connectionCount > 0 ? (
+              <Link
+                href="/library?tab=review"
+                className="rounded-full px-3 py-1.5 text-xs text-[#F5F3EE]"
+                style={{ background: "#1A1A2E", border: "1px solid #3C3489" }}
+              >
+                {connectionCount} connections to confirm
+              </Link>
+            ) : null}
           </div>
         ) : null}
         {messages.length === 0 ? (
