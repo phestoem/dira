@@ -101,7 +101,13 @@ export default function HomePage() {
       text: [text, attached ? attached.name : ""].filter(Boolean).join("\n"),
     };
     const pending: Turn = { id: newId(), role: "dira", busy: true };
-    setMessages((current) => [...current, userTurn, pending]);
+    const correcting = looksLikeCorrection(text);
+    setMessages((current) => {
+      const prior = correcting
+        ? current.map((turn) => (turn.response?.result.confirmationRequired && !turn.resolved ? { ...turn, resolved: true } : turn))
+        : current;
+      return [...prior, userTurn, pending];
+    });
     setInput("");
     setFile(null);
     setBusy(true);
@@ -786,16 +792,45 @@ function messageOf(value: unknown) {
   return typeof message === "string" ? message : "";
 }
 
+function looksLikeCorrection(text: string) {
+  return /\b(i meant|not that|i was referring to|the previous)\b/i.test(text);
+}
+
 function historyFrom(turns: Turn[]) {
   const items: Array<{ role: "user" | "assistant"; content: string }> = [];
   for (const turn of turns) {
     if (turn.role === "user" && turn.text) items.push({ role: "user", content: turn.text });
-    if (turn.role === "dira" && turn.response) {
-      const content = turn.response.result.confirmationText || messageOf(turn.response.result.content) || asAnswer(turn.response.result.content)?.reply || "";
+    if (turn.role === "dira") {
+      const content = diraHistoryText(turn);
       if (content) items.push({ role: "assistant", content });
     }
   }
   return items.slice(-8);
+}
+
+function diraHistoryText(turn: Turn) {
+  const parts: string[] = [];
+  if (turn.text) parts.push(turn.text);
+  const response = turn.response;
+  if (!response) return parts.join("\n").slice(0, 1200);
+  const { result } = response;
+  if (result.confirmationText) parts.push(result.confirmationText);
+  const understanding = asUnderstanding(result.content);
+  if (understanding) {
+    parts.push(`Title: ${understanding.understood.title}`);
+    if (understanding.understood.summary) parts.push(`Summary: ${understanding.understood.summary}`);
+    if (understanding.understood.location) parts.push(`Location: ${understanding.understood.location}`);
+  }
+  const answer = asAnswer(result.content);
+  if (answer?.reply) parts.push(answer.reply);
+  const note = messageOf(result.content);
+  if (note && note !== answer?.reply) parts.push(note);
+  const preview = previewItems(result.content);
+  if (preview.length) parts.push(preview.map((item) => `${item.title}: ${item.change}`).join("; "));
+  if (result.type === "clarification" && response.clarificationOptions?.length) {
+    parts.push(`Asked which was meant: ${response.clarificationOptions.map((option) => option.label).join(", ")}`);
+  }
+  return parts.filter(Boolean).join("\n").slice(0, 1200);
 }
 
 function toLastAction(response: HomeResponse): HomeLastAction {

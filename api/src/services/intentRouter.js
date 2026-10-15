@@ -32,6 +32,13 @@ Intent types:
   said or did in this conversation
 - unclear: genuinely ambiguous
 
+When the user says 'I meant X' or 'not that, I meant'
+or 'the previous one' — this is a correction or
+clarification of the PREVIOUS exchange.
+Look at conversationHistory to understand what
+they are referring to. Do not treat it as a new
+standalone input.
+
 Return JSON:
 {
   intent: string,
@@ -72,6 +79,12 @@ Examples:
 
 'The Mbeya electrical cost was 2.4M TSH not 2.3M'
 → intent: correction, confidence: 0.85
+
+conversationHistory shows DIRA just described
+Tent Camping Plans in Tuliza Nafsi.
+'Not that, I meant the tent spots are part of the landscaping'
+→ intent: correction, confidence: 0.9
+   The previous exchange is the subject, not a new event.
 
 The interpretation string is shown to the user.
 Follow these format rules for that wording.
@@ -140,7 +153,7 @@ details include... the chassis number is...'
 
 Be direct. Use the right format. Let the data speak.`;
 
-export async function routeIntent(input, userId, attachedFile) {
+export async function routeIntent(input, userId, attachedFile, history) {
   const text = String(input || "").trim();
   const fileAttached = Boolean(attachedFile);
   if (!text && fileAttached) {
@@ -159,7 +172,7 @@ export async function routeIntent(input, userId, attachedFile) {
   });
   let classified;
   try {
-    classified = await classify(text, snapshot, attachedFile);
+    classified = await classify(text, snapshot, attachedFile, history);
   } catch (err) {
     console.error("[router] classifier fallback:", err.message);
     classified = heuristic(text, fileAttached);
@@ -169,7 +182,30 @@ export async function routeIntent(input, userId, attachedFile) {
     classified.confidence = Math.max(classified.confidence, 0.9);
     classified.extractedData.mentionsFile = true;
   }
+  applyConversationCorrection(classified, text, history, fileAttached);
   return decide(classified);
+}
+
+export function previousExchangeFrom(history) {
+  const items = conversationItems(history);
+  let lastResponse = "";
+  let priorUser = "";
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!lastResponse && item.role === "assistant") {
+      lastResponse = item.content;
+      continue;
+    }
+    if (lastResponse && item.role === "user") {
+      priorUser = item.content;
+      break;
+    }
+  }
+  return {
+    lastResponse,
+    priorUser,
+    about: aboutFrom(lastResponse),
+  };
 }
 
 async function loadSnapshot(userId, fileAttached) {
@@ -199,15 +235,27 @@ async function loadSnapshot(userId, fileAttached) {
   };
 }
 
-async function classify(text, snapshot, attachedFile) {
+async function classify(text, snapshot, attachedFile, history) {
+  const prior = previousExchangeFrom(history);
+  const correcting = isConversationCorrection(text) && prior.lastResponse;
   const user = [
     `File attached: ${attachedFile ? "yes" : "no"}`,
     `Recent events: ${snapshot.recentEvents.join("; ") || "none"}`,
     `Active visions: ${snapshot.activeVisions}`,
     `Recent journal themes: ${snapshot.journalThemes.join(", ") || "none"}`,
     "",
+    conversationBlock(history),
+    correcting
+      ? [
+          "",
+          "The latest message corrects the previous exchange. Do not treat it as a new standalone input.",
+          `Previous DIRA response: ${prior.lastResponse.slice(0, 700)}`,
+          `That exchange was about: ${prior.about || "the previous reply"}`,
+        ].join("\n")
+      : "",
+    "",
     text,
-  ].join("\n");
+  ].filter((line) => line !== undefined).join("\n");
 
   const raw = await completeRouter(user);
   const parsed = parseJson(raw);
@@ -295,7 +343,7 @@ function heuristic(text, fileAttached) {
       alternatives: [],
     });
   }
-  if (/\b(no,?\s+that'?s wrong|i meant|not that|you misunderstood)\b/.test(lower) || /\bwas\b.+\bnot\b/.test(lower)) {
+  if (isConversationCorrection(text) || /\b(no,?\s+that'?s wrong|you misunderstood)\b/.test(lower) || /\bwas\b.+\bnot\b/.test(lower)) {
     return normalize({
       intent: "correction",
       confidence: 0.72,
@@ -371,6 +419,52 @@ function emptyExtracted(extra = {}) {
     emotionalTone: "neutral",
     ...extra,
   };
+}
+
+function applyConversationCorrection(classified, text, history, fileAttached) {
+  if (fileAttached || !isConversationCorrection(text)) return;
+  const prior = previousExchangeFrom(history);
+  if (!prior.lastResponse) return;
+  classified.extractedData.isCorrecting = true;
+  const standalone = classified.intent === "intake_text"
+    || classified.intent === "intake_file"
+    || classified.intent === "journal"
+    || classified.intent === "unclear";
+  if (!standalone) return;
+  classified.intent = "correction";
+  classified.confidence = Math.max(classified.confidence, 0.86);
+  classified.interpretation = prior.about
+    ? `You're correcting the previous exchange about ${prior.about}.`
+    : "You're correcting the previous exchange.";
+}
+
+function isConversationCorrection(text) {
+  return /\b(i meant|not that|i was referring to|the previous)\b/i.test(String(text || ""));
+}
+
+function conversationItems(history) {
+  return (Array.isArray(history) ? history : [])
+    .filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string" && item.content.trim())
+    .slice(-8)
+    .map((item) => ({ role: item.role, content: item.content.trim().slice(0, 1200) }));
+}
+
+function conversationBlock(history) {
+  const items = conversationItems(history);
+  if (!items.length) return "conversationHistory: none";
+  return [
+    "conversationHistory:",
+    ...items.map((item) => `${item.role === "assistant" ? "DIRA" : "User"}: ${item.content.slice(0, 500)}`),
+  ].join("\n");
+}
+
+function aboutFrom(text) {
+  const source = String(text || "").trim();
+  if (!source) return "";
+  const title = source.match(/^Title:\s*(.+)$/m);
+  if (title) return title[1].trim().slice(0, 180);
+  const line = source.split("\n").map((part) => part.trim()).find(Boolean) || "";
+  return line.replace(/\s*Save it\??\s*$/i, "").slice(0, 180);
 }
 
 function labelFor(intent) {

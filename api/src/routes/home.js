@@ -11,7 +11,7 @@ import {
   understandFile,
   understandText,
 } from "../services/contextEngine.js";
-import { routeIntent } from "../services/intentRouter.js";
+import { previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 
@@ -49,7 +49,7 @@ export default async function homeRoutes(fastify) {
       if (!message && !payload.file) {
         return reply.code(400).send({ error: "Say something, or attach a file." });
       }
-      const routing = await routeIntent(message, request.userId, payload.file);
+      const routing = await routeIntent(message, request.userId, payload.file, payload.history);
       console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2));
       if (routing.action === "clarify") {
         return await clarifyResponse(request.userId, routing, payload);
@@ -261,7 +261,47 @@ async function runJournal(userId, routing, payload) {
 }
 
 async function runCorrection(userId, routing, payload) {
-  const command = await interpretCommand(payload.message, userId).catch((err) => {
+  const prior = previousExchangeFrom(payload.history);
+  console.log("[home] correction about:", prior.about || "(none)");
+  if (previousWasQuestion(payload.lastAction, prior)) {
+    const message = prior.about
+      ? `About the previous reply (${prior.about}): ${payload.message}`
+      : payload.message;
+    return runQuestion(userId, routing, { ...payload, message });
+  }
+  if (openIntake(payload.lastAction, prior) && prior.priorUser && !isBareDismissal(payload.message)) {
+    const revised = [
+      prior.priorUser,
+      prior.about ? `The previous reading was: ${prior.about}.` : "",
+      `Correction: ${payload.message}`,
+    ].filter(Boolean).join("\n\n");
+    return runIntakeText(userId, { ...routing, intent: "intake_text" }, { ...payload, message: revised });
+  }
+  const previous = peekPending(payload.lastAction?.sessionId, userId);
+  if (previous?.kind === "intake" && isBareDismissal(payload.message)) {
+    const sessionId = remember(userId, {
+      kind: "dismiss",
+      queueId: previous.queueId,
+      routing,
+    });
+    const title = payload.lastAction?.summary || prior.about || "that";
+    return {
+      sessionId,
+      routing: publicRouting(routing),
+      action: "confirm",
+      result: {
+        type: "correction_preview",
+        content: { preview: [{ id: previous.queueId, title, change: "Don't save" }] },
+        confirmationRequired: true,
+        confirmationText: `Drop “${title}” without saving?`,
+      },
+      clarificationOptions: null,
+    };
+  }
+  const contextualMessage = prior.about
+    ? `Regarding "${prior.about}": ${payload.message}`
+    : payload.message;
+  const command = await interpretCommand(contextualMessage, userId).catch((err) => {
     console.error("[home] correction command failed:", err.message);
     return null;
   });
@@ -285,26 +325,14 @@ async function runCorrection(userId, routing, payload) {
       clarificationOptions: null,
     };
   }
-  const previous = peekPending(payload.lastAction?.sessionId, userId);
-  if (previous?.kind === "intake") {
-    const sessionId = remember(userId, {
-      kind: "dismiss",
-      queueId: previous.queueId,
-      routing,
-    });
-    const title = payload.lastAction?.summary || "that";
-    return {
-      sessionId,
-      routing: publicRouting(routing),
-      action: "confirm",
-      result: {
-        type: "correction_preview",
-        content: { preview: [{ id: previous.queueId, title, change: "Don't save" }] },
-        confirmationRequired: true,
-        confirmationText: `Drop “${title}” without saving?`,
-      },
-      clarificationOptions: null,
-    };
+  if (command?.answer || command?.needsClarification) {
+    return answerResponse(routing, command.answer || command.needsClarification, false, { results: command.results || [] });
+  }
+  if (prior.lastResponse) {
+    const message = prior.about
+      ? `About the previous reply (${prior.about}): ${payload.message}`
+      : payload.message;
+    return runQuestion(userId, routing, { ...payload, message });
   }
   return answerResponse(routing, "Tell me the old wording and what it should be.", false);
 }
@@ -621,6 +649,24 @@ function publicRouting(routing) {
     confidence: typeof routing?.confidence === "number" ? routing.confidence : 1,
     interpretation: routing?.interpretation || "",
   };
+}
+
+function previousWasQuestion(lastAction, prior) {
+  if (lastAction?.intent === "question") return true;
+  if (lastAction?.intent) return false;
+  if (!prior.lastResponse) return false;
+  return !/title:|save it\?|confirm\?/i.test(prior.lastResponse);
+}
+
+function openIntake(lastAction, prior) {
+  if (lastAction?.saved) return false;
+  if (lastAction?.intent === "intake_text" || lastAction?.intent === "intake_file") return true;
+  if (lastAction?.intent) return false;
+  return /title:/i.test(prior.lastResponse || "") && /save it\?/i.test(prior.lastResponse || "");
+}
+
+function isBareDismissal(message) {
+  return /^(no|nope|not that|that'?s wrong|wrong|never mind|cancel)\.?$/i.test(String(message || "").trim());
 }
 
 function advisorMessages(history, message) {
