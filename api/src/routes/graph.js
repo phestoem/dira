@@ -12,6 +12,7 @@ import { commitTriples } from "../services/graph/relationshipExtractor.js";
 import { categoryOf, listRelationshipTypes, normalizeType } from "../services/graph/relationshipTypes.js";
 import { groupSuggestions } from "../services/graph/graphQuality.js";
 import { rebuildGraph } from "../services/graph/rebuild.js";
+import { resetGraph } from "../services/graph/reset.js";
 
 export default async function graphRoutes(fastify) {
   fastify.get("/graph/types", { preHandler: [fastify.authenticate] }, async () => ({
@@ -183,6 +184,11 @@ export default async function graphRoutes(fastify) {
     if (Array.isArray(body.aliases)) data.aliases = body.aliases.map((item) => String(item).trim()).filter(Boolean).slice(0, 20);
     const updated = await prisma.entity.update({ where: { id: existing.id }, data });
     return present(updated);
+  });
+
+  fastify.post("/graph/reset", { preHandler: [fastify.authenticate] }, async (request) => {
+    const dryRun = request.body?.dryRun !== false;
+    return resetGraph(request.userId, { dryRun });
   });
 
   fastify.post("/graph/rebuild", { preHandler: [fastify.authenticate] }, async (request) => {

@@ -4,9 +4,27 @@ import { prisma } from "../src/prisma.js";
 import { mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
+import { stripEntityIds } from "../src/services/graph/reset.js";
 import { alignPredicate, applySupersession, buildSelfAliasSet, dedupeProposedNames, groupSuggestions, mentionsSelf, prepareTriples } from "../src/services/graph/graphQuality.js";
 import { absorbDroppedPayment, commitTriples, deterministicEdgePlans, dropReason, extractWithRetry, graphExtractProvider, headerDelayFrom, retryDelayMs } from "../src/services/graph/relationshipExtractor.js";
 import { isSensitive, normalizeType } from "../src/services/graph/relationshipTypes.js";
+
+test("graph reset drops entity ids and keeps names", () => {
+  const people = stripEntityIds([
+    { entityId: "person-1", name: "Burton", role: "supervisor" },
+    "Ada",
+    { name: "Neema", role: "spouse" },
+  ]);
+  assert.equal(people.removed, 1);
+  assert.deepEqual(people.list[0], { name: "Burton", role: "supervisor" });
+  assert.equal(people.list[1], "Ada");
+  assert.deepEqual(people.list[2], { name: "Neema", role: "spouse" });
+  const places = stripEntityIds([{ entityId: "place-1", name: "Mbeya", role: "location", relationship: "location" }]);
+  assert.equal(places.removed, 1);
+  assert.equal(places.list[0].name, "Mbeya");
+  assert.equal(places.list[0].role, "location");
+  assert.equal(places.list[0].entityId, undefined);
+});
 
 test("normalizeType maps kinship words and work roles", () => {
   assert.deepEqual(normalizeType("mama").type, "parent_of");
