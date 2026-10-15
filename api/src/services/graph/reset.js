@@ -1,5 +1,6 @@
 import { prisma } from "../../prisma.js";
 import { getOrCreateSelf } from "./entityResolver.js";
+import { setGraphAutoExtract } from "./rebuild.js";
 
 export function stripEntityIds(list) {
   if (!Array.isArray(list)) return { list, removed: 0 };
@@ -65,6 +66,7 @@ export async function resetGraph(userId, options = {}) {
       data: { graphExtractedAt: null },
     });
   }
+  await setGraphAutoExtract(userId, false);
   console.log(`[graph-reset] removed ${report.entities} entities, ${report.edges} edges.`);
   return report;
 }

@@ -245,6 +245,12 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
   }
   applyConversationCorrection(classified, text, history, fileAttached);
   applyAnswerFollowUp(classified, text, history, lastAction, fileAttached);
+  if (!fileAttached && rejectsCorrection(text) && classified.intent === "correction") {
+    classified.intent = isPeopleQuestion(text) ? "graph_query" : "question";
+    classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
+    classified.interpretation = "Answer a question.";
+    if (classified.extractedData) classified.extractedData.isCorrecting = false;
+  }
   if (!fileAttached && isPeopleQuestion(text) && !["relationship_change", "correction", "command"].includes(classified.intent)) {
     classified.intent = "graph_query";
     classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
@@ -315,8 +321,8 @@ async function loadSnapshot(userId, fileAttached) {
 
 async function classify(text, snapshot, attachedFile, history, lastAction) {
   const prior = previousExchangeFrom(history);
-  const correcting = isConversationCorrection(text) && prior.lastResponse;
-  const answerFollowUp = lastResponseWasAnswer(history, lastAction);
+  const correcting = isConversationCorrection(text) && prior.lastResponse && !rejectsCorrection(text);
+  const answerFollowUp = lastResponseWasAnswer(history, lastAction) && !rejectsCorrection(text);
   const user = [
     `File attached: ${attachedFile ? "yes" : "no"}`,
     `Recent events: ${snapshot.recentEvents.join("; ") || "none"}`,
@@ -336,8 +342,9 @@ async function classify(text, snapshot, attachedFile, history, lastAction) {
       ? [
           "",
           "The previous DIRA response was a factual answer to a question.",
-          "A short factual follow-up corrects that answer. Classify it as correction, not intake_text.",
-          "That includes but, actually, no, wait, a contradicting date or fact, 'today is', 'it is now', and 'currently'.",
+          "A follow-up is a correction only when it contains no, not, wrong, actually, or I meant.",
+          "A message that ends in ? or starts with what, who, when, where, how, which, why, je, nani, lini, wapi, or vipi is a question, not a correction.",
+          "Follow-ups such as 'their names' or 'and his family?' are questions. Carry the previous answer as context.",
         ].join("\n")
       : "",
     "",
@@ -350,62 +357,73 @@ async function classify(text, snapshot, attachedFile, history, lastAction) {
   return normalize(parsed);
 }
 
+function routerProvider() {
+  return String(process.env.ROUTER_PROVIDER || "openai").trim().toLowerCase() === "groq" ? "groq" : "openai";
+}
+
 async function completeRouter(user) {
-  const openaiKey = usableKey(process.env.OPENAI_API_KEY);
-  if (openaiKey) {
-    const client = new OpenAI({ apiKey: openaiKey, timeout: 12000 });
-    const response = await client.chat.completions.create({
-      model: OPENAI_MODEL,
-      temperature: 0.1,
-      response_format: { type: "json_object" },
-      messages: [
-        { role: "system", content: ROUTER_PROMPT },
-        { role: "user", content: user },
-      ],
-    });
-    return response.choices?.[0]?.message?.content || "";
+  const provider = routerProvider();
+  try {
+    if (provider === "groq") return await completeWithGroq(user);
+    return await completeWithOpenAI(user);
+  } catch (err) {
+    if (provider === "openai" && !isRateLimitError(err)) {
+      console.error("[router] openai failed, trying groq:", err.message);
+      return completeWithGroq(user);
+    }
+    throw err;
   }
-  return completeWithGroq(user);
+}
+
+async function completeWithOpenAI(user) {
+  const openaiKey = usableKey(process.env.OPENAI_API_KEY);
+  if (!openaiKey) throw new Error("OPENAI_API_KEY is not set");
+  const client = new OpenAI({ apiKey: openaiKey, timeout: 12000 });
+  const response = await client.chat.completions.create({
+    model: OPENAI_MODEL,
+    temperature: 0.1,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: ROUTER_PROMPT },
+      { role: "user", content: user },
+    ],
+  });
+  return response.choices?.[0]?.message?.content || "";
 }
 
 async function completeWithGroq(user) {
   const key = usableKey(process.env.GROQ_API_KEY);
   if (!key) throw new Error("No model key is configured");
-  const body = JSON.stringify({
-    model: GROQ_MODEL,
-    temperature: 0.1,
-    max_tokens: 700,
-    messages: [
-      { role: "system", content: `${ROUTER_PROMPT}\nReturn JSON only.` },
-      { role: "user", content: user },
-    ],
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      temperature: 0.1,
+      max_tokens: 700,
+      messages: [
+        { role: "system", content: `${ROUTER_PROMPT}\nReturn JSON only.` },
+        { role: "user", content: user },
+      ],
+    }),
+    signal: AbortSignal.timeout(12000),
   });
-  let delay = 1500;
-  let response;
-  for (let attempt = 0; attempt < 4; attempt += 1) {
-    response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${key}`,
-        "Content-Type": "application/json",
-      },
-      body,
-      signal: AbortSignal.timeout(20000),
-    });
-    if (response.status !== 429 || attempt === 3) break;
-    const header = Number(response.headers.get("retry-after"));
-    const wait = Number.isFinite(header) && header > 0 ? Math.min(header * 1000, 8000) : delay;
-    console.error("[router] rate limited, retrying in", wait);
-    await sleep(wait);
-    delay = Math.min(delay * 2, 8000);
+  if (!response.ok) {
+    const error = new Error(`Groq router status ${response.status}`);
+    error.status = response.status;
+    throw error;
   }
-  if (!response.ok) throw new Error(`Groq router status ${response.status}`);
   const data = await response.json();
   return stripThink(data.choices?.[0]?.message?.content || "");
 }
 
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function isRateLimitError(err) {
+  const status = err?.status || err?.statusCode || err?.response?.status;
+  if (status === 429) return true;
+  return /\b429\b|rate limit/i.test(String(err?.message || ""));
 }
 
 function normalize(parsed) {
@@ -453,7 +471,7 @@ function heuristic(text, fileAttached) {
       alternatives: [],
     });
   }
-  if (isConversationCorrection(text) || /\b(no,?\s+that'?s wrong|you misunderstood)\b/.test(lower) || /\bwas\b.+\bnot\b/.test(lower)) {
+  if (!rejectsCorrection(text) && (isConversationCorrection(text) || /\b(no,?\s+that'?s wrong|you misunderstood)\b/.test(lower) || /\bwas\b.+\bnot\b/.test(lower))) {
     return normalize({
       intent: "correction",
       confidence: 0.72,
@@ -564,7 +582,7 @@ function emptyExtracted(extra = {}) {
 }
 
 function applyConversationCorrection(classified, text, history, fileAttached) {
-  if (fileAttached || !isConversationCorrection(text)) return;
+  if (fileAttached || rejectsCorrection(text) || !isConversationCorrection(text)) return;
   const prior = previousExchangeFrom(history);
   if (!prior.lastResponse) return;
   classified.extractedData.isCorrecting = true;
@@ -584,8 +602,25 @@ function isConversationCorrection(text) {
   return /\b(i meant|not that|i was referring to|the previous)\b/i.test(String(text || ""));
 }
 
+const QUESTION_WORD = /^(what|who|when|where|how|which|why|je|nani|lini|wapi|vipi)\b/i;
+const CORRECTION_WORD = /\b(no|not|wrong|actually|i meant)\b/i;
+const FOLLOW_UP_REFERENCE = /\b(their names|who are they|what are they called|and (?:his|her|their) family)\b/i;
+
+export function rejectsCorrection(text) {
+  const value = String(text || "").trim();
+  if (!value || CORRECTION_WORD.test(value)) return false;
+  if (/\?\s*$/.test(value) || QUESTION_WORD.test(value) || FOLLOW_UP_REFERENCE.test(value)) return true;
+  return false;
+}
+
+export function isNoiseReply(text) {
+  const value = String(text || "").trim();
+  if (!value) return true;
+  return /^(taking a moment\b|request failed\b|dira is busy right now\b|dira couldn't take that in\b|the advisor could not answer\b)/i.test(value);
+}
+
 function applyAnswerFollowUp(classified, text, history, lastAction, fileAttached) {
-  if (fileAttached || !lastResponseWasAnswer(history, lastAction)) return;
+  if (fileAttached || rejectsCorrection(text) || !lastResponseWasAnswer(history, lastAction)) return;
   const prior = previousExchangeFrom(history);
   if (!clarifiesPreviousAnswer(text, prior.lastResponse)) return;
   classified.extractedData.isCorrecting = true;
@@ -670,6 +705,7 @@ const CURRENT_FACT = /\b(today is|it is now|it'?s now|currently)\b/i;
 function conversationItems(history) {
   return (Array.isArray(history) ? history : [])
     .filter((item) => item && (item.role === "user" || item.role === "assistant") && typeof item.content === "string" && item.content.trim())
+    .filter((item) => item.role !== "assistant" || !isNoiseReply(item.content))
     .slice(-8)
     .map((item) => ({ role: item.role, content: item.content.trim().slice(0, 1200) }));
 }

@@ -204,7 +204,11 @@ export async function commitTriples(userId, triples, options = {}) {
   const result = { created: 0, updated: 0, suggested: 0, conflicts: [], dropped: [], reviewQuestions: [], createdEntities: [] };
   const self = await getOrCreateSelf(userId);
   const quality = options.quality || await loadQualityContext(userId, self);
-  const prepared = prepareTriples(triples, { ...quality, message: options.message || "" });
+  const prepared = prepareTriples(triples, {
+    ...quality,
+    message: options.message || "",
+    sourceText: options.sourceText || options.message || "",
+  });
   result.reviewQuestions = prepared.reviewQuestions;
   await rememberSelfSpellings(self, prepared.selfSpellings);
   result.dropped = prepared.dropped;

@@ -117,6 +117,7 @@ async function parseError(res: Response): Promise<string> {
   } catch {
     /* response was not JSON */
   }
+  if (res.status === 502 || res.status === 503 || res.status === 504) return "DIRA is busy right now. Send that again.";
   return "Request failed";
 }
 

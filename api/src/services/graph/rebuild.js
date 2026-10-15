@@ -15,9 +15,26 @@ import {
 } from "./relationshipExtractor.js";
 import { categoryOf, isSensitive, normalizeType } from "./relationshipTypes.js";
 
+export function graphAutoExtractEnabled(settings, envValue = process.env.GRAPH_AUTO_EXTRACT) {
+  if (settings && typeof settings === "object" && !Array.isArray(settings) && typeof settings.graphAutoExtract === "boolean") {
+    return settings.graphAutoExtract;
+  }
+  return String(envValue || "").trim().toLowerCase() === "true";
+}
+
+export async function setGraphAutoExtract(userId, enabled) {
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { settings: true } });
+  const current = user?.settings && typeof user.settings === "object" && !Array.isArray(user.settings) ? user.settings : {};
+  await prisma.user.update({
+    where: { id: userId },
+    data: { settings: { ...current, graphAutoExtract: Boolean(enabled) } },
+  });
+}
+
 export async function catchUpGraphExtractions() {
-  const users = await prisma.user.findMany({ select: { id: true } });
+  const users = await prisma.user.findMany({ select: { id: true, settings: true } });
   for (const user of users) {
+    if (!graphAutoExtractEnabled(user.settings)) continue;
     const pending = await countMissing(user.id);
     if (!pending) continue;
     try {
@@ -72,13 +89,14 @@ export async function rebuildGraph(userId, options = {}) {
     const event = events[index];
     try {
       const plans = deterministicEdgePlans(event, quality.selfName || self?.name);
-      const extracted = await extractWithRetry(() => extractTriples(eventText(event), {
+      const sourceText = eventText(event);
+      const extracted = await extractWithRetry(() => extractTriples(sourceText, {
         selfName: quality.selfName,
         today: new Date().toISOString().slice(0, 10),
         title: event.title,
         known,
       }));
-      const prepared = prepareTriples(extracted.triples, quality);
+      const prepared = prepareTriples(extracted.triples, { ...quality, message: sourceText, sourceText });
       noteQuestions(report, prepared.reviewQuestions);
       canonize(prepared.kept, seenNames);
       for (const triple of prepared.dropped) absorbDroppedPayment(plans, triple, event, quality.selfName || self?.name);
@@ -113,6 +131,8 @@ export async function rebuildGraph(userId, options = {}) {
           title: event.title,
           entityFacts: [...(extracted.entityFacts || []), ...prepared.entityFacts],
           quality,
+          message: sourceText,
+          sourceText,
           occurredAt: event.occurredAt || null,
           correction: isCorrectionEvent(event),
         });
@@ -168,12 +188,13 @@ export async function rebuildGraph(userId, options = {}) {
   for (let index = 0; index < journal.length; index += 1) {
     const entry = journal[index];
     try {
-      const extracted = await extractWithRetry(() => extractTriples(String(entry.rawContent || "").slice(0, 3000), {
+      const sourceText = String(entry.rawContent || "").slice(0, 3000);
+      const extracted = await extractWithRetry(() => extractTriples(sourceText, {
         selfName: quality.selfName,
         today: new Date().toISOString().slice(0, 10),
         known,
       }));
-      const prepared = prepareTriples(extracted.triples, quality);
+      const prepared = prepareTriples(extracted.triples, { ...quality, message: sourceText, sourceText });
       noteQuestions(report, prepared.reviewQuestions);
       canonize(prepared.kept, seenNames);
       noteDropped(report, prepared.dropped);
@@ -194,6 +215,8 @@ export async function rebuildGraph(userId, options = {}) {
           forceStatus: "suggested",
           entityFacts: [...(extracted.entityFacts || []), ...prepared.entityFacts],
           quality,
+          message: sourceText,
+          sourceText,
         });
         addCounts(report, committed);
         await markGraphExtracted(userId, "diary", entry.id);
@@ -213,6 +236,7 @@ export async function rebuildGraph(userId, options = {}) {
 
   if (!dryRun) await applyLifeDates(userId, events);
   console.log(`[graph-rebuild] done: ${report.counts.eventsProcessed} extracted, ${report.counts.eventsSkipped} skipped`);
+  if (!dryRun) await setGraphAutoExtract(userId, true);
   report.duplicateCandidates = dryRun ? [] : await findDuplicateCandidates(userId);
   report.counts.newEntities = newNames.size;
   return report;
@@ -388,7 +412,7 @@ function visionPlans(vision) {
 }
 
 function eventText(event) {
-  return [event.title, event.understoodMeaning, String(event.fullText || "").slice(0, 3000)].filter(Boolean).join("\n");
+  return [event.title, event.understoodMeaning, event.fullText, event.rawInput].filter(Boolean).join("\n").slice(0, 8000);
 }
 
 async function loadRecords(kind, userId, onlyMissing, budget) {

@@ -2,10 +2,12 @@ import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
-import { answerPeopleQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts, usesRecordedAnswer } from "./graph/peopleGrounding.js";
+import { isNoiseReply } from "./intentRouter.js";
+import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts, usesRecordedAnswer } from "./graph/peopleGrounding.js";
 
-const MODEL = "qwen/qwen3.8-27b";
+const GROQ_MODEL = "qwen/qwen3.8-27b";
 const FACT_MODEL = "gpt-4o-mini";
+const BUSY = "DIRA is busy right now. Send that again.";
 const FACT_TYPES = new Set(["financial", "person", "place", "decision", "date", "asset", "other"]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -110,9 +112,12 @@ Be direct. Use the right format. Let the data speak.`;
 
 export async function chat(messages, userId) {
   const history = normalizeMessages(messages);
-  const latest = [...history].reverse().find((message) => message.role === "user")?.content || "";
-  if (isPeopleQuestion(latest)) {
-    const answered = await answerPeople(userId, latest);
+  const userTurns = history.filter((message) => message.role === "user");
+  const latest = userTurns.at(-1)?.content || "";
+  const priorAnswer = [...history].reverse().find((message) => message.role === "assistant" && !isNoiseReply(message.content))?.content || "";
+  const question = contextualQuestion(latest, userTurns.at(-2)?.content || "", priorAnswer);
+  if (isPeopleQuestion(question)) {
+    const answered = await answerPeople(userId, question);
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
   }
   const context = await loadContext(userId);
@@ -529,55 +534,83 @@ function totalsText(rows) {
     .join("; ");
 }
 
+function advisorProvider() {
+  return String(process.env.ADVISOR_PROVIDER || "openai").trim().toLowerCase() === "groq" ? "groq" : "openai";
+}
+
 async function completeChat(messages, systemPrompt, options = {}) {
-  const key = process.env.GROQ_API_KEY;
-  if (!key || key.startsWith("your_")) {
-    throw httpError("GROQ_API_KEY is not set", 503);
+  const temperature = options.temperature ?? 0.7;
+  const provider = advisorProvider();
+  try {
+    const text = provider === "groq"
+      ? await completeWithGroq(messages, systemPrompt, temperature)
+      : await completeWithOpenAI(messages, systemPrompt, temperature);
+    if (text) return text;
+    throw new Error("empty advisor reply");
+  } catch (err) {
+    if (provider === "openai" && !isRateLimitError(err)) {
+      try {
+        console.error("[advisor] openai failed, trying groq:", err.message);
+        const text = await completeWithGroq(messages, systemPrompt, temperature);
+        if (text) return text;
+      } catch (fallbackErr) {
+        console.error("[advisor] groq fallback failed:", fallbackErr.message);
+      }
+    }
+    throw httpError(BUSY, 503);
   }
-  const body = JSON.stringify({
-    model: MODEL,
-    temperature: options.temperature ?? 0.7,
+}
+
+async function completeWithOpenAI(messages, systemPrompt, temperature) {
+  const key = usableKey(process.env.OPENAI_API_KEY);
+  if (!key) throw new Error("OPENAI_API_KEY is not set");
+  const client = new OpenAI({ apiKey: key, timeout: 20000 });
+  const response = await client.chat.completions.create({
+    model: FACT_MODEL,
+    temperature,
     max_tokens: 800,
     messages: [{ role: "system", content: systemPrompt }, ...messages],
   });
-  const response = await groqChat(key, body);
-  if (!response.ok) {
-    console.error("[advisor] groq status", response.status);
-    throw httpError(
-      response.status === 429 ? "DIRA is busy right now. Send that again." : "The advisor could not answer just now",
-      response.status === 429 ? 503 : 502,
-    );
-  }
-  const data = await response.json();
-  const text = stripThink(data.choices?.[0]?.message?.content || "");
-  return text || "I don't have a clear answer from what's in the life graph.";
+  return stripThink(response.choices?.[0]?.message?.content || "");
 }
 
-async function groqChat(key, body) {
-  let delay = 1500;
-  let response;
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    response = await callGroq(key, body);
-    if (response.status !== 429 || attempt === 4) return response;
-    const header = Number(response.headers.get("retry-after"));
-    const wait = Number.isFinite(header) && header > 0 ? Math.min(header * 1000, 12000) : delay;
-    console.error("[advisor] rate limited, retrying in", wait);
-    await sleep(wait);
-    delay = Math.min(delay * 2, 12000);
-  }
-  return response;
-}
-
-function callGroq(key, body) {
-  return fetch("https://api.groq.com/openai/v1/chat/completions", {
+async function completeWithGroq(messages, systemPrompt, temperature) {
+  const key = usableKey(process.env.GROQ_API_KEY);
+  if (!key) throw new Error("GROQ_API_KEY is not set");
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
       "Content-Type": "application/json",
     },
-    body,
-    signal: AbortSignal.timeout(30000),
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      temperature,
+      max_tokens: 800,
+      messages: [{ role: "system", content: systemPrompt }, ...messages],
+    }),
+    signal: AbortSignal.timeout(12000),
   });
+  if (!response.ok) {
+    const error = new Error(`Groq advisor status ${response.status}`);
+    error.status = response.status;
+    throw error;
+  }
+  const data = await response.json();
+  return stripThink(data.choices?.[0]?.message?.content || "");
+}
+
+function usableKey(value) {
+  if (typeof value !== "string") return null;
+  const key = value.trim();
+  if (!key || key.startsWith("your_")) return null;
+  return key;
+}
+
+function isRateLimitError(err) {
+  const status = err?.status || err?.statusCode || err?.response?.status;
+  if (status === 429) return true;
+  return /\b429\b|rate limit/i.test(String(err?.message || ""));
 }
 
 function normalizeMessages(messages) {
@@ -730,10 +763,6 @@ function numberOrNull(value) {
 
 function textOr(value, fallback) {
   return typeof value === "string" && value.trim() ? value.trim() : fallback;
-}
-
-function sleep(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function httpError(message, statusCode) {

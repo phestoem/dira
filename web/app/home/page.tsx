@@ -163,10 +163,14 @@ export default function HomePage() {
     setBusy(true);
     try {
       const response = await homeInput(text, attached, history, lastActionRef.current);
-      lastActionRef.current = toLastAction(response);
-      setMessages((current) => current.map((turn) => (turn.id === pending.id ? { ...turn, busy: false, response } : turn)));
+      if (isSilentAnswer(response)) {
+        setMessages((current) => current.map((turn) => (turn.id === pending.id ? { ...turn, busy: false, text: BUSY_REPLY, retryText: text } : turn)));
+      } else {
+        lastActionRef.current = toLastAction(response);
+        setMessages((current) => current.map((turn) => (turn.id === pending.id ? { ...turn, busy: false, response } : turn)));
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "DIRA couldn't take that in just now.";
+      const message = failureMessage(err);
       setMessages((current) =>
         current.map((turn) =>
           turn.id === pending.id
@@ -206,10 +210,14 @@ export default function HomePage() {
     setBusy(true);
     try {
       const response = await homeInput(text, null, history, lastActionRef.current);
-      lastActionRef.current = toLastAction(response);
-      setMessages((current) => current.map((turn) => (turn.id === turnId ? { ...turn, busy: false, response } : turn)));
+      if (isSilentAnswer(response)) {
+        setMessages((current) => current.map((turn) => (turn.id === turnId ? { ...turn, busy: false, text: BUSY_REPLY, retryText: text } : turn)));
+      } else {
+        lastActionRef.current = toLastAction(response);
+        setMessages((current) => current.map((turn) => (turn.id === turnId ? { ...turn, busy: false, response } : turn)));
+      }
     } catch (err) {
-      const message = err instanceof Error ? err.message : "DIRA couldn't take that in just now.";
+      const message = failureMessage(err);
       setMessages((current) => current.map((turn) => (turn.id === turnId ? { ...turn, busy: false, text: message, retryText: text } : turn)));
     } finally {
       setBusy(false);
@@ -1140,8 +1148,33 @@ function messageOf(value: unknown) {
   return typeof message === "string" ? message : "";
 }
 
+const BUSY_REPLY = "DIRA is busy right now. Send that again.";
+
+function failureMessage(err: unknown) {
+  const message = err instanceof Error ? err.message.trim() : "";
+  if (!message || message === "Request failed" || /failed to fetch|network|busy|couldn't take that|could not answer/i.test(message)) return BUSY_REPLY;
+  return message;
+}
+
+function isSilentAnswer(response: HomeResponse) {
+  const { type, content, confirmationText } = response.result;
+  if (type === "relationship_preview" || type === "understanding" || type === "clarification" || type === "command_preview" || type === "correction_preview" || type === "journal_saved") {
+    return false;
+  }
+  const answer = asAnswer(content);
+  const reply = (answer?.reply || messageOf(content) || confirmationText || "").trim();
+  return !reply;
+}
+
 function looksLikeCorrection(text: string) {
+  if (rejectsCorrection(text)) return false;
   return /\b(i meant|not that|i was referring to|the previous)\b/i.test(text);
+}
+
+function rejectsCorrection(text: string) {
+  const value = text.trim();
+  if (!value || /\b(no|not|wrong|actually|i meant)\b/i.test(value)) return false;
+  return /\?\s*$/.test(value) || /^(what|who|when|where|how|which|why|je|nani|lini|wapi|vipi)\b/i.test(value) || /\b(their names|and (?:his|her|their) family)\b/i.test(value);
 }
 
 function historyFrom(turns: Turn[]) {
@@ -1158,7 +1191,7 @@ function historyFrom(turns: Turn[]) {
 
 function diraHistoryText(turn: Turn) {
   const parts: string[] = [];
-  if (turn.text) parts.push(turn.text);
+  if (turn.text && !isNoiseHistory(turn.text)) parts.push(turn.text);
   const response = turn.response;
   if (!response) return parts.join("\n").slice(0, 1200);
   const { result } = response;
@@ -1178,7 +1211,13 @@ function diraHistoryText(turn: Turn) {
   if (result.type === "clarification" && response.clarificationOptions?.length) {
     parts.push(`Asked which was meant: ${response.clarificationOptions.map((option) => option.label).join(", ")}`);
   }
-  return parts.filter(Boolean).join("\n").slice(0, 1200);
+  return parts.filter((part) => part && !isNoiseHistory(part)).join("\n").slice(0, 1200);
+}
+
+function isNoiseHistory(content: string) {
+  const value = content.trim();
+  if (!value) return true;
+  return /^(taking a moment\b|request failed\b|dira is busy right now\b|dira couldn't take that in\b)/i.test(value);
 }
 
 function toLastAction(response: HomeResponse): HomeLastAction {

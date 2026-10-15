@@ -3,7 +3,9 @@ import test from "node:test";
 import { prisma } from "../src/prisma.js";
 import { chooseSelfName, mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
 import { describeRelationshipLine, isRelationshipStatement, parseFamilyStatement } from "../src/services/graph/familyStatement.js";
-import { answerPeopleQuestion, buildPeopleContext, conflictEdgeData, deliverPeopleAnswer, groundAdvisorReply, isPeopleQuestion } from "../src/services/graph/peopleGrounding.js";
+import { isNoiseReply, previousExchangeFrom, rejectsCorrection } from "../src/services/intentRouter.js";
+import { answerPeopleQuestion, buildPeopleContext, conflictEdgeData, contextualQuestion, deliverPeopleAnswer, groundAdvisorReply, isPeopleQuestion, resolvePeopleFollowUp } from "../src/services/graph/peopleGrounding.js";
+import { graphAutoExtractEnabled } from "../src/services/graph/rebuild.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
 import { stripEntityIds } from "../src/services/graph/reset.js";
@@ -210,6 +212,54 @@ test("events answer wife, parents and sister births before an edge exists", () =
   const missed = deliverPeopleAnswer("Your wife isn't recorded yet.", context, "who is my wife?");
   assert.match(missed.reply, /Zelda Goodluck Mambosho/);
   assert.equal(/not recorded/i.test(missed.reply), false);
+  const father = answerPeopleQuestion("who is my father?", context);
+  assert.match(father, /Enock Mwakyusa — your father/);
+  assert.equal(father.trim().length > 0, true);
+  const sisterReply = answerPeopleQuestion("who is my sister?", {
+    ...context,
+    people: context.people.map((person) => (person.kind === "sister" ? { ...person, kind: "sibling" } : person)),
+  });
+  assert.match(sisterReply, /Jeni Enock Mwakyusa/);
+  assert.match(sisterReply, /Zenah Enock Mwakyusa/);
+  assert.equal(sisterReply.trim().length > 0, true);
+});
+
+test("marriage wording and children are not guessed from sisters", () => {
+  const sisters = [
+    { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sibling" },
+    { id: "leah", name: "Leah Enock Mwakyusa", kind: "sibling" },
+    { id: "neema", name: "Neema Enock Mwakyusa", kind: "sibling" },
+    { id: "zenah", name: "Zenah Enock Mwakyusa", kind: "sibling" },
+  ];
+  const context = buildPeopleContext({
+    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
+    people: [{ id: "self", name: "Phesto Enock Mwakyusa", kind: "self" }, ...sisters],
+    edges: [],
+    events: [
+      { id: "ev-join", title: "Finland", rawInput: "We were married on 5 August 2006. Zelda Goodluck Mambosho joined me in Finland." },
+      { id: "ev-kids", title: "Children", fullText: "My children are Careen (my eldest daughter), Patrick, Presley, Powell and Prisha Neema." },
+    ],
+  });
+  const wife = answerPeopleQuestion("who is my wife?", context);
+  assert.match(wife, /Zelda Goodluck Mambosho/);
+  assert.match(wife, /5 Aug 2006/);
+  assert.equal(/not recorded/i.test(wife), false);
+  const kids = answerPeopleQuestion("how many kids do I have?", context);
+  assert.match(kids, /5 children/);
+  assert.match(kids, /Careen/);
+  assert.match(kids, /Prisha Neema/);
+  assert.equal(/\bFour\b/.test(kids), false);
+  assert.equal(resolvePeopleFollowUp("what are their names?", "how many kids do I have?"), "what are my children's names?");
+  const names = answerPeopleQuestion(resolvePeopleFollowUp("what are their names?", "how many kids do I have?"), context);
+  assert.match(names, /Patrick/);
+  assert.match(names, /Presley/);
+  const onlySisters = buildPeopleContext({
+    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
+    people: [{ id: "self", name: "Phesto Enock Mwakyusa", kind: "self" }, ...sisters],
+    edges: [],
+    events: [],
+  });
+  assert.equal(answerPeopleQuestion("how many kids do I have?", onlySisters), "Your children aren't recorded yet.");
 });
 
 const ANCHOR_MESSAGE = `My family: my father Enock Mwakyusa passed away
@@ -263,6 +313,50 @@ test("possessive kinship stays on you and keeps full names", () => {
   const hyphen = parseFamilyStatement("My children are Careen and Prisha - Neema.");
   assert.equal(hyphen.triples.some((triple) => triple.object?.name === "Prisha Neema"), true);
   assert.equal(hyphen.triples.some((triple) => String(triple.object?.name || "").includes(" - ")), false);
+});
+
+test("questions are not corrections and kinship uses the full source", () => {
+  assert.equal(rejectsCorrection("what are their names?"), true);
+  assert.equal(rejectsCorrection("and his family?"), true);
+  assert.equal(rejectsCorrection("their names"), true);
+  assert.equal(rejectsCorrection("no, that's wrong"), false);
+  assert.equal(rejectsCorrection("actually I meant Leah"), false);
+  const history = [
+    { role: "user", content: "how many kids do I have?" },
+    { role: "assistant", content: "Four" },
+    { role: "assistant", content: "Request failed" },
+    { role: "assistant", content: "Taking a moment…" },
+    { role: "user", content: "what are their names?" },
+  ];
+  const prior = previousExchangeFrom(history);
+  assert.equal(prior.lastResponse, "Four");
+  assert.equal(isNoiseReply("Request failed"), true);
+  assert.equal(isNoiseReply(""), true);
+  assert.equal(contextualQuestion("what are their names?", "how many kids do I have?", "Four").includes("Previous answer: Four"), true);
+  assert.equal(contextualQuestion("and his family?", "who is my father?", "Enock Mwakyusa — your father."), "my father's family tree\n\nPrevious answer: Enock Mwakyusa — your father.");
+  const family = "My sisters are Jeni, Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda Goodluck Mambosho.";
+  assert.equal(dropReason({
+    subject: { name: "Jeni", type: "person" },
+    predicate: "sibling_of",
+    object: { name: "me", type: "self" },
+    evidence: "Jeni",
+  }, { message: family }), null);
+  assert.equal(dropReason({
+    subject: { name: "Zelda Goodluck Mambosho", type: "person" },
+    predicate: "spouse_of",
+    object: { name: "me", type: "self" },
+    evidence: "Zelda",
+  }, { sourceText: family }), null);
+  assert.equal(dropReason({
+    subject: { name: "Jeni", type: "person" },
+    predicate: "sibling_of",
+    object: { name: "me", type: "self" },
+    evidence: "Jeni",
+  }), "unsupported-family");
+  assert.equal(graphAutoExtractEnabled({ graphAutoExtract: false }, "true"), false);
+  assert.equal(graphAutoExtractEnabled({ graphAutoExtract: true }, "false"), true);
+  assert.equal(graphAutoExtractEnabled({}, "false"), false);
+  assert.equal(graphAutoExtractEnabled({}, "true"), true);
 });
 
 test("normalizeType maps kinship words and work roles", () => {

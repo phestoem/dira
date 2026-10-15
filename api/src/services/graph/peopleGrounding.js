@@ -22,7 +22,9 @@ export function isPeopleQuestion(text) {
   if (!value) return false;
   if (/\b(my|our)\s+(sisters|brothers|children|sons|daughters|wife|husband|father|mother)\s+(are|is)\b/i.test(value)) return false;
   if (/\b(family tree|who is|who's|who are|how old|birthdays?|birth dates?|relatives)\b/i.test(value)) return true;
-  if (/[?]/.test(value) && /\b(my|our)\s+(parents|wife|husband|father|mother|sisters|brothers|children)\b/i.test(value)) return true;
+  if (/\bhow many\b/i.test(value) && /\b(kids|children|sons|daughters|sisters|brothers)\b/i.test(value)) return true;
+  if (/\b(children|kids|sisters|brothers|parents)'?s?\s+names\b/i.test(value)) return true;
+  if (/[?]/.test(value) && /\b(my|our)\s+(parents|wife|husband|father|mother|sisters|brothers|children|kids)\b/i.test(value)) return true;
   return /\b(my|our)\s+\w+'s\s+(family|spouse|wife|husband|children|parents|sisters|brothers|birthday|age)\b/i.test(value);
 }
 
@@ -34,7 +36,7 @@ export async function loadPeopleContext(userId) {
     }),
     prisma.event.findMany({
       where: { userId, status: { not: "archived" } },
-      select: { id: true, title: true, understoodMeaning: true, fullText: true },
+      select: { id: true, title: true, understoodMeaning: true, fullText: true, rawInput: true, notes: true },
       orderBy: { createdAt: "desc" },
       take: 200,
     }),
@@ -130,20 +132,50 @@ export function peopleContextBlock(context) {
   return (context?.facts || []).map((fact) => `${fact.source.type}:${fact.source.id} | ${fact.text}`).join("\n");
 }
 
+export function resolvePeopleFollowUp(latest, prior) {
+  const question = String(latest || "");
+  const previous = String(prior || "");
+  if (/\band (?:his|her|their) family\b/i.test(question)) {
+    if (/\b(father|dad|baba)\b/i.test(previous)) return "my father's family tree";
+    if (/\b(mother|mum|mama)\b/i.test(previous)) return "my mother's family tree";
+    return "family tree";
+  }
+  if (!/\b(their names|who are they|what are they called)\b/i.test(question)) return question;
+  if (/\b(kids|children|sons|daughters)\b/i.test(previous)) return "what are my children's names?";
+  if (/\bsisters?\b/i.test(previous)) return "who are my sisters?";
+  if (/\bbrothers?\b/i.test(previous)) return "who are my brothers?";
+  if (/\bparents?\b/i.test(previous)) return "who are my parents?";
+  if (/\b(father|dad|baba)\b/i.test(previous)) return "who is my father?";
+  if (/\b(mother|mum|mama)\b/i.test(previous)) return "who is my mother?";
+  return question;
+}
+
+export function contextualQuestion(latest, priorUser, priorAnswer) {
+  const question = resolvePeopleFollowUp(latest, priorUser);
+  const answer = String(priorAnswer || "").trim();
+  if (!answer || !/\b(their names|who are they|what are they called|and (?:his|her|their) family)\b/i.test(String(latest || ""))) return question;
+  return `${question}\n\nPrevious answer: ${answer}`;
+}
+
 export function usesRecordedAnswer(question) {
   const q = String(question || "");
   if (/\bfamily tree\b/i.test(q)) return true;
-  if (/\b(wife|husband)\b/i.test(q)) return true;
-  if (/\bparents?\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return true;
-  if (/\bsisters?\b/i.test(q) && /\bbirth/i.test(q)) return true;
+  if (/\b(wife|husband|spouse)\b/i.test(q)) return true;
+  if (/\b(father|mother|dad|mum|baba|mama|parents?)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return true;
+  if (/\b(sisters?|brothers?)\b/i.test(q)) return true;
+  if (/\b(kids|children|sons|daughters)\b/i.test(q)) return true;
   return false;
 }
 
 export function answerPeopleQuestion(question, context) {
   const q = String(question || "");
-  if (/\b(wife|husband)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return spouseAnswer(q, context);
+  if (/\b(wife|husband|spouse)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return spouseAnswer(q, context);
   if (/\bparents?\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentsAnswer(context);
+  if (/\b(father|dad|baba)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentRoleAnswer("father", context);
+  if (/\b(mother|mum|mama)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentRoleAnswer("mother", context);
+  if (/\b(kids|children|sons|daughters)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return childrenAnswer(q, context);
   if (/\bsisters?\b/i.test(q) && /\bbirth/i.test(q)) return sisterBirthAnswer(context);
+  if (/\b(sisters?|brothers?)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return siblingAnswer(q, context);
   const people = context?.people || [];
   const father = people.find((person) => person.kind === "father");
   const mother = people.find((person) => person.kind === "mother");
@@ -221,7 +253,7 @@ export function deliverPeopleAnswer(modelText, context, question) {
   const familyTree = /\bfamily tree\b/i.test(question || "");
   const modelMissed = /\b(not recorded|isn't recorded|aren't recorded)\b/i.test(checked.reply)
     && !/\b(not recorded|isn't recorded|aren't recorded)\b/i.test(recorded);
-  const reply = familyTree || checked.removed.length || modelMissed ? recorded : checked.reply;
+  const reply = recorded.trim() && (familyTree || checked.removed.length || modelMissed) ? recorded : (checked.reply || recorded);
   return { reply, removed: checked.removed, sourceIds: parsed.sourceIds.filter((id) => knownSource(id, context)) };
 }
 
@@ -278,11 +310,15 @@ const NAME = "[\\p{Lu}][\\p{L}'’\\-]+(?:\\s+[\\p{Lu}][\\p{L}'’\\-]+){0,3}";
 const SPOKEN = `\\d{1,2}\\s+(?:${Object.keys(MONTHS).map((month) => `${month[0].toUpperCase()}${month.slice(1)}|${month}`).join("|")})\\s+\\d{4}`;
 
 function spouseAnswer(question, context) {
-  const confirmed = (context?.people || []).find((person) => person.kind === "wife" || person.kind === "husband");
-  if (confirmed) return `${confirmed.name} — your ${confirmed.kind}.`;
-  const record = spouseRecord(context);
-  if (!record) return "Your spouse isn't recorded yet.";
   const word = /\bhusband\b/i.test(question) && !/\bwife\b/i.test(question) ? "husband" : "wife";
+  const confirmed = (context?.people || []).find((person) => person.kind === "wife" || person.kind === "husband" || person.kind === "spouse");
+  const record = spouseRecord(context);
+  if (confirmed) {
+    const married = record?.marriageDate ? ` (married ${prettyDate(record.marriageDate)})` : "";
+    const line = `${confirmed.name} — your ${confirmed.kind === "spouse" ? word : confirmed.kind}${married}.`;
+    return record?.marriageDate ? `${line}\n${RECORD_LINE}` : line;
+  }
+  if (!record) return "Your spouse isn't recorded yet.";
   const married = record.marriageDate ? ` (married ${prettyDate(record.marriageDate)})` : "";
   return `${record.name} — your ${word}${married}.\n${RECORD_LINE}`;
 }
@@ -314,6 +350,39 @@ function parentsAnswer(context) {
   return lines.join("\n");
 }
 
+function parentRoleAnswer(kind, context) {
+  const confirmed = (context?.people || []).find((person) => person.kind === kind);
+  const record = (context?.records || []).find((item) => item.kind === kind);
+  const person = confirmed || record;
+  if (!person) return `Your ${kind} isn't recorded yet.`;
+  const death = confirmed?.deathDate || record?.deathDate;
+  const line = `${person.name} — your ${kind}${passed({ deathDate: death })}.`;
+  return confirmed ? line : `${line}\n${RECORD_LINE}`;
+}
+
+function siblingAnswer(question, context) {
+  const want = /\bbrother/i.test(question) ? "brother" : "sister";
+  const specific = (context?.people || []).filter((person) => person.kind === want);
+  const broader = (context?.people || []).filter((person) => person.kind === "sibling" || person.kind === "sister" || person.kind === "brother");
+  const people = specific.length ? specific : broader;
+  const eventPeople = (context?.records || []).filter((item) => item.kind === want && !people.some((person) => namesMatch(person.name, item.name)));
+  const names = [...people.map((person) => person.name), ...eventPeople.map((item) => item.name)];
+  if (!names.length) return `Your ${want}s aren't recorded yet.`;
+  const label = specific.length || eventPeople.length ? `${want}s` : "siblings";
+  const line = `Your ${label}: ${names.join(", ")}.`;
+  return eventPeople.length && !people.length ? `${line}\n${RECORD_LINE}` : line;
+}
+
+function childrenAnswer(question, context) {
+  const confirmed = (context?.people || []).filter((person) => person.kind === "child" || person.kind === "son" || person.kind === "daughter");
+  const extra = (context?.records || []).filter((item) => ["child", "son", "daughter"].includes(item.kind) && !confirmed.some((person) => namesMatch(person.name, item.name)));
+  const names = [...confirmed.map((person) => person.name), ...extra.map((item) => item.name)];
+  if (!names.length) return "Your children aren't recorded yet.";
+  const count = /\bhow many\b/i.test(question) ? `You have ${names.length} children: ` : "Your children: ";
+  const line = `${count}${names.join(", ")}.`;
+  return extra.length ? `${line}\n${RECORD_LINE}` : line;
+}
+
 function sisterBirthAnswer(context) {
   const sisters = (context?.people || []).filter((person) => person.kind === "sister" || person.kind === "sibling");
   const lines = [];
@@ -339,10 +408,12 @@ function birthOf(person, context) {
 function recordedFromEvents(events, people) {
   const records = [];
   for (const event of events || []) {
-    const text = [event?.title, event?.understoodMeaning, event?.fullText].filter(Boolean).join(". ").replace(/\s+/g, " ").trim();
+    const text = [event?.title, event?.understoodMeaning, event?.fullText, event?.rawInput, event?.notes].filter(Boolean).join(". ").replace(/\s+/g, " ").trim();
     if (!text) continue;
     collectKinship(text, event.id, people, records);
+    collectLists(text, event.id, people, records);
     collectDatedNames(text, event.id, people, records);
+    attachJoinedSpouse(text, event.id, people, records);
   }
   return records;
 }
@@ -367,6 +438,48 @@ function collectKinship(text, eventId, people, records) {
       mergeRecord(records, { ...resolved, kind, eventId, birthDate: null, deathDate: death, marriageDate: marriage && !death ? marriage : null });
     }
   }
+}
+
+function collectLists(text, eventId, people, records) {
+  const match = String(text || "").match(/\b[Mm]y\s+(children|sons|daughters|sisters|brothers)\s+are\s+([^.]*)/);
+  if (!match) return;
+  const role = match[1].toLowerCase();
+  const kind = role === "children" ? "child" : role.replace(/s$/, "");
+  for (const name of splitNameList(match[2])) {
+    const resolved = resolveRecord(name, people);
+    if (!resolved) continue;
+    mergeRecord(records, { ...resolved, kind, eventId, birthDate: null, deathDate: null, marriageDate: null });
+  }
+}
+
+function splitNameList(text) {
+  return String(text || "")
+    .replace(/\([^)]*\)/g, " ")
+    .split(/,|\band\b/i)
+    .map((part) => properWords(part))
+    .filter(Boolean);
+}
+
+function attachJoinedSpouse(text, eventId, people, records) {
+  const date = marriageDateIn(text);
+  for (const match of String(text || "").matchAll(new RegExp(`\\b(${NAME})\\s+joined\\s+me\\b`, "gu"))) {
+    const resolved = resolveRecord(match[1], people);
+    if (!resolved) continue;
+    mergeRecord(records, { ...resolved, kind: "spouse", eventId, birthDate: null, deathDate: null, marriageDate: date });
+  }
+  if (!date) return;
+  const spouse = records.find((item) => item.eventId === eventId && (item.kind === "spouse" || item.kind === "wife" || item.kind === "husband"));
+  if (spouse && !spouse.marriageDate) spouse.marriageDate = date;
+}
+
+function marriageDateIn(text) {
+  const near = /\b(?:married|marriage|wedding|engagement)\b[^.!?]{0,60}/gi;
+  for (const match of String(text || "").matchAll(near)) {
+    const window = text.slice(Math.max(0, match.index - 24), match.index + match[0].length);
+    const iso = datesIn(window).map(normalizeDate).find((value) => value && /^\d{4}-\d{2}-\d{2}$/.test(value));
+    if (iso) return iso;
+  }
+  return null;
 }
 
 function collectDatedNames(text, eventId, people, records) {
