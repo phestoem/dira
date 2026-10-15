@@ -175,7 +175,7 @@ async function intakeResponse(userId, routing, queueId, result) {
     action: routing.action,
     result: {
       type: "understanding",
-      content: understood,
+      content: { ...understood, queueId },
       confirmationRequired: true,
       confirmationText: line,
     },

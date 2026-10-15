@@ -737,13 +737,29 @@ export async function getQueue(): Promise<QueueItem[]> {
   return Array.isArray(data.items) ? data.items : [];
 }
 
-export async function confirmQueueItem(id: string, space?: IntakeSpace): Promise<unknown> {
+export async function confirmQueueItem(
+  id: string,
+  space?: IntakeSpace,
+  occurredAt?: string | null,
+): Promise<{ id?: string; title?: string }> {
   const res = await apiFetch(`/queue/${id}/confirm`, {
     method: "POST",
-    body: JSON.stringify(space ? { space } : {}),
+    body: JSON.stringify({
+      ...(space ? { space } : {}),
+      ...(occurredAt !== undefined ? { occurredAt } : {}),
+    }),
   });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json();
+  return res.json() as Promise<{ id?: string; title?: string }>;
+}
+
+export async function reopenQueueItem(id: string, understood?: unknown): Promise<{ success: boolean }> {
+  const res = await apiFetch(`/queue/${id}/reopen`, {
+    method: "POST",
+    body: JSON.stringify(understood ? { understood } : {}),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<{ success: boolean }>;
 }
 
 export async function dismissQueueItem(id: string): Promise<{ success: boolean }> {

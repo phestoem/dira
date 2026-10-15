@@ -7,10 +7,13 @@ import remarkGfm from "remark-gfm";
 import QueuePanel from "@/components/QueuePanel";
 import {
   archiveEvent,
+  confirmQueueItem,
+  dismissQueueItem,
   getAdvisorSuggestions,
   getQueue,
   homeConfirm,
   homeInput,
+  reopenQueueItem,
   type CommandRecord,
   type CommandResult,
   type HomeLastAction,
@@ -41,6 +44,13 @@ type Turn = {
   response?: HomeResponse;
   busy?: boolean;
   resolved?: boolean;
+  restored?: boolean;
+};
+
+type LastConfirmed = {
+  understood: UnderstandingContent;
+  queueId: string;
+  turnId: string;
 };
 
 type SpeechResultEvent = {
@@ -73,6 +83,7 @@ export default function HomePage() {
   const [suggestions, setSuggestions] = useState<string[]>(FALLBACK_SUGGESTIONS);
   const [queue, setQueue] = useState<QueueItem[]>([]);
   const [queueOpen, setQueueOpen] = useState(false);
+  const [lastConfirmed, setLastConfirmed] = useState<LastConfirmed | null>(null);
 
   useEffect(() => {
     messagesRef.current = messages;
@@ -182,15 +193,61 @@ export default function HomePage() {
     inputRef.current?.focus();
   }
 
+  async function resaveRestored(
+    queueId: string,
+    space: IntakeSpace,
+    occurredAt: string | null,
+    title: string,
+  ): Promise<HomeResponse> {
+    const event = await confirmQueueItem(queueId, space, occurredAt);
+    getQueue().then(setQueue).catch(() => undefined);
+    return {
+      sessionId: null,
+      routing: { intent: "intake_text", confidence: 1, interpretation: "Saved again." },
+      action: "proceed",
+      result: {
+        type: "saved",
+        content: { message: `Saved as ${event.title || title}.`, eventId: event.id || "" },
+        confirmationRequired: false,
+        confirmationText: null,
+      },
+      clarificationOptions: null,
+    };
+  }
+
+  async function dismissRestored(turnId: string, queueId: string) {
+    if (busy) return;
+    setBusy(true);
+    setMessages((current) => current.map((item) => (item.id === turnId ? { ...item, resolved: true, restored: false } : item)));
+    try {
+      await dismissQueueItem(queueId);
+      getQueue().then(setQueue).catch(() => undefined);
+      setMessages((current) => [...current, { id: newId(), role: "dira", text: "Left it as it was." }]);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Couldn't dismiss that.";
+      setMessages((current) => current.map((item) => (item.id === turnId ? { ...item, resolved: false, restored: true } : item)));
+      setMessages((current) => [...current, { id: newId(), role: "dira", text: message }]);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function undo(turn: Turn) {
     const eventId = eventIdOf(turn.response?.result.content);
     if (eventId) {
       setBusy(true);
       try {
         await archiveEvent(eventId);
+        const saved = lastConfirmed;
+        if (saved?.queueId) await reopenQueueItem(saved.queueId, saved.understood);
         setMessages((current) =>
-          current.map((item) => (item.id === turn.id ? { ...item, response: undefined, text: "Undone." } : item)),
+          current.map((item) => {
+            if (item.id === turn.id) return { ...item, response: undefined, text: "Undone." };
+            if (saved?.turnId && item.id === saved.turnId) return { ...item, resolved: false, restored: true };
+            return item;
+          }),
         );
+        getQueue().then(setQueue).catch(() => undefined);
       } catch (err) {
         const message = err instanceof Error ? err.message : "Couldn't undo that.";
         setMessages((current) => [...current, { id: newId(), role: "dira", text: message }]);
@@ -280,12 +337,24 @@ export default function HomePage() {
                 key={turn.id}
                 turn={turn}
                 busy={busy}
-                onConfirm={(space, occurredAt) =>
-                  void followUp(turn.id, () =>
-                    homeConfirm(turn.response?.sessionId || "", true, { space, occurredAt }),
-                  )
-                }
-                onDismiss={() => void followUp(turn.id, () => homeConfirm(turn.response?.sessionId || "", false))}
+                onConfirm={(space, occurredAt) => {
+                  const content = asUnderstanding(turn.response?.result.content);
+                  const queueId = content?.queueId || "";
+                  if (content && queueId) setLastConfirmed({ understood: content, queueId, turnId: turn.id });
+                  if (turn.restored && queueId) {
+                    void followUp(turn.id, () => resaveRestored(queueId, space, occurredAt, content?.understood.title || "this"));
+                    return;
+                  }
+                  void followUp(turn.id, () => homeConfirm(turn.response?.sessionId || "", true, { space, occurredAt }));
+                }}
+                onDismiss={() => {
+                  const queueId = asUnderstanding(turn.response?.result.content)?.queueId;
+                  if (turn.restored && queueId) {
+                    void dismissRestored(turn.id, queueId);
+                    return;
+                  }
+                  void followUp(turn.id, () => homeConfirm(turn.response?.sessionId || "", false));
+                }}
                 onOption={(intent) =>
                   void followUp(turn.id, () =>
                     homeConfirm(turn.response?.sessionId || "", true, { selectedOption: intent }),
@@ -421,6 +490,7 @@ function Message({
       <ResponseBody
         response={response}
         resolved={Boolean(turn.resolved)}
+        restored={Boolean(turn.restored)}
         busy={busy}
         onConfirm={onConfirm}
         onDismiss={onDismiss}
@@ -453,6 +523,7 @@ function Message({
 function ResponseBody({
   response,
   resolved,
+  restored,
   busy,
   onConfirm,
   onDismiss,
@@ -460,6 +531,7 @@ function ResponseBody({
 }: {
   response: HomeResponse;
   resolved: boolean;
+  restored: boolean;
   busy: boolean;
   onConfirm: (space: IntakeSpace, occurredAt: string | null) => void;
   onDismiss: () => void;
@@ -474,6 +546,7 @@ function ResponseBody({
         content={understanding}
         prompt={result.confirmationText}
         resolved={resolved}
+        restored={restored}
         busy={busy}
         onConfirm={onConfirm}
         onDismiss={onDismiss}
@@ -557,6 +630,7 @@ function UnderstandingCard({
   content,
   prompt,
   resolved,
+  restored,
   busy,
   onConfirm,
   onDismiss,
@@ -564,6 +638,7 @@ function UnderstandingCard({
   content: UnderstandingContent;
   prompt: string | null;
   resolved: boolean;
+  restored: boolean;
   busy: boolean;
   onConfirm: (space: IntakeSpace, occurredAt: string | null) => void;
   onDismiss: () => void;
@@ -576,6 +651,9 @@ function UnderstandingCard({
   return (
     <div className="max-w-[480px] rounded-xl border border-[#2A2A28] bg-[#161614] p-4">
       {prompt ? <DiraMarkdown text={prompt} /> : null}
+      {restored && !resolved ? (
+        <p className="mt-2 text-[11px] text-[#6B6963]">Restored — make your changes and save</p>
+      ) : null}
       <h2 className="mt-3 text-base font-semibold text-[#F5F3EE]">{understood.title}</h2>
       {understood.summary ? <p className="mt-1 line-clamp-2 text-sm text-[#9B9892]">{understood.summary}</p> : null}
       <div className="mt-3 flex flex-wrap gap-1.5">
@@ -789,6 +867,7 @@ function highlightAmounts(text: string, keyPrefix: string): ReactNode[] {
 }
 
 type UnderstandingContent = {
+  queueId?: string;
   suggestedSpace?: IntakeSpace | null;
   altimetrixContext?: string | null;
   emotionalSignificance?: string | null;

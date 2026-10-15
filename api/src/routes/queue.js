@@ -108,6 +108,34 @@ export default async function queueRoutes(fastify) {
     }
   });
 
+  fastify.post("/queue/:id/reopen", { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const queue = await prisma.inputQueue.findFirst({
+      where: { id: request.params.id, userId: request.userId },
+    });
+    if (!queue) return reply.code(404).send({ error: "Input not found" });
+    if (queue.resultEventId) {
+      const event = await prisma.event.findFirst({
+        where: { id: queue.resultEventId, userId: request.userId },
+        select: { status: true },
+      });
+      if (event && event.status !== "archived") {
+        return reply.code(409).send({ error: "Undo the saved event first" });
+      }
+    }
+    const understoodAs = restoredUnderstanding(queue, request.body?.understood);
+    await prisma.inputQueue.update({
+      where: { id: queue.id },
+      data: {
+        processingStatus: "processing",
+        understoodAs,
+        resultEventId: null,
+        processedAt: null,
+        error: null,
+      },
+    });
+    return { success: true };
+  });
+
   fastify.post("/queue/:id/dismiss", { preHandler: [fastify.authenticate] }, async (request, reply) => {
     const queue = await prisma.inputQueue.findFirst({
       where: { id: request.params.id, userId: request.userId },
@@ -122,6 +150,26 @@ export default async function queueRoutes(fastify) {
     });
     return { success: true };
   });
+}
+
+function restoredUnderstanding(queue, snapshot) {
+  if (snapshot && typeof snapshot === "object" && snapshot.understood && typeof snapshot.understood === "object") {
+    let stored = null;
+    try {
+      stored = JSON.parse(queue.understoodAs || "");
+    } catch {
+      stored = null;
+    }
+    if (stored?.understood) return queue.understoodAs;
+    return JSON.stringify({
+      understood: snapshot.understood,
+      suggestedSpace: snapshot.suggestedSpace || null,
+      suggestedEventType: snapshot.suggestedEventType || null,
+      fullText: null,
+      sourceFile: queue.filePath || null,
+    });
+  }
+  return queue.understoodAs;
 }
 
 function presentQueueItem(row) {

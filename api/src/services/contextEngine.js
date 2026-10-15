@@ -292,7 +292,6 @@ export async function createEventFromUnderstanding(userId, understoodInput, enti
           resultEventId: created.id,
           resultEntityId: entity?.id || null,
           processedAt: new Date(),
-          understoodAs: understood.contentType,
           error: null,
         },
       });
