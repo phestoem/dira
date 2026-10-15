@@ -45,6 +45,7 @@ type Turn = {
   busy?: boolean;
   resolved?: boolean;
   restored?: boolean;
+  reopenQueueId?: string;
 };
 
 type LastConfirmed = {
@@ -193,26 +194,34 @@ export default function HomePage() {
     inputRef.current?.focus();
   }
 
-  async function resaveRestored(
-    queueId: string,
-    space: IntakeSpace,
-    occurredAt: string | null,
-    title: string,
-  ): Promise<HomeResponse> {
-    const event = await confirmQueueItem(queueId, space, occurredAt);
-    getQueue().then(setQueue).catch(() => undefined);
-    return {
-      sessionId: null,
-      routing: { intent: "intake_text", confidence: 1, interpretation: "Saved again." },
-      action: "proceed",
-      result: {
-        type: "saved",
-        content: { message: `Saved as ${event.title || title}.`, eventId: event.id || "" },
-        confirmationRequired: false,
-        confirmationText: null,
-      },
-      clarificationOptions: null,
-    };
+  async function saveRestored(turnId: string, queueId: string, space: IntakeSpace, occurredAt: string | null, title: string) {
+    if (busy) return;
+    setBusy(true);
+    try {
+      const event = await confirmQueueItem(queueId, space, occurredAt);
+      const saved: HomeResponse = {
+        sessionId: null,
+        routing: { intent: "intake_text", confidence: 1, interpretation: "Saved again." },
+        action: "proceed",
+        result: {
+          type: "saved",
+          content: { message: `Saved as ${event.title || title}.`, eventId: event.id || "", queueId },
+          confirmationRequired: false,
+          confirmationText: null,
+        },
+        clarificationOptions: null,
+      };
+      setMessages((current) => [
+        ...current.map((item) => (item.id === turnId ? { ...item, resolved: true, restored: false } : item)),
+        { id: newId(), role: "dira", response: saved },
+      ]);
+      getQueue().then(setQueue).catch(() => undefined);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Couldn't save that.";
+      setMessages((current) => [...current, { id: newId(), role: "dira", text: message }]);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function dismissRestored(turnId: string, queueId: string) {
@@ -237,13 +246,18 @@ export default function HomePage() {
     if (eventId) {
       setBusy(true);
       try {
-        await archiveEvent(eventId);
-        const saved = lastConfirmed;
-        if (saved?.queueId) await reopenQueueItem(saved.queueId, saved.understood);
+        const archived = await archiveEvent(eventId);
+        const cardId = understandingBefore(messagesRef.current, turn.id) || lastConfirmed?.turnId || "";
+        const card = messagesRef.current.find((item) => item.id === cardId);
+        const snapshot = asUnderstanding(card?.response?.result.content) || lastConfirmed?.understood;
+        const queueId = archived.queueId || queueIdOf(turn.response?.result.content) || snapshot?.queueId || lastConfirmed?.queueId || "";
+        if (queueId) await reopenQueueItem(queueId, snapshot || undefined);
         setMessages((current) =>
           current.map((item) => {
             if (item.id === turn.id) return { ...item, response: undefined, text: "Undone." };
-            if (saved?.turnId && item.id === saved.turnId) return { ...item, resolved: false, restored: true };
+            if (cardId && item.id === cardId) {
+              return { ...item, resolved: false, restored: true, reopenQueueId: queueId || item.reopenQueueId };
+            }
             return item;
           }),
         );
@@ -339,16 +353,16 @@ export default function HomePage() {
                 busy={busy}
                 onConfirm={(space, occurredAt) => {
                   const content = asUnderstanding(turn.response?.result.content);
-                  const queueId = content?.queueId || "";
-                  if (content && queueId) setLastConfirmed({ understood: content, queueId, turnId: turn.id });
+                  const queueId = turn.reopenQueueId || content?.queueId || "";
+                  if (content) setLastConfirmed({ understood: content, queueId, turnId: turn.id });
                   if (turn.restored && queueId) {
-                    void followUp(turn.id, () => resaveRestored(queueId, space, occurredAt, content?.understood.title || "this"));
+                    void saveRestored(turn.id, queueId, space, occurredAt, content?.understood.title || "this");
                     return;
                   }
                   void followUp(turn.id, () => homeConfirm(turn.response?.sessionId || "", true, { space, occurredAt }));
                 }}
                 onDismiss={() => {
-                  const queueId = asUnderstanding(turn.response?.result.content)?.queueId;
+                  const queueId = turn.reopenQueueId || asUnderstanding(turn.response?.result.content)?.queueId || "";
                   if (turn.restored && queueId) {
                     void dismissRestored(turn.id, queueId);
                     return;
@@ -994,6 +1008,20 @@ function eventIdOf(value: unknown) {
   if (!value || typeof value !== "object" || !("eventId" in value)) return "";
   const id = (value as { eventId?: unknown }).eventId;
   return typeof id === "string" ? id : "";
+}
+
+function queueIdOf(value: unknown) {
+  if (!value || typeof value !== "object" || !("queueId" in value)) return "";
+  const id = (value as { queueId?: unknown }).queueId;
+  return typeof id === "string" ? id : "";
+}
+
+function understandingBefore(turns: Turn[], savedId: string) {
+  const index = turns.findIndex((item) => item.id === savedId);
+  for (let cursor = index - 1; cursor >= 0; cursor -= 1) {
+    if (turns[cursor].response?.result.type === "understanding") return turns[cursor].id;
+  }
+  return "";
 }
 
 function newId() {

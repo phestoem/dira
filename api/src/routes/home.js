@@ -422,7 +422,7 @@ async function confirmIntake(request, entry, body) {
       console.error("[bridge] error:", err.message);
     }
   });
-  return doneResponse(entry.routing, "saved", { message: `Saved as ${event.title}.`, eventId: event.id }, null);
+  return doneResponse(entry.routing, "saved", { message: `Saved as ${event.title}.`, eventId: event.id, queueId: queue.id }, null);
 }
 
 async function confirmJournal(userId, entry) {

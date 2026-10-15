@@ -295,10 +295,10 @@ export async function updateEvent(
   return res.json() as Promise<LifeEvent>;
 }
 
-export async function archiveEvent(id: string): Promise<{ success: boolean }> {
+export async function archiveEvent(id: string): Promise<{ success: boolean; queueId?: string | null }> {
   const res = await apiFetch(`/events/${id}`, { method: "DELETE" });
   if (!res.ok) throw new Error(await parseError(res));
-  return res.json() as Promise<{ success: boolean }>;
+  return res.json() as Promise<{ success: boolean; queueId?: string | null }>;
 }
 
 export type JournalEntry = {

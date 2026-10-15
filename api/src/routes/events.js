@@ -123,11 +123,20 @@ export default async function eventRoutes(fastify) {
     if (!existing) {
       return reply.code(404).send({ error: "Event not found" });
     }
+    const queue = await prisma.inputQueue.findFirst({
+      where: { userId: request.userId, resultEventId: existing.id },
+    });
     await prisma.event.update({
       where: { id: existing.id },
       data: { status: "archived" },
     });
-    return { success: true };
+    if (queue) {
+      await prisma.inputQueue.update({
+        where: { id: queue.id },
+        data: { processingStatus: "processing", resultEventId: null, processedAt: null, error: null },
+      });
+    }
+    return { success: true, queueId: queue?.id || null };
   });
 }
 
