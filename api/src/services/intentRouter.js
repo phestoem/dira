@@ -606,13 +606,93 @@ Names, dates, and places are facts.
 Opinions and questions are not facts.
 Return { "facts": [] } if nothing specific.`;
 
+const SAVE_OFFER = /(?:should i|shall i|do you want me to|want me to|please confirm(?: if you want me to)?)\s+(?:add|save|record|create|log|store)\b/i;
+
+export function resolveOfferedSave(message, history) {
+  const text = String(message || "").trim();
+  const last = lastAssistantText(history);
+  if (!last || !SAVE_OFFER.test(last)) return null;
+  if (declinesOfferedSave(text)) return { action: "decline" };
+  if (!acceptsOfferedSave(text)) return null;
+  const content = factFromOffer(last, history);
+  if (content.length < 10) return null;
+  return { action: "save", content };
+}
+
+function acceptsOfferedSave(text) {
+  if (!text || text.length > 140 || /\?/.test(text)) return false;
+  if (/\b(but|actually|instead|change|except|wait)\b/i.test(text)) return false;
+  return /^(?:yes|yeah|yep|yup|ok|okay|sure|please|confirm)(?:[.!]|$|\s)/i.test(text)
+    || /^(?:go ahead|do it|please do|yes please|add it|save it|create it|record it)\b/i.test(text);
+}
+
+function declinesOfferedSave(text) {
+  return /^(?:no|nope|nah|not now|don'?t|do not|skip|never mind|leave it|cancel)(?:[.!]|$|\s+(?:thanks|thank you))?$/i.test(text);
+}
+
+function lastAssistantText(history) {
+  const items = Array.isArray(history) ? history : [];
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (item?.role === "assistant" && typeof item.content === "string" && item.content.trim()) return item.content;
+  }
+  return "";
+}
+
+function factFromOffer(assistant, history) {
+  const subject = offerSubject(assistant);
+  if (subject && !vagueOffer(subject)) return subject.slice(0, 180);
+  const earlier = earlierStatedFact(history);
+  if (earlier) return earlier;
+  return subject.length >= 10 ? subject.slice(0, 180) : "";
+}
+
+function offerSubject(text) {
+  const plain = String(text || "").replace(/\*\*/g, "").replace(/\s+/g, " ").trim();
+  const asked = plain.match(/(?:should i|shall i|do you want me to|want me to)\s+(?:add|save|record|create|log|store)\b([\s\S]{0,220}?)(?:\?|$)/i);
+  if (asked) return trimOfferSubject(asked[1]);
+  const confirm = plain.match(/please confirm\b([\s\S]{0,200}?)(?:\?|$)/i);
+  return confirm ? trimOfferSubject(confirm[1]) : "";
+}
+
+function trimOfferSubject(raw) {
+  return String(raw || "")
+    .replace(/^.*?\bfor\s+/i, "")
+    .replace(/^(?:if you want me to\s+)?(?:add|save|record|create|log|store)\s+/i, "")
+    .replace(/^(?:a|an|the)\s+(?:new\s+)?(?:event|record|note)\s+(?:for\s+)?/i, "")
+    .replace(/\bnow$/i, "")
+    .replace(/[?.]+$/g, "")
+    .trim();
+}
+
+function vagueOffer(subject) {
+  if (/\b(?:19|20)\d{2}\b/.test(subject)) return false;
+  return /^(?:her|his|their|its|the|this|that|a|an|it)\b/i.test(subject);
+}
+
+function earlierStatedFact(history) {
+  const items = Array.isArray(history) ? history : [];
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index];
+    if (!item || item.role !== "user" || typeof item.content !== "string") continue;
+    const text = item.content.trim();
+    if (!text || acceptsOfferedSave(text) || declinesOfferedSave(text) || /\?$/.test(text)) continue;
+    const stated = heuristicFacts(text)[0]?.fact || "";
+    if (stated) return stated;
+    if (text.length >= 12 && /\b(?:born|birth|died|married|bought|paid)\b/i.test(text) && /\b(?:19|20)\d{2}\b/.test(text)) {
+      return text.slice(0, 180);
+    }
+  }
+  return "";
+}
+
 export async function extractConversationalFacts(message) {
   const text = String(message || "").trim();
   if (text.length < 12) return [];
   const raw = await completeFacts(text.slice(0, 4000));
-  const facts = parseFactList(raw)
-    .filter((fact) => fact.confidence > 0.75)
-    .slice(0, 2);
+  const parsed = parseFactList(raw)
+    .filter((fact) => fact.confidence > 0.75);
+  const facts = (parsed.length ? parsed : heuristicFacts(text)).slice(0, 2);
   console.log("[router] conversational facts:", facts.length);
   return facts;
 }
@@ -665,12 +745,58 @@ function parseFactList(raw) {
 
 function normalizeConversationalFact(item) {
   if (!item || typeof item !== "object") return null;
-  const fact = textOr(item.fact, "").replace(/\s+/g, " ").slice(0, 160);
-  const category = FACT_CATEGORIES.has(item.category) ? item.category : "";
-  const confidence = clamp(item.confidence);
-  if (!fact || !category || !Number.isFinite(Number(item.confidence))) return null;
-  const suggestedTitle = textOr(item.suggestedTitle, fact).replace(/\s+/g, " ").slice(0, 80);
+  const fact = textOr(item.fact || item.content || item.summary, "").replace(/\s+/g, " ").slice(0, 160);
+  const category = factCategory(item.category || item.factType);
+  const stated = Number(item.confidence);
+  const confidence = Number.isFinite(stated) ? clamp(stated) : fact && category ? 0.85 : 0;
+  if (!fact || !category || confidence <= 0.75) return null;
+  const suggestedTitle = textOr(item.suggestedTitle || item.suggestedEventTitle || item.title, fact).replace(/\s+/g, " ").slice(0, 80);
   return { fact, category, suggestedTitle, confidence };
+}
+
+function factCategory(value) {
+  const raw = String(value || "").toLowerCase();
+  if (FACT_CATEGORIES.has(raw)) return raw;
+  if (/(person|people|family|relationship|child|daughter|son)/.test(raw)) return "person";
+  if (/(date|birth|birthday|time)/.test(raw)) return "date";
+  if (/(place|location|city)/.test(raw)) return "place";
+  if (/(money|financial|cost|payment)/.test(raw)) return "financial";
+  if (/(event|asset|decision)/.test(raw)) return "event";
+  return "";
+}
+
+const MONTH = "(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)";
+const STOP_NAME = new Set(["our", "my", "the", "a", "an", "her", "his", "their", "daughter", "son", "child", "wife", "husband", "born", "was", "were", "in", "at", "on"]);
+
+function heuristicFacts(text) {
+  const date = text.match(new RegExp(`\\b${MONTH}\\s+\\d{1,2}(?:st|nd|rd|th)?(?:,)?\\s+\\d{4}\\b|\\b\\d{1,2}[/.\\-]\\d{1,2}[/.\\-]\\d{2,4}\\b`, "i"));
+  if (!date || !/\b(born|birth|died|married|moved|bought|purchased|paid|signed)\b/i.test(text)) return [];
+  const name = properName(text);
+  const place = text.match(/\b(?:in|at)\s+([A-Z][\p{L}'’-]{2,}(?:\s+[A-Z][\p{L}'’-]{2,}){0,2})/u);
+  const when = date[0].replace(/(\d)(st|nd|rd|th)/i, "$1");
+  const where = place?.[1] || "";
+  const fact = [[name, bornVerb(text), when].filter(Boolean).join(" "), where].filter(Boolean).join(", ").slice(0, 160);
+  const title = fact;
+  if (fact.length < 12) return [];
+  return [{ fact, category: "event", suggestedTitle: title.slice(0, 80), confidence: 0.9 }];
+}
+
+function properName(text) {
+  const beforeBorn = text.match(/\b([A-Z][\p{L}'’-]{2,})\b(?=[^.?!]{0,40}\bborn\b)/u);
+  if (beforeBorn && !STOP_NAME.has(beforeBorn[1].toLowerCase())) return beforeBorn[1];
+  const words = text.match(/\b[A-Z][\p{L}'’-]{2,}\b/gu) || [];
+  return words.find((word) => !STOP_NAME.has(word.toLowerCase()) && !/^(January|February|March|April|May|June|July|August|September|October|November|December)$/.test(word)) || "";
+}
+
+function bornVerb(text) {
+  if (/\bborn\b|\bbirth\b/i.test(text)) return "born";
+  if (/\bdied\b/i.test(text)) return "died";
+  if (/\bmarried\b/i.test(text)) return "married";
+  if (/\bmoved\b/i.test(text)) return "moved";
+  if (/\bbought\b|\bpurchased\b/i.test(text)) return "bought";
+  if (/\bpaid\b/i.test(text)) return "paid";
+  if (/\bsigned\b/i.test(text)) return "signed";
+  return "";
 }
 
 function usableKey(value) {

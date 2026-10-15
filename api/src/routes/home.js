@@ -11,7 +11,7 @@ import {
   understandFile,
   understandText,
 } from "../services/contextEngine.js";
-import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
+import { extractConversationalFacts, previousExchangeFrom, resolveOfferedSave, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 
@@ -48,6 +48,19 @@ export default async function homeRoutes(fastify) {
       const message = payload.message.trim();
       if (!message && !payload.file) {
         return reply.code(400).send({ error: "Say something, or attach a file." });
+      }
+      if (message && !payload.file) {
+        const offered = resolveOfferedSave(message, payload.history);
+        if (offered?.action === "decline") {
+          return answerResponse(
+            { intent: "question", confidence: 0.95, interpretation: "Leave the offered event unsaved.", action: "proceed" },
+            "Okay. I won't save that.",
+            false,
+          );
+        }
+        if (offered?.action === "save") {
+          return await saveOfferedFact(request.userId, offered.content);
+        }
       }
       const routing = await routeIntent(message, request.userId, payload.file, payload.history, payload.lastAction);
       console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2));
@@ -126,6 +139,79 @@ async function runIntakeFile(userId, routing, payload) {
     await markQueueFailed(queue.id, err);
     throw err;
   }
+}
+
+async function saveOfferedFact(userId, content) {
+  const queue = await prisma.inputQueue.create({
+    data: {
+      userId,
+      rawContent: content,
+      contentType: "text",
+      source: "manual",
+      processingStatus: "processing",
+    },
+  });
+  let result;
+  try {
+    result = await understandText(content, userId);
+  } catch (err) {
+    await markQueueFailed(queue.id, err);
+    throw err;
+  }
+  if (result.duplicate?.existingTitle) {
+    await prisma.inputQueue.update({
+      where: { id: queue.id },
+      data: { processingStatus: "dismissed", processedAt: new Date(), error: null },
+    });
+    return answerResponse(
+      { intent: "question", confidence: 0.95, interpretation: "Already saved.", action: "proceed" },
+      `That's already saved as ${result.duplicate.existingTitle}.`,
+      false,
+    );
+  }
+  await prisma.inputQueue.update({
+    where: { id: queue.id },
+    data: {
+      understoodAs: JSON.stringify({
+        understood: result.understood,
+        suggestedSpace: result.suggestedSpace,
+        suggestedEventType: result.suggestedEventType,
+        fullText: content,
+        sourceFile: null,
+      }),
+    },
+  });
+  const understood = applyCorrections(result.understood, null);
+  understood.space = SPACES.has(result.suggestedSpace) ? result.suggestedSpace : "personal";
+  if (EVENT_TYPES.has(result.suggestedEventType)) understood.eventType = result.suggestedEventType;
+  const occurredAt = dateFromIsoDay(understood.occurredAt);
+  const event = await createEventFromUnderstanding(userId, understood, null, true, queue.id, {
+    fullText: content,
+    sourceFile: null,
+    ...(occurredAt && occurredAt !== INVALID_DATE ? { occurredAt } : {}),
+  });
+  setImmediate(async () => {
+    try {
+      await extractAndLinkEntities(event, userId, understood);
+    } catch (err) {
+      console.error("[entity-extract] failed:", err.message);
+    }
+  });
+  setImmediate(async () => {
+    try {
+      if (!isSignificantEvent(event)) return;
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      await sendLifeEvent(event, userId, user);
+    } catch (err) {
+      console.error("[bridge] error:", err.message);
+    }
+  });
+  return doneResponse(
+    { intent: "intake_text", confidence: 0.95, interpretation: `Saved ${event.title}.`, action: "proceed" },
+    "saved",
+    { message: `Saved as ${event.title}.`, eventId: event.id, queueId: queue.id },
+    null,
+  );
 }
 
 async function runIntakeText(userId, routing, payload) {
