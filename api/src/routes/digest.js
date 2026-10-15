@@ -2,7 +2,9 @@ import { generateDigest, sendDigestEmail } from "../services/digestService.js";
 
 export default async function digestRoutes(fastify) {
   fastify.get("/digest/preview", { preHandler: [fastify.authenticate] }, async (request) => {
-    return generateDigest(request.userId);
+    const digest = await generateDigest(request.userId);
+    delete digest.mentions;
+    return digest;
   });
 
   fastify.post("/digest/send", { preHandler: [fastify.authenticate] }, async (request, reply) => {

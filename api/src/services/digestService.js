@@ -2,20 +2,27 @@ import { Resend } from "resend";
 import { prisma } from "../prisma.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-const BIRTHDAY_WINDOW = 60;
-const EVENT_WINDOW = 30;
 const APP_URL = "https://dira.qusaz.com";
 const FROM = "DIRA <phesto@qusaz.com>";
 
 export async function generateDigest(userId) {
   const today = helsinkiDate(new Date());
-  const [events, pendingQueue, visions] = await Promise.all([
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { settings: true } });
+  const memory = digestMemory(user?.settings);
+  const yesterday = shiftDay(today, -1);
+  const yesterdayStart = startOfHelsinkiDay(yesterday.year, yesterday.month, yesterday.day);
+  const todayStart = startOfHelsinkiDay(today.year, today.month, today.day);
+  const [events, pendingQueue, visions, yesterdayEvents, yesterdayVisions] = await Promise.all([
     prisma.event.findMany({
       where: { userId, status: { not: "archived" } },
-      select: { title: true, occurredAt: true, dueAt: true, people: true },
+      select: { id: true, title: true, occurredAt: true, dueAt: true, people: true },
     }),
     prisma.inputQueue.count({
-      where: { userId, processingStatus: { in: ["pending", "processing"] } },
+      where: {
+        userId,
+        processingStatus: { in: ["pending", "processing"] },
+        ...(memory.lastDigestSent ? { createdAt: { gt: memory.lastDigestSent } } : {}),
+      },
     }),
     prisma.vision.findMany({
       where: {
@@ -25,19 +32,40 @@ export async function generateDigest(userId) {
       },
       select: { title: true, lastTouchedAt: true, createdAt: true },
     }),
+    prisma.event.findMany({
+      where: {
+        userId,
+        status: { not: "archived" },
+        createdAt: { gte: yesterdayStart, lt: todayStart },
+      },
+      select: { title: true },
+    }),
+    prisma.vision.findMany({
+      where: {
+        userId,
+        status: { notIn: ["released", "archived"] },
+        createdAt: { gte: yesterdayStart, lt: todayStart },
+      },
+      select: { title: true },
+    }),
   ]);
 
   const upcomingBirthdays = [];
   const upcomingEvents = [];
+  const mentions = { birthdayIds: [], eventIds: [] };
 
   for (const event of events) {
-    const birthday = birthdayFrom(event, today);
+    const birthday = birthdayFrom(event, today, memory.birthdayIds);
     if (birthday) {
       upcomingBirthdays.push(birthday);
+      mentions.birthdayIds.push(birthday.mark);
       continue;
     }
-    const upcoming = upcomingFrom(event, today);
-    if (upcoming) upcomingEvents.push(upcoming);
+    const upcoming = upcomingFrom(event, today, memory.eventIds);
+    if (upcoming) {
+      upcomingEvents.push(upcoming);
+      mentions.eventIds.push(upcoming.mark);
+    }
   }
 
   upcomingBirthdays.sort((left, right) => left.daysAway - right.daysAway);
@@ -50,16 +78,28 @@ export async function generateDigest(userId) {
     }))
     .sort((left, right) => right.daysSinceTouch - left.daysSinceTouch);
 
+  const yesterdayActivity = [
+    ...yesterdayEvents.map((event) => ({ title: event.title, kind: "event" })),
+    ...yesterdayVisions.map((vision) => ({ title: vision.title, kind: "vision" })),
+  ];
+
   const digest = {
     upcomingBirthdays,
     upcomingEvents,
     pendingQueue,
     dormantVisions,
+    yesterday: yesterdayActivity,
     hasAnything: false,
+    mentions,
   };
   digest.hasAnything = Boolean(
-    digest.upcomingBirthdays.length || digest.upcomingEvents.length || digest.pendingQueue || digest.dormantVisions.length,
+    digest.upcomingBirthdays.length
+    || digest.upcomingEvents.length
+    || digest.pendingQueue
+    || digest.dormantVisions.length
+    || digest.yesterday.length,
   );
+  for (const item of [...upcomingBirthdays, ...upcomingEvents]) delete item.mark;
   return digest;
 }
 
@@ -68,7 +108,10 @@ export async function sendDigestEmail(userId) {
   if (!user?.email) return { sent: false, sections: [] };
   const digest = await generateDigest(userId);
   const sections = digestSections(digest);
-  if (!digest.hasAnything) return { sent: false, sections };
+  if (!digest.hasAnything) {
+    console.log(`[digest] nothing new for ${user.email}, skipping`);
+    return { sent: false, sections };
+  }
   const when = helsinkiDate(new Date());
   const apiKey = usableKey(process.env.RESEND_API_KEY);
   if (!apiKey) {
@@ -88,6 +131,7 @@ export async function sendDigestEmail(userId) {
     failure.statusCode = 502;
     throw failure;
   }
+  await rememberDigest(user, digest);
   return { sent: true, sections };
 }
 
@@ -104,7 +148,6 @@ export async function runScheduledDigests() {
     try {
       const result = await sendDigestEmail(user.id);
       if (result.sent) console.log("[digest] sent to:", user.email);
-      else console.log("[digest] nothing to send:", user.email);
     } catch (err) {
       console.error("[digest] failed for:", user.email, err.message);
     }
@@ -122,39 +165,101 @@ export function digestSettings(value) {
   };
 }
 
+function digestMemory(settings) {
+  const value = settings && typeof settings === "object" && !Array.isArray(settings) ? settings : {};
+  const content = value.lastDigestContent && typeof value.lastDigestContent === "object" ? value.lastDigestContent : {};
+  const sent = value.lastDigestSent ? new Date(value.lastDigestSent) : null;
+  return {
+    lastDigestSent: sent && !Number.isNaN(sent.getTime()) ? sent : null,
+    birthdayIds: new Set(stringList(content.birthdayIds)),
+    eventIds: new Set(stringList(content.eventIds)),
+  };
+}
+
+async function rememberDigest(user, digest) {
+  const current = user.settings && typeof user.settings === "object" && !Array.isArray(user.settings) ? user.settings : {};
+  const previous = digestMemory(current);
+  await prisma.user.update({
+    where: { id: user.id },
+    data: {
+      settings: {
+        ...current,
+        lastDigestSent: new Date().toISOString(),
+        lastDigestContent: {
+          birthdayIds: [...new Set([...previous.birthdayIds, ...digest.mentions.birthdayIds])],
+          eventIds: [...new Set([...previous.eventIds, ...digest.mentions.eventIds])],
+        },
+      },
+    },
+  });
+}
+
 function digestSections(digest) {
   const sections = [];
   if (digest.upcomingBirthdays.length || digest.upcomingEvents.length) sections.push("upcoming");
   if (digest.pendingQueue) sections.push("queue");
   if (digest.dormantVisions.length) sections.push("visions");
+  if (digest.yesterday.length) sections.push("yesterday");
   return sections;
 }
 
-function birthdayFrom(event, today) {
+function birthdayFrom(event, today, mentioned) {
   if (!event.occurredAt || !/\bbirth/i.test(event.title || "")) return null;
   const day = calendarDay(event.occurredAt);
   if (!day) return null;
   const daysAway = daysUntilAnniversary(day.month, day.day, today);
-  if (daysAway < 0 || daysAway > BIRTHDAY_WINDOW) return null;
+  const stage = birthdayStage(daysAway, mentioned, event.id, anniversaryYear(day.month, day.day, today));
+  if (!stage) return null;
   return {
     name: birthdayName(event),
     date: formatMonthDay(day.month, day.day),
     daysAway,
+    mark: stage,
   };
 }
 
-function upcomingFrom(event, today) {
+function upcomingFrom(event, today, mentioned) {
   const dated = [event.occurredAt, event.dueAt].find((value) => {
     const daysAway = daysUntilDate(value, today);
-    return daysAway != null && daysAway >= 0 && daysAway <= EVENT_WINDOW;
+    return daysAway != null && daysAway >= 0 && daysAway <= 3;
   });
   if (!dated) return null;
   const day = calendarDay(dated);
+  const daysAway = daysUntilDate(dated, today);
+  const stage = eventStage(daysAway, mentioned, event.id, day.year);
+  if (!stage) return null;
   return {
     title: event.title,
     date: formatMonthDay(day.month, day.day),
-    daysAway: daysUntilDate(dated, today),
+    daysAway,
+    mark: stage,
   };
+}
+
+function birthdayStage(daysAway, mentioned, id, year) {
+  if (daysAway === 0) return mark(mentioned, id, year, "0");
+  if (daysAway === 1) return mark(mentioned, id, year, "1");
+  if (daysAway > 1 && daysAway <= 7) return mark(mentioned, id, year, "7");
+  if (daysAway === 30) return mark(mentioned, id, year, "30");
+  return null;
+}
+
+function eventStage(daysAway, mentioned, id, year) {
+  if (daysAway === 0) return mark(mentioned, id, year, "0");
+  if (daysAway === 1) return mark(mentioned, id, year, "1");
+  if (daysAway > 1 && daysAway <= 3) return mark(mentioned, id, year, "3");
+  return null;
+}
+
+function mark(mentioned, id, year, stage) {
+  const key = `${id}:${year}:${stage}`;
+  return mentioned.has(key) ? null : key;
+}
+
+function anniversaryYear(month, day, today) {
+  const start = Date.UTC(today.year, today.month - 1, today.day);
+  const target = Date.UTC(today.year, month - 1, day);
+  return target >= start ? today.year : today.year + 1;
 }
 
 function birthdayName(event) {
@@ -233,8 +338,8 @@ function formatMonthDay(month, day) {
 function renderDigest(digest, when) {
   const blocks = [];
   const upcoming = [
-    ...digest.upcomingBirthdays.map((item) => `${escapeHtml(item.name)} birthday ${away(item.daysAway)} (${escapeHtml(item.date)})`),
-    ...digest.upcomingEvents.filter((item) => item.daysAway <= EVENT_WINDOW).map((item) => `${escapeHtml(item.title)} ${away(item.daysAway)}`),
+    ...digest.upcomingBirthdays.map((item) => birthdayLine(item)),
+    ...digest.upcomingEvents.map((item) => `${escapeHtml(item.title)} ${away(item.daysAway)}`),
   ];
   if (upcoming.length) blocks.push(section("Upcoming", upcoming));
   if (digest.pendingQueue) {
@@ -243,6 +348,9 @@ function renderDigest(digest, when) {
   }
   if (digest.dormantVisions.length) {
     blocks.push(section("Visions", digest.dormantVisions.map((vision) => `“${escapeHtml(vision.title)}” hasn't been touched in ${vision.daysSinceTouch} days`)));
+  }
+  if (digest.yesterday.length) {
+    blocks.push(section("Yesterday", digest.yesterday.map((item) => escapeHtml(item.title))));
   }
   return `<!doctype html>
 <html>
@@ -268,6 +376,13 @@ function section(label, lines) {
   </div>`;
 }
 
+function birthdayLine(item) {
+  const name = escapeHtml(item.name);
+  if (item.daysAway === 0) return `${name}'s birthday is today`;
+  if (item.daysAway === 1) return `${name}'s birthday is tomorrow (${escapeHtml(item.date)})`;
+  return `${name} birthday ${away(item.daysAway)} (${escapeHtml(item.date)})`;
+}
+
 function away(days) {
   if (days === 0) return "today";
   if (days === 1) return "in 1 day";
@@ -280,6 +395,24 @@ function escapeHtml(value) {
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;");
+}
+
+function stringList(value) {
+  return Array.isArray(value) ? value.filter((item) => typeof item === "string") : [];
+}
+
+function shiftDay(today, delta) {
+  const shifted = new Date(Date.UTC(today.year, today.month - 1, today.day + delta));
+  return { year: shifted.getUTCFullYear(), month: shifted.getUTCMonth() + 1, day: shifted.getUTCDate() };
+}
+
+function startOfHelsinkiDay(year, month, day) {
+  for (const offset of [2, 3]) {
+    const date = new Date(Date.UTC(year, month - 1, day, -offset, 0, 0));
+    const parts = helsinkiDate(date);
+    if (parts.year === year && parts.month === month && parts.day === day && parts.hour === 0) return date;
+  }
+  return new Date(Date.UTC(year, month - 1, day, -3, 0, 0));
 }
 
 function usableKey(value) {

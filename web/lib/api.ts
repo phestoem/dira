@@ -20,6 +20,7 @@ export type DigestPreview = {
   upcomingEvents: Array<{ title: string; date: string; daysAway: number }>;
   pendingQueue: number;
   dormantVisions: Array<{ title: string; daysSinceTouch: number }>;
+  yesterday: Array<{ title: string; kind: "event" | "vision" }>;
   hasAnything: boolean;
 };
 
