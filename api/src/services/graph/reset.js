@@ -1,6 +1,6 @@
 import { prisma } from "../../prisma.js";
 import { getOrCreateSelf } from "./entityResolver.js";
-import { setGraphAutoExtract } from "./rebuild.js";
+import { setGraphAutoExtract } from "./autoExtract.js";
 
 export function stripEntityIds(list) {
   if (!Array.isArray(list)) return { list, removed: 0 };

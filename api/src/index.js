@@ -21,6 +21,7 @@ import queueRoutes from "./routes/queue.js";
 import digestRoutes from "./routes/digest.js";
 import graphRoutes from "./routes/graph.js";
 import { bridgeConfig } from "./services/altimetrixBridge.js";
+import { graphAutoExtractEnabled } from "./services/graph/autoExtract.js";
 import { runScheduledDigests } from "./services/digestService.js";
 import { catchUpGraphExtractions } from "./services/graph/rebuild.js";
 
@@ -65,6 +66,7 @@ if (process.env.DIRA_DISABLE_CRON === "true") {
   }, { timezone: "Europe/Helsinki" });
 }
 console.log(bridgeConfig() ? "[bridge] configured" : "[bridge] skipping: not configured");
+console.log(`[graph] auto-extract for users without a setting: ${graphAutoExtractEnabled({}) ? "on" : "off"} (GRAPH_AUTO_EXTRACT)`);
 
 app.get("/health", async () => ({
   status: "ok",

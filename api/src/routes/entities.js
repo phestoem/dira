@@ -1,4 +1,5 @@
 import { prisma } from "../prisma.js";
+import { autoExtractOn } from "../services/graph/autoExtract.js";
 import { normalizeName } from "../services/graph/entityResolver.js";
 import { anchorEventEdges, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getNeighbors } from "../services/graph/graphQuery.js";
@@ -226,6 +227,8 @@ export async function linkEntityToTarget(userId, entityId, input) {
 }
 
 export async function extractAndLinkEntities(event, userId, understood) {
+  // Entities, event anchors and triples are all graph; while auto-extract is off the event waits for a rebuild.
+  if (!(await autoExtractOn(userId, `event ${event.id}`))) return [];
   const linked = [];
   const location =
     textOrNull(understood?.location) ||

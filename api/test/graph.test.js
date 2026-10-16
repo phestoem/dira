@@ -7,6 +7,9 @@ import { isNoiseReply, previousExchangeFrom, rejectsCorrection } from "../src/se
 import { answerPeopleQuestion, buildPeopleContext, conflictEdgeData, contextualQuestion, deliverPeopleAnswer, groundAdvisorReply, isPeopleQuestion, peopleFromTree, resolvePeopleFollowUp } from "../src/services/graph/peopleGrounding.js";
 import { isReadonly, runReadonly } from "../src/readonly.js";
 import { graphAutoExtractEnabled } from "../src/services/graph/rebuild.js";
+import { autoExtractOn } from "../src/services/graph/autoExtract.js";
+import { resetGraph } from "../src/services/graph/reset.js";
+import { extractAndLinkEntities } from "../src/routes/entities.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
 import { stripEntityIds } from "../src/services/graph/reset.js";
@@ -635,6 +638,50 @@ test("assemblePaths stops at depth and does not loop", () => {
   assert.ok(paths.every((path) => path.length <= 5));
   const tooDeep = assemblePaths(edges, { kind: "entity", id: "a" }, { kind: "entity", id: "e" }, 2, 3);
   assert.equal(tooDeep.length, 0);
+});
+
+test("after a reset, stated connections save and automatic extraction waits", async (t) => {
+  if (!(await databaseReady())) {
+    t.skip("Postgres is not ready for graph tests");
+    return;
+  }
+  const user = await prisma.user.create({
+    data: { email: `gate-${Date.now()}@example.com`, handle: `gate${Date.now()}`, name: "Ada Tester", settings: { graphAutoExtract: true } },
+  });
+  try {
+    assert.equal(await autoExtractOn(user.id), true);
+    await resetGraph(user.id, { dryRun: false });
+    assert.equal(await autoExtractOn(user.id), false);
+
+    const event = await prisma.event.create({
+      data: {
+        userId: user.id,
+        title: "Certificate of Occupancy - Plot P9200",
+        eventType: "personal",
+        space: "personal",
+        rawInput: "Certificate of Occupancy for Plot P9200 in Kitunda, witnessed by Hassani Juma Mrisho.",
+        people: [{ name: "Hassani Juma Mrisho", role: "witness" }],
+        places: [{ name: "Kitunda" }],
+      },
+    });
+    const linked = await extractAndLinkEntities(event, user.id, { location: "Kitunda", summary: event.rawInput });
+    assert.deepEqual(linked, []);
+    assert.equal(await prisma.entity.count({ where: { userId: user.id, isSelf: false } }), 0);
+    assert.equal(await prisma.relationship.count({ where: { userId: user.id } }), 0);
+    assert.equal((await prisma.event.findUnique({ where: { id: event.id } })).graphExtractedAt, null);
+
+    const stated = await commitTriples(user.id, [{
+      subject: { name: "Lina Example", type: "person", kind: "sister" },
+      predicate: "sibling_of",
+      object: { name: "me", type: "self" },
+      evidence: "My sister Lina Example lives in Mbeya.",
+      confidence: 0.9,
+    }], { source: "conversation", forceStatus: "suggested", message: "My sister Lina Example lives in Mbeya." });
+    assert.equal(stated.created + stated.updated + stated.suggested >= 1, true);
+    assert.equal(await prisma.relationship.count({ where: { userId: user.id, type: "sibling_of" } }), 1);
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+  }
 });
 
 test("graph records stay consistent", async (t) => {

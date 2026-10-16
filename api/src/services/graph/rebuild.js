@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma.js";
+import { graphAutoExtractEnabled, setGraphAutoExtract } from "./autoExtract.js";
 import { findDuplicateCandidates, getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
 import { applySupersession, dedupeProposedNames, isCorrectionEvent } from "./graphQuality.js";
 import {
@@ -15,21 +16,7 @@ import {
 } from "./relationshipExtractor.js";
 import { categoryOf, isSensitive, normalizeType } from "./relationshipTypes.js";
 
-export function graphAutoExtractEnabled(settings, envValue = process.env.GRAPH_AUTO_EXTRACT) {
-  if (settings && typeof settings === "object" && !Array.isArray(settings) && typeof settings.graphAutoExtract === "boolean") {
-    return settings.graphAutoExtract;
-  }
-  return String(envValue || "").trim().toLowerCase() === "true";
-}
-
-export async function setGraphAutoExtract(userId, enabled) {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { settings: true } });
-  const current = user?.settings && typeof user.settings === "object" && !Array.isArray(user.settings) ? user.settings : {};
-  await prisma.user.update({
-    where: { id: userId },
-    data: { settings: { ...current, graphAutoExtract: Boolean(enabled) } },
-  });
-}
+export { graphAutoExtractEnabled, setGraphAutoExtract };
 
 export async function catchUpGraphExtractions() {
   const users = await prisma.user.findMany({ select: { id: true, settings: true } });

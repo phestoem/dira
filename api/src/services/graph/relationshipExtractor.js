@@ -1,5 +1,6 @@
 import { prisma } from "../../prisma.js";
 import { isReadonly } from "../../readonly.js";
+import { autoExtractOn } from "./autoExtract.js";
 import { getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
 import { buildSelfAliasSet, dropReason, fullNameFromProfile, prepareTriples as refineTriples, relativesFromEdges } from "./graphQuality.js";
 import { categoryOf, isSensitive, isSymmetric, listRelationshipTypes, normalizeType } from "./relationshipTypes.js";
@@ -335,6 +336,8 @@ export function scheduleExtraction(userId, text, options = {}) {
   if (isReadonly()) return;
   setImmediate(async () => {
     try {
+      const what = options.evidenceEventId ? `event ${options.evidenceEventId}` : options.diaryEntryId ? `journal entry ${options.diaryEntryId}` : options.visionId ? `vision ${options.visionId}` : `a ${options.source || "message"}`;
+      if (!(await autoExtractOn(userId, what))) return;
       const self = await prisma.entity.findFirst({ where: { userId, isSelf: true }, select: { name: true } });
       const known = await prisma.entity.findMany({
         where: { userId, status: { not: "archived" }, mergedIntoId: null },

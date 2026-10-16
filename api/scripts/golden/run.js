@@ -108,7 +108,8 @@ async function post(path, body) {
 async function fixture() {
   const id = randomUUID();
   await prisma.user.create({
-    data: { id, email: `golden+${id}@example.invalid`, handle: `golden-${id.slice(0, 8)}`, name: SELF_NAME },
+    // Auto-extract on, like an account that was never reset; the reset case turns it off.
+    data: { id, email: `golden+${id}@example.invalid`, handle: `golden-${id.slice(0, 8)}`, name: SELF_NAME, settings: { graphAutoExtract: true } },
   });
   console.log(`fixture user ${id}`);
   signIn(id);
@@ -119,12 +120,53 @@ async function fixture() {
       console.log(`- ${message.slice(0, 70)}${message.length > 70 ? "…" : ""}\n    ${steps.join(" → ")}`);
     }
     await settle(id);
-    return await ask(id, false);
+    const code = await ask(id, false);
+    const resetCode = !args.only || args.only.has("reset-gate") ? await resetGate(id) : 0;
+    return code || resetCode;
   } finally {
     await settle(id).catch(() => {});
     await prisma.user.delete({ where: { id } });
     console.log(`\nfixture user ${id} deleted`);
   }
+}
+
+// After /graph/reset a stated, confirmed family introduction still becomes edges,
+// while a confirmed document event adds nothing to the graph and waits for the next rebuild.
+async function resetGate(userId) {
+  const failures = [];
+  const startedAt = new Date().toISOString();
+  await post("/graph/reset", { dryRun: false });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { settings: true } });
+  if (user?.settings?.graphAutoExtract !== false) failures.push("reset left graphAutoExtract on");
+
+  const familyBefore = await prisma.relationship.count({ where: { userId, category: "family", status: "confirmed" } });
+  const intro = "My sister Amani Enock Mwakyusa lives in Mbeya. My brother Baraka Enock Mwakyusa was born on 2 June 1985.";
+  const introSteps = await seed(intro);
+  await settle(userId, 8000);
+  const familyEdges = await prisma.relationship.findMany({ where: { userId, category: "family", status: "confirmed" } });
+  const names = new Map((await prisma.entity.findMany({ where: { userId }, select: { id: true, name: true } })).map((row) => [row.id, row.name]));
+  const linked = familyEdges.flatMap((edge) => [names.get(edge.fromId), names.get(edge.toId)]).join(" ");
+  if (familyEdges.length - familyBefore < 2) failures.push(`family introduction added ${familyEdges.length - familyBefore} confirmed edge(s), expected 2 (${introSteps.join(" → ")})`);
+  for (const name of ["Amani", "Baraka"]) if (!linked.includes(name)) failures.push(`no confirmed edge for ${name}`);
+
+  const edgesBefore = await prisma.relationship.count({ where: { userId } });
+  const entitiesBefore = await prisma.entity.count({ where: { userId } });
+  const doc = "Certificate of Occupancy for Plot P9200 in Kitunda Industrial Area, issued to Phesto Enock Mwakyusa on 3 March 2024 and witnessed by Hassani Juma Mrisho.";
+  const docSteps = await seed(doc);
+  await settle(userId, 8000);
+  const event = await prisma.event.findFirst({ where: { userId, rawInput: doc }, select: { id: true, graphExtractedAt: true } });
+  const edgesAdded = (await prisma.relationship.count({ where: { userId } })) - edgesBefore;
+  const entitiesAdded = (await prisma.entity.count({ where: { userId } })) - entitiesBefore;
+  if (!event) failures.push(`document event was not saved (${docSteps.join(" → ")})`);
+  else if (event.graphExtractedAt) failures.push("document event was marked extracted; the rebuild would skip it");
+  if (edgesAdded) failures.push(`document event added ${edgesAdded} edge(s) while auto-extract is off`);
+  if (entitiesAdded) failures.push(`document event added ${entitiesAdded} entit${entitiesAdded === 1 ? "y" : "ies"} while auto-extract is off`);
+
+  console.log(`\n${failures.length ? "FAIL" : "PASS"}  reset-gate  [graph reset]  ${startedAt}`);
+  console.log(`  Q: /graph/reset  ⇢  ${intro}  ⇢  ${doc}`);
+  console.log(indent(`family: ${introSteps.join(" → ")}; ${familyEdges.length - familyBefore} confirmed family edge(s)\ndocument: ${docSteps.join(" → ")}; ${edgesAdded} edge(s), ${entitiesAdded} entities, graphExtractedAt ${event?.graphExtractedAt ? "set" : "null"}`));
+  for (const failure of failures) console.log(`  ✗ ${failure}`);
+  return failures.length ? 1 : 0;
 }
 
 // Confirms whatever DIRA offers, the way a person tapping Save would.
