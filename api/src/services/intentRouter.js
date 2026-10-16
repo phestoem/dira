@@ -245,6 +245,10 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
   }
   applyConversationCorrection(classified, text, history, fileAttached);
   applyAnswerFollowUp(classified, text, history, lastAction, fileAttached);
+  // Accepting or declining needs something DIRA offered first; a fresh statement is neither.
+  if (!conversationItems(history).some((item) => item.role === "assistant")) {
+    classified.followUp = { action: "none", fact: "" };
+  }
   if (!fileAttached && rejectsCorrection(text) && classified.intent === "correction") {
     classified.intent = isPeopleQuestion(text) ? "graph_query" : "question";
     classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);

@@ -4,7 +4,8 @@ import { prisma } from "../src/prisma.js";
 import { chooseSelfName, mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
 import { describeRelationshipLine, isRelationshipStatement, parseFamilyStatement } from "../src/services/graph/familyStatement.js";
 import { isNoiseReply, previousExchangeFrom, rejectsCorrection } from "../src/services/intentRouter.js";
-import { answerPeopleQuestion, buildPeopleContext, conflictEdgeData, contextualQuestion, deliverPeopleAnswer, groundAdvisorReply, isPeopleQuestion, resolvePeopleFollowUp } from "../src/services/graph/peopleGrounding.js";
+import { answerPeopleQuestion, buildPeopleContext, conflictEdgeData, contextualQuestion, deliverPeopleAnswer, groundAdvisorReply, isPeopleQuestion, peopleFromTree, resolvePeopleFollowUp } from "../src/services/graph/peopleGrounding.js";
+import { isReadonly, runReadonly } from "../src/readonly.js";
 import { graphAutoExtractEnabled } from "../src/services/graph/rebuild.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
@@ -510,6 +511,105 @@ test("graph extraction backs off on rate limits", async () => {
   }, async (ms) => { waits.push(ms); }));
   assert.equal(calls, 5);
   assert.deepEqual(waits, [2000, 4000, 8000, 16000]);
+});
+
+test("a generic entity kind never hides the tree role", () => {
+  const rows = peopleFromTree({
+    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
+    parents: [{ id: "enock", name: "Enock Mwakyusa", kind: "person" }],
+    siblings: [{ id: "jeni", name: "Jeni", kind: "person" }, { id: "leah", name: "Leah", kind: "sister" }],
+    spouse: [{ id: "zelda", name: "Zelda Goodluck Mambosho", kind: "person" }],
+    children: [{ id: "patrick", name: "Patrick", kind: null }],
+  });
+  assert.deepEqual(rows.map((row) => `${row.name}:${row.kind}`), [
+    "Phesto Enock Mwakyusa:self",
+    "Enock Mwakyusa:parent",
+    "Jeni:sibling",
+    "Leah:sister",
+    "Zelda Goodluck Mambosho:spouse",
+    "Patrick:child",
+  ]);
+});
+
+test("event wording as saved in dira_dev answers family questions", () => {
+  // Tree rows as getFamilyTree returns them after a graph reset: few edges, generic kinds.
+  const people = peopleFromTree({
+    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
+    siblings: ["Jeni", "Neema", "Zenah Enock Mwakyusa", "Leah"].map((name) => ({ id: name.toLowerCase().split(" ")[0], name, kind: "person" })),
+    spouse: [{ id: "zelda", name: "Zelda Goodluck Mambosho", kind: "person" }],
+    children: [{ id: "patrick", name: "Patrick", kind: null }, { id: "powell", name: "Powell", kind: null }],
+  }).concat([{ id: "prisha", name: "Prisha - Neema", kind: "person", role: "other" }]);
+  const events = [
+    { id: "ev-births", title: "Birthdates of Jeni, Leah, and Neema Mwakyusa", rawInput: "My sister Jeni Enock Mwakyusa was born on December 4th, 1980, followed by Leah Enock Mwakyusa born on December 14th, 1983, and then Neema Enock Mwakyusa born on December 3rd, 1987." },
+    { id: "ev-zenah", title: "Birth Information of Zenah Enock Mwakyusa", rawInput: "Zenah Enock Mwakyusa was born on February 3rd, 1993, in Meta hospital Mbeya." },
+    { id: "ev-engaged", title: "First Flight to Finland and Engagement", rawInput: "In the year 2005 May 3rd I flew from Dar es salaam Tanzania to FInland for the first time. Came for studies, and a day before, on 2nd May I engaged my fiance Zelda Goodluck Mambosho." },
+    { id: "ev-married", title: "Marriage and Relocation Timeline", rawInput: "My wife joined me in FInland in December 2008, about two years after we got married on 5th August 2006." },
+    { id: "ev-parents-married", title: "Parents' Marriage", rawInput: "My parents got married on 25th April 1977 in Makungu Mgololo, Iringa Tanzania." },
+    { id: "ev-father", title: "Enock Mwakyusa Profile", rawInput: "My fadher is Enock Mwakyusa, born in Feb 19th 1956 in Rungwe Mbeya, he died on April 25th 2004." },
+    { id: "ev-family", title: "Family Information", rawInput: "Your father Enock Mwakyusa passed away on 25 April 2004, your mother Froidah Biniala Kyando lives in Mbeya, and you have sisters Jeni, Leah, Neema, and Zenah, a wife Zelda Goodluck" },
+    { id: "ev-mother", title: "Froidah Biniala Kyando Profile", rawInput: "Her name is Froidah Biniala Kyando born in 1960, married to my father Enock Mwakyusa." },
+    { id: "ev-careen", title: "Careen Fortunate Phesto's Father", rawInput: "The speaker is the father of Careen Fortunate Phesto." },
+    { id: "ev-careen-born", title: "Careen Fortunate Phesto's Birth Information", rawInput: "Careen Fortunate Phesto was born on February 4th, 2002, and her mother's name is Emmiliana Maegga." },
+    { id: "ev-patrick", title: "Birth of older son, Patrick", understoodMeaning: "The older son, Patrick was born in Helsinki, Finland on September 25, 2008.", rawInput: "Our older son was born on 25th September 2008 in Helsinki Finland" },
+    { id: "ev-presley", title: "Birth of Second Son", rawInput: "On 11th December 2012 our second son Presley was born in Helsinki" },
+    { id: "ev-powell", title: "Birth Announcement for Powell", rawInput: "You welcomed your son Powell, born on 30 May 2015." },
+    { id: "ev-prisha", title: "Welcoming Prisha - Neema", rawInput: "You welcomed your daughter Prisha - Neema on June 20, 2020." },
+  ];
+  const context = buildPeopleContext({ self: people[0], people, events });
+
+  assert.equal(isPeopleQuestion("list my sisters"), true);
+  assert.equal(isRelationshipStatement("list my sisters"), false);
+  assert.equal(isRelationshipStatement("I have four sisters"), true);
+  const brother = parseFamilyStatement("My brother Juma Enock Mwakyusa was born on 1 March 1990.");
+  assert.deepEqual(brother.triples.map((triple) => `${triple.subject.name} ${triple.predicate} ${triple.object.name}`), ["Juma Enock Mwakyusa sibling_of me"]);
+  assert.equal(brother.entityFacts[0].birthDate, "1990-03-01");
+  const intro = parseFamilyStatement("My father is Enock Mwakyusa, born 19 February 1956 in Rungwe, Mbeya, and he died on 25 April 2004. I have four sisters: Jeni Enock Mwakyusa, Leah Enock Mwakyusa, Neema Enock Mwakyusa and Zenah Enock Mwakyusa. I have five children: Careen, Patrick, Presley, Powell and Prisha. Powell is our third son.");
+  assert.equal(intro.triples.filter((triple) => triple.predicate === "sibling_of").length, 4);
+  assert.equal(intro.triples.filter((triple) => triple.predicate === "parent_of" && triple.subject.name === "me").length, 5);
+  const enock = intro.entityFacts.find((fact) => fact.name === "Enock Mwakyusa");
+  assert.equal(enock.birthDate, "1956-02-19");
+  assert.equal(enock.deathDate, "2004-04-25");
+
+  const wife = answerPeopleQuestion("who is my wife?", context);
+  assert.match(wife, /Zelda Goodluck Mambosho — your wife \(married 5 Aug 2006\)/);
+
+  const parents = answerPeopleQuestion("who are my parents?", context);
+  assert.match(parents, /Enock Mwakyusa — your father \(passed 25 Apr 2004\)/);
+  assert.match(parents, /Froidah Biniala Kyando — your mother/);
+
+  const sisters = answerPeopleQuestion("list my sisters", context);
+  assert.match(sisters, /Your sisters: Jeni, Leah, Neema, Zenah Enock Mwakyusa\./);
+  assert.equal(sisters.includes("Zelda"), false);
+
+  const births = answerPeopleQuestion("when were my sisters born?", context);
+  for (const line of ["Jeni — 4 Dec 1980", "Leah — 14 Dec 1983", "Neema — 3 Dec 1987", "Zenah Enock Mwakyusa — 3 Feb 1993"]) assert.match(births, new RegExp(line));
+  assert.equal(/not recorded/i.test(births), false);
+
+  const children = answerPeopleQuestion("how many children do I have?", context);
+  assert.match(children, /You have 5 children: Careen Fortunate Phesto, Patrick, Presley, Powell, Prisha - Neema\./);
+
+  const tree = answerPeopleQuestion("show my family tree", context);
+  assert.match(tree, /Spouse: Zelda Goodluck Mambosho \(wife, married 5 Aug 2006\)/);
+  assert.match(tree, /Children: Careen Fortunate Phesto \(daughter|Children: Careen Fortunate Phesto \(b\. 4 Feb 2002\)/);
+  for (const line of tree.split("\n")) {
+    if (/^(Siblings|Children):/.test(line)) assert.equal(line.includes("Zelda"), false, line);
+  }
+  assert.equal(tree.includes("Emmiliana"), false);
+  assert.equal(context.records.some((record) => /^(your|her|my|on)$/i.test(record.name)), false);
+});
+
+test("a readonly request cannot write, even from background work", async () => {
+  assert.equal(isReadonly(), false);
+  await runReadonly(async () => {
+    assert.equal(isReadonly(), true);
+    await assert.rejects(() => prisma.entity.create({ data: { userId: "nobody", name: "x", entityType: "person" } }), /readonly request: refused to create Entity/);
+    await assert.rejects(() => prisma.$executeRawUnsafe("DELETE FROM entities WHERE false"), /readonly request/);
+    const late = await new Promise((resolve) => {
+      setImmediate(() => prisma.relationship.deleteMany({ where: { userId: "nobody" } }).then(() => resolve("wrote"), (err) => resolve(err.name)));
+    });
+    assert.equal(late, "ReadonlyError");
+  });
+  assert.equal(isReadonly(), false);
 });
 
 test("assemblePaths stops at depth and does not loop", () => {

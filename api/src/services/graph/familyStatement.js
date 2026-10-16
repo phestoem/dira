@@ -13,7 +13,7 @@ export function isRelationshipStatement(text) {
   if (!value || value.includes("?") || /^(who|how|what|where|when|why)\b/i.test(value) || isPeopleQuestion(value)) return false;
   const lower = value.toLowerCase();
   if (/\b(no longer|not my|sold the|amehama|si tena)\b/.test(lower)) return false;
-  return /\b(my\s+(father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?|family)|is my\s+(father|mother|son|daughter|sister|brother|wife|husband)|supervises|anasimamia)\b/.test(lower);
+  return /\b(my\s+(father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?|family)|is my\s+(father|mother|son|daughter|sister|brother|wife|husband)|(?:i|we) have (?:\w+ )?(?:sisters|brothers|siblings|children|kids|sons|daughters)|supervises|anasimamia)\b/.test(lower);
 }
 
 export function parseFamilyStatement(text) {
@@ -29,7 +29,7 @@ export function parseFamilyStatement(text) {
 }
 
 function kinshipClauses(text) {
-  const pattern = /\b(?:my|our)\s+(?:father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?)\b|\b(?:mke|mume)\s+wangu\b|\b(?:baba|mama)\s+yangu\b/gi;
+  const pattern = /\b(?:my|our)\s+(?:father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?)\b|\b(?:i|we)\s+have\s+(?:\w+\s+)?(?:sisters|brothers|children|sons|daughters)\b|\b(?:mke|mume)\s+wangu\b|\b(?:baba|mama)\s+yangu\b/gi;
   const marks = [...String(text || "").matchAll(pattern)];
   if (!marks.length) return [String(text || "").trim()].filter(Boolean);
   return marks.map((mark, index) => text.slice(mark.index, marks[index + 1]?.index ?? text.length).trim()).filter(Boolean);
@@ -56,7 +56,8 @@ export function describeRelationshipLine({ type, from, to, selfId, attributes })
 }
 
 function readList(sentence, triples, facts, seen) {
-  const sisters = sentence.match(/\bmy (sisters|brothers|sons|daughters|children) are\s+(.+?)\.?\s*$/i);
+  const sisters = sentence.match(/\bmy (sisters|brothers|sons|daughters|children) are\s+(.+?)\.?\s*$/i)
+    || sentence.match(/\b(?:i|we) have (?:\w+ )?(sisters|brothers|sons|daughters|children)\s*[:,—-]\s*([^.]+)/i);
   if (sisters) {
     const role = sisters[1].toLowerCase();
     const people = shareSurname(splitPeople(sisters[2]).map(readNote));
@@ -139,12 +140,30 @@ function readPerson(clause, triples, facts, seen) {
     }
     return;
   }
-  const parent = matchRole(clause, /\bmy (father|mother|mum|mom|dad|mama|baba)\s+/i);
+  // "My brother Juma Enock Mwakyusa was born on 1 March 1990", "my son Powell"
+  const relative = matchRole(clause, /\b(?:my|our) (sister|brother|son|daughter)\s+(?:is\s+)?/i);
+  if (relative) {
+    const kind = relative.role.toLowerCase();
+    const person = { name: relative.name, type: "person", kind };
+    addFact(facts, relative.name, { kind, birthDate: dateAfter(clause, /\bborn\b/i), deathDate: dateAfter(clause, /\b(?:died|passed away)\b/i) });
+    const child = kind === "son" || kind === "daughter";
+    addTriple(triples, seen, {
+      subject: child ? SELF : person,
+      predicate: child ? "parent_of" : "sibling_of",
+      object: child ? person : SELF,
+      evidence: clause.trim(),
+      attributes: {},
+      confidence: 0.9,
+    });
+    return;
+  }
+  const parent = matchRole(clause, /\bmy (father|mother|mum|mom|dad|mama|baba)\s+(?:is\s+)?/i);
   if (!parent) return;
   const kind = ["mother", "mum", "mama"].includes(parent.role.toLowerCase()) ? "mother" : "father";
   const name = parent.name;
-  const deathDate = spokenDate(clause);
-  addFact(facts, name, { kind, deathDate });
+  const deathDate = dateAfter(clause, /\b(?:died|passed away|death)\b/i) || (/\b(born)\b/i.test(clause) ? null : spokenDate(clause));
+  const birthDate = dateAfter(clause, /\bborn\b/i);
+  addFact(facts, name, { kind, deathDate, birthDate });
   addTriple(triples, seen, {
     subject: { name, type: "person", kind },
     predicate: "parent_of",
@@ -177,7 +196,7 @@ function matchRole(text, prefix) {
 }
 
 function matchNamedRole(text) {
-  const marker = String(text || "").match(/\bis my (son|daughter|sister|brother|wife|husband|father|mother)\b/i);
+  const marker = String(text || "").match(/\bis (?:my|our) (?:(?:eldest|oldest|youngest|first|second|third|fourth|fifth|last|older|younger|little|only)\s+)?(son|daughter|sister|brother|wife|husband|father|mother)\b/i);
   if (!marker) return null;
   const before = String(text).slice(0, marker.index).trim();
   const words = before.split(/\s+/);
@@ -257,6 +276,11 @@ function placeFrom(clause) {
   return matches.length ? matches[matches.length - 1][1] : "";
 }
 
+function dateAfter(text, verb) {
+  const at = String(text || "").search(verb);
+  return at < 0 ? null : spokenDate(String(text).slice(at));
+}
+
 function spokenDate(text) {
   const match = String(text || "").match(/\b(\d{1,2})\s+(january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+(\d{4})\b/i);
   if (!match) return null;
@@ -277,7 +301,7 @@ function addFact(facts, name, extra) {
     Object.assign(existing, Object.fromEntries(Object.entries(extra).filter(([, value]) => value)));
     return;
   }
-  facts.push({ name, birthDate: null, deathDate: extra.deathDate || null, kind: extra.kind || null, birthOrder: extra.birthOrder || null });
+  facts.push({ name, birthDate: extra.birthDate || null, deathDate: extra.deathDate || null, kind: extra.kind || null, birthOrder: extra.birthOrder || null });
 }
 
 function parentWord(person) {

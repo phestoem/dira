@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma.js";
+import { isReadonly } from "../../readonly.js";
 import { getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
 import { buildSelfAliasSet, dropReason, fullNameFromProfile, prepareTriples as refineTriples, relativesFromEdges } from "./graphQuality.js";
 import { categoryOf, isSensitive, isSymmetric, listRelationshipTypes, normalizeType } from "./relationshipTypes.js";
@@ -331,6 +332,7 @@ export async function anchorEventEdges(userId, event) {
 }
 
 export function scheduleExtraction(userId, text, options = {}) {
+  if (isReadonly()) return;
   setImmediate(async () => {
     try {
       const self = await prisma.entity.findFirst({ where: { userId, isSelf: true }, select: { name: true } });

@@ -2,6 +2,7 @@ import { randomUUID } from "crypto";
 import { extname } from "path";
 import { writeFile } from "fs/promises";
 import { prisma } from "../prisma.js";
+import { isReadonly, runReadonly, wantsReadonly } from "../readonly.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
 import { confirmCommand, interpretCommand } from "../services/commandInterpreter.js";
 import {
@@ -50,39 +51,18 @@ const INTENT_LABEL = {
 
 export default async function homeRoutes(fastify) {
   fastify.post("/home/input", { preHandler: [fastify.authenticate] }, async (request, reply) => {
-    try {
-      const payload = await readPayload(request);
-      const message = payload.message.trim();
-      if (!message && !payload.file) {
-        return reply.code(400).send({ error: "Say something, or attach a file." });
-      }
-      const routing = await routeIntent(message, request.userId, payload.file, payload.history, payload.lastAction);
-      console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2), routing.followUp?.action || "none");
-      if (message && !payload.file && routing.followUp?.action === "decline") {
-        return answerResponse(
-          { intent: "question", confidence: 0.95, interpretation: "Leave that unsaved.", action: "proceed" },
-          "Okay. I won't save that.",
-          false,
-        );
-      }
-      if (message && !payload.file && routing.followUp?.action === "accept" && routing.followUp.fact) {
-        return await saveOfferedFact(request.userId, routing.followUp.fact);
-      }
-      if (routing.action === "clarify") {
-        return await clarifyResponse(request.userId, routing, payload);
-      }
-      return await executeIntent(request.userId, routing, payload);
-    } catch (err) {
-      return sendError(reply, err, "DIRA couldn't take that in just now");
-    }
+    if (wantsReadonly(request)) return runReadonly(() => takeInput(request, reply));
+    return takeInput(request, reply);
   });
 
   fastify.post("/home/confirm", { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    if (wantsReadonly(request)) return reply.code(409).send({ error: "A readonly request can't confirm anything." });
     try {
       const body = request.body || {};
       const sessionId = typeof body.sessionId === "string" ? body.sessionId : "";
       const entry = takePending(sessionId, request.userId);
       if (!entry) return reply.code(404).send({ error: "That confirmation expired. Say it again." });
+      if (entry.readonly) return reply.code(409).send({ error: "That came from a readonly request, so there is nothing to confirm." });
       if (body.confirmed !== true) {
         await cancelPending(entry, request.userId);
         return doneResponse(entry.routing, "dismissed", { message: "Left it as it was." }, null);
@@ -111,6 +91,34 @@ export default async function homeRoutes(fastify) {
   });
 }
 
+async function takeInput(request, reply) {
+  try {
+    const payload = await readPayload(request);
+    const message = payload.message.trim();
+    if (!message && !payload.file) {
+      return reply.code(400).send({ error: "Say something, or attach a file." });
+    }
+    const routing = await routeIntent(message, request.userId, payload.file, payload.history, payload.lastAction);
+    console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2), routing.followUp?.action || "none", isReadonly() ? "readonly" : "");
+    if (message && !payload.file && routing.followUp?.action === "decline") {
+      return answerResponse(
+        { intent: "question", confidence: 0.95, interpretation: "Leave that unsaved.", action: "proceed" },
+        "Okay. I won't save that.",
+        false,
+      );
+    }
+    if (message && !payload.file && routing.followUp?.action === "accept" && routing.followUp.fact) {
+      return await saveOfferedFact(request.userId, routing.followUp.fact);
+    }
+    if (routing.action === "clarify") {
+      return await clarifyResponse(request.userId, routing, payload);
+    }
+    return await executeIntent(request.userId, routing, payload);
+  } catch (err) {
+    return sendError(reply, err, "DIRA couldn't take that in just now");
+  }
+}
+
 async function executeIntent(userId, routing, payload) {
   if (routing.intent === "intake_file") return runIntakeFile(userId, routing, payload);
   if (routing.intent === "intake_text") return runIntakeText(userId, routing, payload);
@@ -125,6 +133,7 @@ async function executeIntent(userId, routing, payload) {
 }
 
 async function runIntakeFile(userId, routing, payload) {
+  if (isReadonly()) return readonlySkip(routing, "read and save the attached file");
   const stored = payload.storedFile || (payload.file ? await storeUpload(payload.file) : null);
   if (!stored) {
     return answerResponse(routing, "Attach the file and I'll read it.", false);
@@ -150,6 +159,9 @@ async function runIntakeFile(userId, routing, payload) {
 }
 
 async function saveOfferedFact(userId, content) {
+  if (isReadonly()) {
+    return readonlySkip({ intent: "intake_text", confidence: 0.95, interpretation: "Save the offered fact.", action: "proceed" }, `save “${content}”`);
+  }
   const queue = await prisma.inputQueue.create({
     data: {
       userId,
@@ -227,6 +239,10 @@ async function runIntakeText(userId, routing, payload) {
   if (content.length < 10) {
     return answerResponse(routing, "Say a little more about what happened and I'll save it.", false);
   }
+  if (isReadonly()) {
+    const result = await understandText(content, userId);
+    return readonlySkip(routing, `save “${result.understood?.title || "this"}” as an event`);
+  }
   const queue = await prisma.inputQueue.create({
     data: {
       userId,
@@ -283,7 +299,7 @@ async function runQuestion(userId, routing, payload) {
     console.error("[home] fact extract failed:", err.message);
     return [];
   });
-  if (looksRelational(payload.message) && !isPeopleQuestion(payload.message)) {
+  if (!isReadonly() && looksRelational(payload.message) && !isPeopleQuestion(payload.message)) {
     scheduleExtraction(userId, payload.message, { source: "conversation", forceStatus: "suggested", title: "conversation" });
   }
   const [reply, facts] = await Promise.all([chat(messages, userId), factsPromise]);
@@ -332,6 +348,7 @@ async function runCommand(userId, routing, payload) {
 async function runJournal(userId, routing, payload) {
   const content = payload.message.trim();
   if (!content) return answerResponse(routing, "Write the reflection and I'll keep it.", false);
+  if (isReadonly()) return readonlySkip(routing, "save this to your journal");
   if (routing.action === "confirm") {
     const sessionId = remember(userId, { kind: "journal", content, routing });
     return {
@@ -440,7 +457,7 @@ async function runCorrection(userId, routing, payload) {
 }
 
 async function clarifyResponse(userId, routing, payload) {
-  const storedFile = payload.storedFile || (payload.file ? await storeUpload(payload.file) : null);
+  const storedFile = payload.storedFile || (payload.file && !isReadonly() ? await storeUpload(payload.file) : null);
   const sessionId = remember(userId, {
     kind: "clarify",
     routing,
@@ -597,13 +614,22 @@ async function runRelationshipAdd(userId, routing, payload) {
       return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
     }
   }
+  // "My sisters' birthdays: Jeni was born on 4 December 1980 …" names no new connection but records dates.
+  if (!triples.length && /\b\d{4}\b/.test(payload.message)) {
+    return runIntakeText(userId, { ...routing, intent: "intake_text", interpretation: "Save this as something that happened." }, payload);
+  }
+  if (isReadonly()) {
+    const lines = triples.map((triple) => `${triple.subject?.name} ${triple.predicate} ${triple.object?.name}`);
+    return readonlySkip(routing, lines.length ? `suggest ${lines.join("; ")}` : "save a connection, but found none");
+  }
   const committed = await commitTriples(userId, triples, {
     source: "conversation",
     forceStatus: "suggested",
     entityFacts,
     message: payload.message,
   });
-  const edges = await recentSuggested(userId, committed.created + committed.updated);
+  const count = committed.created + committed.updated;
+  const edges = count ? await recentSuggested(userId, count) : [];
   return relationshipCard(userId, routing, edges, "add");
 }
 
@@ -617,7 +643,7 @@ async function runRelationshipChange(userId, routing, payload) {
     return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
   }
   const proposals = [];
-  for (const triple of extracted.triples) {
+  for (const triple of isReadonly() ? [] : extracted.triples) {
     const saved = await commitTriples(userId, [triple], { source: "conversation", forceStatus: "suggested" });
     void saved;
   }
@@ -738,7 +764,8 @@ async function relationshipCard(userId, routing, edges, mode) {
 
 async function recentSuggested(userId, count) {
   return prisma.relationship.findMany({
-    where: { userId, status: "suggested", label: { not: "conflict" } },
+    // label is usually NULL, and SQL drops NULL rows from a plain `not`.
+    where: { userId, status: "suggested", OR: [{ label: null }, { label: { not: "conflict" } }] },
     orderBy: { createdAt: "desc" },
     take: Math.max(count, 1),
   });
@@ -936,6 +963,22 @@ function answerResponse(routing, reply, confirmationRequired, extra = {}) {
   };
 }
 
+// What a readonly request gets instead of a save: the same routing, and a note of what was skipped.
+function readonlySkip(routing, what) {
+  return {
+    sessionId: null,
+    routing: publicRouting(routing),
+    action: "proceed",
+    result: {
+      type: "readonly_skipped",
+      content: { message: `Readonly: would ${what}. Nothing was saved.` },
+      confirmationRequired: false,
+      confirmationText: null,
+    },
+    clarificationOptions: null,
+  };
+}
+
 function doneResponse(routing, type, content, confirmationText) {
   return {
     sessionId: null,
@@ -992,7 +1035,7 @@ function advisorMessages(history, message) {
 function remember(userId, payload) {
   sweep();
   const sessionId = randomUUID();
-  pending.set(sessionId, { userId, expiresAt: Date.now() + PENDING_TTL_MS, ...payload });
+  pending.set(sessionId, { userId, expiresAt: Date.now() + PENDING_TTL_MS, readonly: isReadonly(), ...payload });
   return sessionId;
 }
 

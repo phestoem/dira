@@ -124,6 +124,7 @@ export async function chat(messages, userId) {
   const graph = await graphContext(userId, latest);
   context.graphLines = graph.lines;
   context.familyLines = graph.family;
+  context.holdingLines = HOLDINGS_QUESTION.test(latest) ? await holdingLines(userId) : [];
   const system = buildSystemPrompt(context);
   const reply = await completeChat(history, system);
   console.log(
@@ -380,6 +381,8 @@ ${(context.graphLines || []).length ? context.graphLines.join("\n") : "none conf
 
 ${(context.familyLines || []).length ? `FAMILY:\n${context.familyLines.join("\n")}` : ""}
 
+${(context.holdingLines || []).length ? `PROPERTY RECORDS (every recorded event about land, plots or houses; several records can describe the same place):\n${context.holdingLines.join("\n")}\nWhen asked what properties they have, name each distinct place from these records with its plot number or location. Leave none out.` : ""}
+
 Prefer confirmed graph edges for who-is-connected questions.
 Mention when a relationship has ended.
 Never state a name, date, relationship or place about a person unless it appears above.
@@ -434,6 +437,26 @@ async function answerPeople(userId, question) {
     return { reply: answerPeopleQuestion(question, context), sourceIds: [] };
   }
   return deliverPeopleAnswer(modelText, context, question);
+}
+
+const HOLDINGS_QUESTION = /\b(propert(?:y|ies)|lands?|plots?|houses?|homes|real estate|assets|kiwanja|viwanja|nyumba|mali)\b/i;
+const HOLDINGS_EVENT = /\b(plots?|land|house|property|certificate of occupancy|title deed|kiwanja|nyumba|shamba|mauziano)\b/i;
+
+// Property questions see every property record, not just the most recent events.
+async function holdingLines(userId) {
+  const events = await prisma.event.findMany({
+    where: { userId, status: { not: "archived" } },
+    orderBy: [{ occurredAt: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
+    select: { title: true, occurredAt: true, understoodMeaning: true, rawInput: true },
+  });
+  return events
+    .filter((event) => HOLDINGS_EVENT.test([event.title, event.understoodMeaning, event.rawInput].filter(Boolean).join(" ")))
+    .slice(0, 40)
+    .map((event) => [
+      event.title,
+      event.occurredAt ? event.occurredAt.toISOString().slice(0, 10) : "undated",
+      clip(event.understoodMeaning, 260),
+    ].filter(Boolean).join(" | "));
 }
 
 function familyLines(tree) {

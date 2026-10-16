@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma.js";
+import { isReadonly } from "../../readonly.js";
 import { normalizeName } from "./entityResolver.js";
 import { getFamilyTree } from "./graphQuery.js";
 
@@ -21,9 +22,12 @@ export function isPeopleQuestion(text) {
   const value = String(text || "").trim();
   if (!value) return false;
   if (/\b(my|our)\s+(sisters|brothers|children|sons|daughters|wife|husband|father|mother)\s+(are|is)\b/i.test(value)) return false;
+  // "My sisters' birthdays: Jeni was born on 4 December 1980, …" tells; it doesn't ask.
+  if (!value.includes("?") && !/^(?:please\s+)?(?:who|what|when|where|which|how|list|show|name|tell|give|remind|do|does|did|is|are)\b/i.test(value) && /\b(born|married|died|passed away)\b/i.test(value)) return false;
   if (/\b(family tree|who is|who's|who are|how old|birthdays?|birth dates?|relatives)\b/i.test(value)) return true;
   if (/\bhow many\b/i.test(value) && /\b(kids|children|sons|daughters|sisters|brothers)\b/i.test(value)) return true;
   if (/\b(children|kids|sisters|brothers|parents)'?s?\s+names\b/i.test(value)) return true;
+  if (/^(?:please\s+)?(?:list|show|name|tell me|give me|remind me of)\b/i.test(value) && /\b(my|our)\s+(parents|wife|husband|spouse|father|mother|sisters|brothers|siblings|children|kids|sons|daughters|family)\b/i.test(value)) return true;
   if (/[?]/.test(value) && /\b(my|our)\s+(parents|wife|husband|father|mother|sisters|brothers|children|kids)\b/i.test(value)) return true;
   return /\b(my|our)\s+\w+'s\s+(family|spouse|wife|husband|children|parents|sisters|brothers|birthday|age)\b/i.test(value);
 }
@@ -87,8 +91,10 @@ export function buildPeopleContext({ self, people = [], edges = [], events = [] 
     });
   }
   const records = recordedFromEvents(events, roster);
+  refineKinds(roster, records);
   const eventFacts = [];
   for (const record of records) {
+    if (!record.name) continue;
     if (record.name) allowedNames.push(record.name);
     for (const iso of [record.birthDate, record.deathDate, record.marriageDate]) {
       if (iso) allowedDates.add(iso);
@@ -162,20 +168,21 @@ export function usesRecordedAnswer(question) {
   if (/\bfamily tree\b/i.test(q)) return true;
   if (/\b(wife|husband|spouse)\b/i.test(q)) return true;
   if (/\b(father|mother|dad|mum|baba|mama|parents?)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return true;
-  if (/\b(sisters?|brothers?)\b/i.test(q)) return true;
+  if (/\b(sisters?|brothers?|siblings?)\b/i.test(q)) return true;
   if (/\b(kids|children|sons|daughters)\b/i.test(q)) return true;
   return false;
 }
 
 export function answerPeopleQuestion(question, context) {
   const q = String(question || "");
+  if (/\bfamily tree\b/i.test(q) && !/\b(father|mother)'s\b/i.test(q)) return familyTreeAnswer(context);
   if (/\b(wife|husband|spouse)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return spouseAnswer(q, context);
   if (/\bparents?\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentsAnswer(context);
   if (/\b(father|dad|baba)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentRoleAnswer("father", context);
   if (/\b(mother|mum|mama)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentRoleAnswer("mother", context);
   if (/\b(kids|children|sons|daughters)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return childrenAnswer(q, context);
-  if (/\bsisters?\b/i.test(q) && /\bbirth/i.test(q)) return sisterBirthAnswer(context);
-  if (/\b(sisters?|brothers?)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return siblingAnswer(q, context);
+  if (/\b(sisters?|brothers?|siblings?)\b/i.test(q) && /\b(born|birth|birthdays?)\b/i.test(q)) return siblingBirthAnswer(q, context);
+  if (/\b(sisters?|brothers?|siblings?)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return siblingAnswer(q, context);
   const people = context?.people || [];
   const father = people.find((person) => person.kind === "father");
   const mother = people.find((person) => person.kind === "mother");
@@ -281,6 +288,7 @@ export function conflictEdgeData(userId, conflict) {
 }
 
 export async function persistConflicts(userId, conflicts) {
+  if (isReadonly()) return;
   for (const conflict of conflicts || []) {
     if (!conflict?.entityId) continue;
     const existing = await prisma.relationship.findFirst({
@@ -291,11 +299,22 @@ export async function persistConflicts(userId, conflicts) {
   }
 }
 
-function peopleFromTree(tree) {
+// The tree says where someone sits (parent, sibling, spouse, child). A specific kinship
+// word on the entity refines that; a generic entity kind like "person" never replaces it.
+const ROLE_KINDS = {
+  parent: ["father", "mother"],
+  sibling: ["sister", "brother"],
+  spouse: ["wife", "husband"],
+  child: ["son", "daughter"],
+};
+
+export function peopleFromTree(tree) {
   const rows = [];
-  const push = (person, kind) => {
+  const push = (person, role) => {
     if (!person?.id || rows.some((row) => row.id === person.id)) return;
-    rows.push({ ...person, kind: person.kind || kind || null });
+    const own = String(person.kind || "").toLowerCase();
+    const kind = role === "self" ? "self" : (ROLE_KINDS[role]?.includes(own) ? own : role);
+    rows.push({ ...person, kind, role });
   };
   push(tree?.self, "self");
   for (const person of tree?.parents || []) push(person, "parent");
@@ -305,194 +324,175 @@ function peopleFromTree(tree) {
   return rows;
 }
 
+// Event wording can say "my sister Jeni" where the edge only says sibling_of.
+function refineKinds(people, records) {
+  for (const person of people) {
+    const choices = ROLE_KINDS[person.role];
+    if (!choices || choices.includes(person.kind)) continue;
+    const named = records.find((item) => choices.includes(item.kind) && samePerson(item, person));
+    if (named) person.kind = named.kind;
+  }
+}
+
 const RECORD_LINE = "From your records — confirm in Review to lock it in.";
-const NAME = "[\\p{Lu}][\\p{L}'’\\-]+(?:\\s+[\\p{Lu}][\\p{L}'’\\-]+){0,3}";
-const SPOKEN = `\\d{1,2}\\s+(?:${Object.keys(MONTHS).map((month) => `${month[0].toUpperCase()}${month.slice(1)}|${month}`).join("|")})\\s+\\d{4}`;
-
-function spouseAnswer(question, context) {
-  const word = /\bhusband\b/i.test(question) && !/\bwife\b/i.test(question) ? "husband" : "wife";
-  const confirmed = (context?.people || []).find((person) => person.kind === "wife" || person.kind === "husband" || person.kind === "spouse");
-  const record = spouseRecord(context);
-  if (confirmed) {
-    const married = record?.marriageDate ? ` (married ${prettyDate(record.marriageDate)})` : "";
-    const line = `${confirmed.name} — your ${confirmed.kind === "spouse" ? word : confirmed.kind}${married}.`;
-    return record?.marriageDate ? `${line}\n${RECORD_LINE}` : line;
-  }
-  if (!record) return "Your spouse isn't recorded yet.";
-  const married = record.marriageDate ? ` (married ${prettyDate(record.marriageDate)})` : "";
-  return `${record.name} — your ${word}${married}.\n${RECORD_LINE}`;
-}
-
-function spouseRecord(context) {
-  const hits = (context?.records || []).filter((item) => item.kind === "wife" || item.kind === "husband" || item.kind === "spouse");
-  if (!hits.length) return null;
-  return hits.reduce((best, item) => ({
-    name: String(item.name || "").length > String(best.name || "").length ? item.name : best.name,
-    kind: best.kind && best.kind !== "spouse" ? best.kind : (item.kind || best.kind),
-    marriageDate: best.marriageDate || item.marriageDate,
-  }));
-}
-
-function parentsAnswer(context) {
-  const lines = [];
-  let fromEvent = false;
-  for (const kind of ["father", "mother"]) {
-    const confirmed = (context?.people || []).find((person) => person.kind === kind);
-    const record = (context?.records || []).find((item) => item.kind === kind);
-    const person = confirmed || record;
-    if (!person) continue;
-    if (!confirmed) fromEvent = true;
-    const death = confirmed?.deathDate || record?.deathDate;
-    lines.push(`${(confirmed || record).name} — your ${kind}${passed({ deathDate: death })}.`);
-  }
-  if (!lines.length) return "Your parents aren't recorded yet.";
-  if (fromEvent) lines.push(RECORD_LINE);
-  return lines.join("\n");
-}
-
-function parentRoleAnswer(kind, context) {
-  const confirmed = (context?.people || []).find((person) => person.kind === kind);
-  const record = (context?.records || []).find((item) => item.kind === kind);
-  const person = confirmed || record;
-  if (!person) return `Your ${kind} isn't recorded yet.`;
-  const death = confirmed?.deathDate || record?.deathDate;
-  const line = `${person.name} — your ${kind}${passed({ deathDate: death })}.`;
-  return confirmed ? line : `${line}\n${RECORD_LINE}`;
-}
-
-function siblingAnswer(question, context) {
-  const want = /\bbrother/i.test(question) ? "brother" : "sister";
-  const specific = (context?.people || []).filter((person) => person.kind === want);
-  const broader = (context?.people || []).filter((person) => person.kind === "sibling" || person.kind === "sister" || person.kind === "brother");
-  const people = specific.length ? specific : broader;
-  const eventPeople = (context?.records || []).filter((item) => item.kind === want && !people.some((person) => namesMatch(person.name, item.name)));
-  const names = [...people.map((person) => person.name), ...eventPeople.map((item) => item.name)];
-  if (!names.length) return `Your ${want}s aren't recorded yet.`;
-  const label = specific.length || eventPeople.length ? `${want}s` : "siblings";
-  const line = `Your ${label}: ${names.join(", ")}.`;
-  return eventPeople.length && !people.length ? `${line}\n${RECORD_LINE}` : line;
-}
-
-function childrenAnswer(question, context) {
-  const confirmed = (context?.people || []).filter((person) => person.kind === "child" || person.kind === "son" || person.kind === "daughter");
-  const extra = (context?.records || []).filter((item) => ["child", "son", "daughter"].includes(item.kind) && !confirmed.some((person) => namesMatch(person.name, item.name)));
-  const names = [...confirmed.map((person) => person.name), ...extra.map((item) => item.name)];
-  if (!names.length) return "Your children aren't recorded yet.";
-  const count = /\bhow many\b/i.test(question) ? `You have ${names.length} children: ` : "Your children: ";
-  const line = `${count}${names.join(", ")}.`;
-  return extra.length ? `${line}\n${RECORD_LINE}` : line;
-}
-
-function sisterBirthAnswer(context) {
-  const sisters = (context?.people || []).filter((person) => person.kind === "sister" || person.kind === "sibling");
-  const lines = [];
-  let fromEvent = false;
-  for (const sister of sisters) {
-    const found = birthOf(sister, context);
-    if (!found) continue;
-    if (found.fromEvent) fromEvent = true;
-    lines.push(`${sister.name} — ${prettyDate(found.iso)}`);
-  }
-  if (!lines.length) return "Your sisters' birth dates aren't recorded yet.";
-  if (fromEvent) lines.push(RECORD_LINE);
-  return lines.join("\n");
-}
-
-function birthOf(person, context) {
-  const own = normalizeDate(person?.birthDate);
-  if (own) return { iso: own, fromEvent: false };
-  const record = (context?.records || []).find((item) => item.birthDate && namesMatch(item.name, person?.name));
-  return record ? { iso: record.birthDate, fromEvent: true } : null;
-}
+// "Prisha - Neema" is one name; reading it as "Neema" would hand the date to a sister.
+const NAME = "[\\p{Lu}][\\p{L}'’\\-]+(?:(?:\\s+[-–]\\s+|\\s+)[\\p{Lu}][\\p{L}'’\\-]+){0,3}";
+const MONTH_WORDS = Object.keys(MONTHS).sort((a, b) => b.length - a.length).map(anyCase).join("|");
+const DAY = "\\d{1,2}(?:st|nd|rd|th)?";
+// "3 February 1993", "25th of April 1977", "February 3rd, 1993", "Feb 17th 1978", "2006-08-05".
+const DATE = `(?:${DAY}\\s+(?:of\\s+)?(?:${MONTH_WORDS})\\.?,?\\s+\\d{4}|(?:${MONTH_WORDS})\\.?\\s+${DAY},?\\s+\\d{4}|\\d{4}-\\d{2}-\\d{2})`;
+const DATE_RE = new RegExp(DATE, "gi");
+const KIN_WORDS = {
+  father: "father", dad: "father", baba: "father", fadher: "father",
+  mother: "mother", mum: "mother", mom: "mother", mama: "mother",
+  sister: "sister", brother: "brother", son: "son", daughter: "daughter",
+  wife: "wife", husband: "husband", fiance: "spouse", "fiancé": "spouse", fiancee: "spouse", "fiancée": "spouse",
+};
+const KIN = `(?:${Object.keys(KIN_WORDS).map(anyCase).join("|")})`;
+const ORDER = "(?:(?:older|elder|eldest|oldest|younger|youngest|little|big|baby|first|second|third|fourth|fifth|last|first-born|firstborn|only)\\s+)";
+const LIST_ROLE = { children: "child", kids: "child", sons: "son", daughters: "daughter", sisters: "sister", brothers: "brother", siblings: "sibling" };
+const NOT_NAME = new Set([
+  "i", "me", "my", "our", "your", "you", "he", "she", "his", "her", "their", "they", "we", "it", "the", "a", "an", "on", "in", "at",
+  "and", "then", "followed", "birth", "born", "title", "date", "certificate", "user", "speaker", "family", "information", "profile",
+  ...Object.keys(MONTHS),
+]);
 
 function recordedFromEvents(events, people) {
   const records = [];
   for (const event of events || []) {
     const text = [event?.title, event?.understoodMeaning, event?.fullText, event?.rawInput, event?.notes].filter(Boolean).join(". ").replace(/\s+/g, " ").trim();
     if (!text) continue;
-    collectKinship(text, event.id, people, records);
-    collectLists(text, event.id, people, records);
-    collectDatedNames(text, event.id, people, records);
-    attachJoinedSpouse(text, event.id, people, records);
+    // One sentence at a time, so a date is never borrowed from the next fact.
+    for (const sentence of text.split(/(?<=[.!?])\s+(?=[\p{Lu}\d])/u)) {
+      collectKinship(sentence, event.id, people, records);
+      collectLists(sentence, event.id, people, records);
+      collectDatedNames(sentence, event.id, people, records);
+      collectMarriage(sentence, event.id, people, records);
+    }
   }
   return records;
 }
 
 function collectKinship(text, eventId, people, records) {
-  const patterns = [
-    { re: new RegExp(`\\b(?:[Mm]y|[Oo]ur)\\s+(wife|husband)\\s+(?:[Ii]s\\s+)?(${NAME})`, "gu"), kind: (match) => match[1].toLowerCase() },
-    { re: new RegExp(`\\b(?:[Mm]arriage|[Mm]arried|[Ee]ngagement)\\s+to\\s+(${NAME})`, "gu"), kind: () => "spouse" },
-    { re: new RegExp(`\\b(?:[Mm]y|[Oo]ur)\\s+(father|mother|mum|mom|dad|mama|baba)\\s+(?:[Ii]s\\s+)?(${NAME})`, "gu"), kind: (match) => parentKind(match[1]) },
-    { re: new RegExp(`\\b(mke|mume)\\s+wangu(?:\\s+ni)?\\s+(${NAME})`, "gu"), kind: (match) => (match[1].toLowerCase() === "mke" ? "wife" : "husband") },
-    { re: new RegExp(`\\b(baba|mama)\\s+yangu(?:\\s+ni)?\\s+(${NAME})`, "gu"), kind: (match) => (match[1].toLowerCase() === "mama" ? "mother" : "father") },
-  ];
-  for (const pattern of patterns) {
-    for (const match of text.matchAll(pattern.re)) {
-      const raw = match[match.length - 1];
-      const resolved = resolveRecord(raw, people);
-      if (!resolved) continue;
-      const window = text.slice(match.index, match.index + match[0].length + 80);
-      const death = /\b(passed away|died|death)\b/i.test(window) ? spokenDate(window) : null;
-      const kind = pattern.kind(match);
-      const marriage = kind === "spouse" || kind === "wife" || kind === "husband" ? spokenDate(window) : null;
-      mergeRecord(records, { ...resolved, kind, eventId, birthDate: null, deathDate: death, marriageDate: marriage && !death ? marriage : null });
-    }
+  const add = (raw, kind) => {
+    const resolved = resolveRecord(raw, people);
+    if (resolved) mergeRecord(records, { ...resolved, kind, eventId, birthDate: null, deathDate: null, marriageDate: null });
+  };
+  // "my sister Jeni", "our second son Presley", "the older son, Patrick", "your father Enock", "my wife is Zelda"
+  // Without my/our/your/the, only the "son, Patrick" form counts; "her mother Emmiliana" is someone else's.
+  const before = new RegExp(`(\\b(?:[Mm]y|[Oo]ur|[Yy]our|[Tt]he)\\s+)?${ORDER}?\\b(${KIN})\\b(,?)\\s+(?:(?:is|was|named|called)\\s+)?(${NAME})`, "gu");
+  for (const match of text.matchAll(before)) {
+    if (!match[1] && !match[3]) continue;
+    add(match[4], KIN_WORDS[match[2].toLowerCase()]);
+  }
+  // "Careen is my eldest daughter", "Powell is our third son"
+  for (const match of text.matchAll(new RegExp(`(${NAME})\\s+is\\s+(?:my|our|your)\\s+${ORDER}?(${KIN})\\b`, "gu"))) {
+    add(match[1], KIN_WORDS[match[2].toLowerCase()]);
+  }
+  // "I am the father of Careen", "The speaker is the father of Careen"
+  for (const match of text.matchAll(new RegExp(`\\b(?:I am|I'm|[Tt]he speaker is|[Uu]ser is)\\s+the\\s+(?:father|mother|parent)\\s+of\\s+(${NAME})`, "gu"))) {
+    add(match[1], "child");
+  }
+  // "Froidah Biniala Kyando … married to my father"
+  const partner = text.match(/\bmarried to (?:my|our|your) (father|mother|dad|mum|mom)\b/i);
+  if (partner) {
+    const first = candidateNames(text.slice(0, partner.index)).find((name) => resolveRecord(name, people));
+    if (first) add(first, parentKind(partner[1]) === "father" ? "mother" : "father");
+  }
+  // Swahili: "mke wangu ni Zelda", "baba yangu ni Enock"
+  for (const match of text.matchAll(new RegExp(`\\b(mke|mume|baba|mama)\\s+(?:wangu|yangu)(?:\\s+ni)?\\s+(${NAME})`, "gu"))) {
+    add(match[2], { mke: "wife", mume: "husband", baba: "father", mama: "mother" }[match[1].toLowerCase()]);
   }
 }
 
+// "I have four sisters: Jeni, Leah, Neema and Zenah", "my children are …", "You have sisters Jeni, Leah …"
 function collectLists(text, eventId, people, records) {
-  const match = String(text || "").match(/\b[Mm]y\s+(children|sons|daughters|sisters|brothers)\s+are\s+([^.]*)/);
-  if (!match) return;
-  const role = match[1].toLowerCase();
-  const kind = role === "children" ? "child" : role.replace(/s$/, "");
-  for (const name of splitNameList(match[2])) {
-    const resolved = resolveRecord(name, people);
-    if (!resolved) continue;
-    mergeRecord(records, { ...resolved, kind, eventId, birthDate: null, deathDate: null, marriageDate: null });
+  const lists = [
+    new RegExp(`\\b(?:[Mm]y|[Oo]ur|[Yy]our)\\s+(?:\\w+\\s+)?(children|kids|sons|daughters|sisters|brothers|siblings)\\s+(?:are|include)\\s+(.+)$`, "u"),
+    new RegExp(`\\b(?:I|[Ww]e|[Yy]ou)\\s+have\\s+(?:\\w+\\s+)?(children|kids|sons|daughters|sisters|brothers|siblings)\\s*(?::|,|-|—|named|called)?\\s*(.+)$`, "u"),
+  ];
+  for (const pattern of lists) {
+    const match = text.match(pattern);
+    if (!match) continue;
+    for (const name of splitNameList(match[2])) {
+      const resolved = resolveRecord(name, people);
+      if (resolved) mergeRecord(records, { ...resolved, kind: LIST_ROLE[match[1].toLowerCase()], eventId, birthDate: null, deathDate: null, marriageDate: null });
+    }
   }
 }
 
 function splitNameList(text) {
   return String(text || "")
     .replace(/\([^)]*\)/g, " ")
-    .split(/,|\band\b/i)
+    .split(/,|;|\band\b/i)
     .map((part) => properWords(part))
     .filter(Boolean);
 }
 
-function attachJoinedSpouse(text, eventId, people, records) {
-  const date = marriageDateIn(text);
-  for (const match of String(text || "").matchAll(new RegExp(`\\b(${NAME})\\s+joined\\s+me\\b`, "gu"))) {
-    const resolved = resolveRecord(match[1], people);
-    if (!resolved) continue;
-    mergeRecord(records, { ...resolved, kind: "spouse", eventId, birthDate: null, deathDate: null, marriageDate: date });
+function collectDatedNames(text, eventId, people, records) {
+  const aboutBirth = /\b(born|birth|birthdays?|welcomed)\b/i.test(text);
+  if (aboutBirth) {
+    // "Zenah … was born on February 3rd, 1993", "Patrick was born in Helsinki on September 25, 2008", "Powell, born on 30 May 2015"
+    for (const match of text.matchAll(new RegExp(`(${NAME}),?\\s+(?:was\\s+)?born\\b[^.!?]{0,60}?(${DATE})`, "gu"))) {
+      addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
+    }
+    // "On 11th December 2012 our second son Presley was born"
+    for (const match of text.matchAll(new RegExp(`\\b[Oo]n\\s+(${DATE}),?\\s+(?:[^.!?]{0,40}?\\s)?(${NAME})\\s+was\\s+born\\b`, "gu"))) {
+      addDate(records, people, match[2], eventId, { birthDate: spokenDate(match[1]) });
+    }
   }
-  if (!date) return;
-  const spouse = records.find((item) => item.eventId === eventId && (item.kind === "spouse" || item.kind === "wife" || item.kind === "husband"));
-  if (spouse && !spouse.marriageDate) spouse.marriageDate = date;
+  // "… Presley on 11 December 2012 and Prisha on 20 June 2020"; a bare "Leah 14 Dec 1983" only for someone known.
+  for (const match of text.matchAll(new RegExp(`(${NAME}),?\\s+(?:on\\s+)?(${DATE})`, "gu"))) {
+    const lead = text.slice(Math.max(0, match.index - 40), match.index);
+    if (/\b(marriage|married|engagement|engaged|passed away|died|registered)\b/i.test(lead)) continue;
+    if (!aboutBirth && !resolveRecord(match[1], people)?.personId) continue;
+    addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
+  }
+  // "Enock Mwakyusa, born … in Rungwe, Mbeya, and he died on 25 April 2004": the person is the
+  // first known name before the verb, not the nearest capitalised word (which is often a place).
+  for (const match of text.matchAll(new RegExp(`\\b(?:passed away|died)\\s+(?:on\\s+)?(${DATE})`, "gu"))) {
+    const names = candidateNames(text.slice(0, match.index));
+    const who = names.find((name) => resolveRecord(name, people)?.personId) || names[0];
+    if (who) addDate(records, people, who, eventId, { deathDate: spokenDate(match[1]) });
+  }
+}
+
+// "I married Zelda … on 5 August 2006", "marriage to Zelda", "we got married on 5th August 2006", "Zelda joined me"
+function collectMarriage(text, eventId, people, records) {
+  if (!/\b(married|marriage|wedding|wed|engaged|engagement|joined me)\b/i.test(text)) return;
+  const date = /\bengag/i.test(text) && !/\b(married|marriage|wedding)\b/i.test(text) ? null : marriageDateIn(text);
+  let named = false;
+  const patterns = [
+    new RegExp(`\\b(?:married|wed)\\s+(?:to\\s+)?(${NAME})`, "gu"),
+    new RegExp(`\\b(?:[Mm]arriage|[Ee]ngagement|[Ww]edding)\\s+(?:to|with)\\s+(${NAME})`, "gu"),
+    new RegExp(`\\bengaged\\s+(?:to\\s+)?(?:my\\s+fianc[ée]e?\\s+)?(${NAME})`, "gu"),
+    new RegExp(`(${NAME})\\s+joined\\s+me\\b`, "gu"),
+  ];
+  for (const pattern of patterns) {
+    for (const match of text.matchAll(pattern)) {
+      if (/\bmarried to (?:my|our|your) (father|mother)/i.test(match[0])) continue;
+      const resolved = resolveRecord(match[1], people);
+      if (!resolved) continue;
+      named = true;
+      mergeRecord(records, { ...resolved, kind: "spouse", eventId, birthDate: null, deathDate: null, marriageDate: date });
+    }
+  }
+  // "we got married on 5th August 2006" names nobody; it still dates the marriage.
+  if (!named && date && /\b(we|I)\b[^.!?]{0,20}\b(got married|married|wedding)\b|\bmy (wife|husband)\b/i.test(text) && !/\bparents\b/i.test(text)) {
+    const kind = /\bmy wife\b/i.test(text) ? "wife" : /\bmy husband\b/i.test(text) ? "husband" : "spouse";
+    records.push({ name: "", personId: null, kind, eventId, birthDate: null, deathDate: null, marriageDate: date });
+  }
+  const spouse = records.find((item) => item.eventId === eventId && ["spouse", "wife", "husband"].includes(item.kind));
+  if (spouse && !spouse.marriageDate && date) spouse.marriageDate = date;
 }
 
 function marriageDateIn(text) {
-  const near = /\b(?:married|marriage|wedding|engagement)\b[^.!?]{0,60}/gi;
-  for (const match of String(text || "").matchAll(near)) {
-    const window = text.slice(Math.max(0, match.index - 24), match.index + match[0].length);
-    const iso = datesIn(window).map(normalizeDate).find((value) => value && /^\d{4}-\d{2}-\d{2}$/.test(value));
-    if (iso) return iso;
-  }
-  return null;
-}
-
-function collectDatedNames(text, eventId, people, records) {
-  const born = new RegExp(`\\b(${NAME})\\s+(?:[Ww]as\\s+)?[Bb]orn(?:\\s+[Oo]n)?\\s+(${SPOKEN})`, "gu");
-  const listed = new RegExp(`\\b(${NAME})\\s+(${SPOKEN})`, "gu");
-  const died = new RegExp(`\\b(${NAME})\\b[^.!?]{0,80}?\\b(?:[Pp]assed away|[Dd]ied)\\s+[Oo]n\\s+(${SPOKEN})`, "gu");
-  for (const match of text.matchAll(born)) addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
-  for (const match of text.matchAll(listed)) {
-    const before = text.slice(Math.max(0, match.index - 40), match.index);
-    if (/\b(marriage|married|engagement|passed away|died)\b/i.test(before)) continue;
-    addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
-  }
-  for (const match of text.matchAll(died)) addDate(records, people, match[1], eventId, { deathDate: spokenDate(match[2]) });
+  const word = String(text || "").match(/\b(?:married|marriage|wedding|wed)\b/i);
+  if (!word) return null;
+  const dates = [...String(text).matchAll(DATE_RE)].map((match) => ({ at: match.index, iso: normalizeDate(match[0]) })).filter((item) => item.iso);
+  if (!dates.length) return null;
+  dates.sort((a, b) => Math.abs(a.at - word.index) - Math.abs(b.at - word.index));
+  return dates[0].iso;
 }
 
 function addDate(records, people, raw, eventId, dates) {
@@ -502,29 +502,26 @@ function addDate(records, people, raw, eventId, dates) {
 }
 
 function mergeRecord(records, claim) {
-  const existing = records.find((item) => namesMatch(item.name, claim.name) && item.eventId === claim.eventId);
+  const existing = records.find((item) => item.eventId === claim.eventId && samePerson(item, claim));
   if (!existing) {
     records.push({ ...claim });
     return;
   }
-  if (String(claim.name).length > String(existing.name).length) existing.name = claim.name;
+  if (!existing.personId && String(claim.name).length > String(existing.name).length) existing.name = claim.name;
   existing.personId = existing.personId || claim.personId || null;
   existing.birthDate = existing.birthDate || claim.birthDate;
   existing.deathDate = existing.deathDate || claim.deathDate;
   existing.marriageDate = existing.marriageDate || claim.marriageDate;
-  if (claim.kind && (!existing.kind || existing.kind === "spouse")) existing.kind = claim.kind;
-}
-
-function resolveRecordName(name, people) {
-  return resolveRecord(name, people)?.name || "";
+  if (claim.kind && (!existing.kind || existing.kind === "spouse" || existing.kind === "child")) existing.kind = claim.kind;
 }
 
 function resolveRecord(name, people) {
   const cleaned = properWords(name);
   if (!cleaned) return null;
-  const exact = (people || []).find((person) => normalizeName(person.name) === normalizeName(cleaned));
+  const key = normalizeName(cleaned);
+  const exact = (people || []).find((person) => normalizeName(person.name) === key);
   if (exact) return { name: exact.name, personId: exact.id };
-  const first = normalizeName(cleaned).split(" ")[0];
+  const first = key.split(" ")[0];
   const hits = (people || []).filter((person) => normalizeName(person.name).split(" ")[0] === first);
   if (hits.length === 1) return { name: hits[0].name, personId: hits[0].id };
   return { name: cleaned, personId: null };
@@ -532,12 +529,41 @@ function resolveRecord(name, people) {
 
 function properWords(name) {
   const kept = [];
-  for (const word of String(name || "").replace(/^(my|our)\s+/i, "").trim().split(/\s+/)) {
+  const words = String(name || "").replace(/^\s*(?:my|our|your|his|her|their|the|a|an)\s+/i, "").trim().split(/\s+/);
+  for (const raw of words) {
+    const word = raw.replace(/[.,;:!?)]+$/, "");
     if (!word || !/^[\p{Lu}][\p{L}'’\-]*$/u.test(word)) break;
-    if (/^(my|our|the|was|born|on)$/i.test(word)) break;
+    if (NOT_NAME.has(word.toLowerCase())) break;
     kept.push(word);
   }
   return kept.join(" ");
+}
+
+function candidateNames(text) {
+  return [...String(text || "").matchAll(new RegExp(NAME, "gu"))].map((match) => properWords(match[0])).filter(Boolean);
+}
+
+function samePerson(left, right) {
+  if (left?.personId && right?.personId) return left.personId === right.personId;
+  if (left?.id && right?.personId) return left.id === right.personId;
+  if (left?.personId && right?.id) return left.personId === right.id;
+  return namesMatch(left?.name, right?.name);
+}
+
+// One row per person across events, keeping the first non-empty value of each field.
+function distinctPeople(rows) {
+  const out = [];
+  for (const row of rows) {
+    if (!row?.name) continue;
+    const seen = out.find((item) => samePerson(item, row));
+    if (!seen) {
+      out.push({ ...row });
+      continue;
+    }
+    seen.birthDate = seen.birthDate || row.birthDate || null;
+    seen.deathDate = seen.deathDate || row.deathDate || null;
+  }
+  return out;
 }
 
 function namesMatch(left, right) {
@@ -548,12 +574,167 @@ function namesMatch(left, right) {
 }
 
 function parentKind(word) {
-  return ["mother", "mum", "mama"].includes(String(word || "").toLowerCase()) ? "mother" : "father";
+  return ["mother", "mum", "mom", "mama"].includes(String(word || "").toLowerCase()) ? "mother" : "father";
 }
 
 function spokenDate(text) {
-  const match = String(text || "").match(new RegExp(SPOKEN, "i"));
+  const match = String(text || "").match(new RegExp(DATE, "i"));
   return match ? normalizeDate(match[0]) : null;
+}
+
+function anyCase(word) {
+  return `[${word[0].toUpperCase()}${word[0]}]${word.slice(1)}`;
+}
+
+function spouseAnswer(question, context) {
+  const word = /\bhusband\b/i.test(question) && !/\bwife\b/i.test(question) ? "husband" : "wife";
+  const confirmed = (context?.people || []).find((person) => ["wife", "husband", "spouse"].includes(person.kind));
+  const record = spouseRecord(context);
+  if (confirmed) {
+    const married = record?.marriageDate ? ` (married ${prettyDate(record.marriageDate)})` : "";
+    const line = `${confirmed.name} — your ${confirmed.kind === "spouse" ? word : confirmed.kind}${married}.`;
+    return record?.marriageDate ? `${line}\n${RECORD_LINE}` : line;
+  }
+  if (!record?.name) return "Your spouse isn't recorded yet.";
+  const married = record.marriageDate ? ` (married ${prettyDate(record.marriageDate)})` : "";
+  return `${record.name} — your ${record.kind && record.kind !== "spouse" ? record.kind : word}${married}.\n${RECORD_LINE}`;
+}
+
+function spouseRecord(context) {
+  const hits = (context?.records || []).filter((item) => ["wife", "husband", "spouse"].includes(item.kind));
+  if (!hits.length) return null;
+  return hits.reduce((best, item) => ({
+    name: String(item.name || "").length > String(best.name || "").length ? item.name : best.name,
+    kind: best.kind && best.kind !== "spouse" ? best.kind : (item.kind || best.kind),
+    marriageDate: best.marriageDate || item.marriageDate,
+  }));
+}
+
+// Everyone in one role: confirmed tree people first, then people only the events name.
+function relatives(context, kinds) {
+  const fromTree = (context?.people || []).filter((person) => kinds.includes(person.kind));
+  const fromEvents = distinctPeople((context?.records || []).filter((item) => kinds.includes(item.kind)))
+    .filter((item) => !fromTree.some((person) => samePerson(item, person)));
+  const birth = (person) => birthOf(person, context)?.iso || "9999";
+  const all = [...fromTree, ...fromEvents].sort((a, b) => birth(a).localeCompare(birth(b)));
+  return { fromTree, fromEvents, all };
+}
+
+function kindOf(person, context, choices) {
+  if (choices.includes(person.kind)) return person.kind;
+  return (context?.records || []).find((item) => choices.includes(item.kind) && samePerson(item, person))?.kind || person.kind;
+}
+
+function deathOf(person, context) {
+  const own = normalizeDate(person?.deathDate);
+  if (own) return own;
+  return (context?.records || []).find((item) => item.deathDate && samePerson(item, person))?.deathDate || null;
+}
+
+function parentsAnswer(context) {
+  const found = relatives(context, ["father", "mother", "parent"]);
+  if (!found.all.length) return "Your parents aren't recorded yet.";
+  const rank = { father: 0, mother: 1, parent: 2 };
+  const lines = found.all
+    .map((person) => ({ person, kind: kindOf(person, context, ["father", "mother"]) }))
+    .sort((a, b) => rank[a.kind] - rank[b.kind])
+    .map(({ person, kind }) => `${person.name} — your ${kind}${passed({ deathDate: deathOf(person, context) })}.`);
+  if (found.fromEvents.length) lines.push(RECORD_LINE);
+  return lines.join("\n");
+}
+
+function parentRoleAnswer(kind, context) {
+  const found = relatives(context, [kind, "parent"]);
+  const person = found.all.find((item) => kindOf(item, context, ["father", "mother"]) === kind);
+  if (!person) return `Your ${kind} isn't recorded yet.`;
+  const line = `${person.name} — your ${kind}${passed({ deathDate: deathOf(person, context) })}.`;
+  return found.fromTree.includes(person) ? line : `${line}\n${RECORD_LINE}`;
+}
+
+function siblingsWanted(question) {
+  if (/\bbrothers?\b/i.test(question) && !/\bsisters?\b/i.test(question)) return { label: "brothers", kinds: ["brother", "sibling"], not: "sister" };
+  if (/\bsisters?\b/i.test(question) && !/\bbrothers?\b/i.test(question)) return { label: "sisters", kinds: ["sister", "sibling"], not: "brother" };
+  return { label: "siblings", kinds: ["sister", "brother", "sibling"], not: null };
+}
+
+function siblingsFor(question, context) {
+  const want = siblingsWanted(question);
+  const found = relatives(context, want.kinds);
+  const people = found.all.filter((person) => !want.not || kindOf(person, context, ["sister", "brother"]) !== want.not);
+  return { want, people, fromEvents: found.fromEvents.some((item) => people.includes(item)) };
+}
+
+function siblingAnswer(question, context) {
+  const { want, people, fromEvents } = siblingsFor(question, context);
+  if (!people.length) return `Your ${want.label} aren't recorded yet.`;
+  const count = /\bhow many\b/i.test(question) ? `You have ${people.length} ${want.label}: ` : `Your ${want.label}: `;
+  const line = `${count}${people.map((person) => person.name).join(", ")}.`;
+  return fromEvents ? `${line}\n${RECORD_LINE}` : line;
+}
+
+function siblingBirthAnswer(question, context) {
+  const { want, people } = siblingsFor(question, context);
+  if (!people.length) return `Your ${want.label} aren't recorded yet.`;
+  let fromEvent = false;
+  const lines = people.map((person) => {
+    const found = birthOf(person, context);
+    if (!found) return `${person.name} — birth date not recorded yet`;
+    if (found.fromEvent) fromEvent = true;
+    return `${person.name} — ${prettyDate(found.iso)}`;
+  });
+  if (fromEvent) lines.push(RECORD_LINE);
+  return lines.join("\n");
+}
+
+function childrenAnswer(question, context) {
+  const found = relatives(context, ["child", "son", "daughter"]);
+  if (!found.all.length) return "Your children aren't recorded yet.";
+  const names = found.all.map((person) => person.name);
+  const count = /\bhow many\b/i.test(question) ? `You have ${names.length} children: ` : "Your children: ";
+  const line = `${count}${names.join(", ")}.`;
+  return found.fromEvents.length ? `${line}\n${RECORD_LINE}` : line;
+}
+
+// Built only from recorded facts; a person appears once, in the one role they hold.
+function familyTreeAnswer(context) {
+  const self = (context?.people || []).find((person) => person.kind === "self") || context?.self;
+  const born = (person) => {
+    const found = birthOf(person, context);
+    return found ? `b. ${prettyDate(found.iso)}` : "";
+  };
+  const describe = (person, ...bits) => {
+    const extra = bits.filter(Boolean).join(", ");
+    return extra ? `${person.name} (${extra})` : person.name;
+  };
+  const lines = [];
+  if (self?.name) lines.push(`You: ${self.name}`);
+  const parents = relatives(context, ["father", "mother", "parent"]).all;
+  if (parents.length) {
+    lines.push(`Parents: ${parents.map((person) => {
+      const death = deathOf(person, context);
+      return describe(person, kindOf(person, context, ["father", "mother"]), born(person), death ? `passed ${prettyDate(death)}` : "");
+    }).join("; ")}`);
+  }
+  const spouse = (context?.people || []).find((person) => ["wife", "husband", "spouse"].includes(person.kind));
+  const record = spouseRecord(context);
+  if (spouse || record?.name) {
+    const person = spouse || record;
+    const kind = person.kind && person.kind !== "spouse" ? person.kind : (record?.kind && record.kind !== "spouse" ? record.kind : "spouse");
+    lines.push(`Spouse: ${describe(person, kind, record?.marriageDate ? `married ${prettyDate(record.marriageDate)}` : "")}`);
+  }
+  const siblings = siblingsFor("siblings", context).people;
+  if (siblings.length) lines.push(`Siblings: ${siblings.map((person) => describe(person, kindOf(person, context, ["sister", "brother"]).replace("sibling", ""), born(person))).join("; ")}`);
+  const children = relatives(context, ["child", "son", "daughter"]).all;
+  if (children.length) lines.push(`Children: ${children.map((person) => describe(person, kindOf(person, context, ["son", "daughter"]).replace("child", ""), born(person))).join("; ")}`);
+  if (lines.length <= 1) return "Your family tree isn't recorded yet.";
+  return lines.join("\n");
+}
+
+function birthOf(person, context) {
+  const own = normalizeDate(person?.birthDate);
+  if (own && /^\d{4}-\d{2}-\d{2}$/.test(own)) return { iso: own, fromEvent: false };
+  const record = (context?.records || []).find((item) => item.birthDate && /^\d{4}-\d{2}-\d{2}$/.test(item.birthDate) && samePerson(item, person));
+  return record ? { iso: record.birthDate, fromEvent: true } : null;
 }
 
 function factConflicts(people, eventFacts) {
@@ -595,7 +776,7 @@ function nameAllowed(candidate, allowed) {
 function datesIn(text) {
   const value = String(text || "");
   const found = [];
-  const pattern = /\b(?:\d{1,2}\s+(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+\d{4}|(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\s+\d{1,2},?\s+\d{4}|\d{4})\b/gi;
+  const pattern = new RegExp(`\\b(?:${DATE}|\\d{4})\\b`, "gi");
   for (const match of value.matchAll(pattern)) found.push(match[0]);
   return found;
 }
@@ -618,7 +799,7 @@ function normalizeDate(value) {
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
   }
-  const text = String(value || "").trim();
+  const text = String(value || "").trim().replace(/(\d)(?:st|nd|rd|th)\b/gi, "$1").replace(/\s+of\s+/i, " ").replace(/\.(?=\s)/g, "").replace(/(\d{1,2}\s+[A-Za-z]+),(\s+\d{4})$/, "$1$2");
   const iso = text.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
   let match = text.match(/^(\d{1,2})\s+([A-Za-z]+)\s+(\d{4})$/);

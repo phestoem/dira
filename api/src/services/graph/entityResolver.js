@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma.js";
+import { isReadonly } from "../../readonly.js";
 import { inverseOf, isSymmetric } from "./relationshipTypes.js";
 
 const HONORIFIC = /^(mr|mrs|ms|dr|prof|ndugu|bi|bwana|mzee)\.?\s+/i;
@@ -50,6 +51,8 @@ export async function getOrCreateSelf(userId) {
   }
   if (!best) best = profile || existing?.name || "Me";
   const aliases = mergeAliases(existing?.aliases, [user?.handle, existing?.name, "me", "i", "mimi"]);
+  // A readonly request reads the self as it is; it never creates or renames it.
+  if (isReadonly()) return existing || { id: null, userId, name: best, entityType: "person", kind: "self", isSelf: true, aliases };
   if (!existing) {
     return prisma.entity.create({
       data: {
