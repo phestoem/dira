@@ -1,6 +1,6 @@
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
-import { isRelationshipStatement } from "./graph/familyStatement.js";
+import { isRelationshipStatement, namesPersonWithRole } from "./graph/familyStatement.js";
 import { isPeopleQuestion } from "./graph/peopleGrounding.js";
 
 const OPENAI_MODEL = "gpt-4o-mini";
@@ -270,6 +270,14 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
     classified.intent = "relationship_add";
     classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
     classified.interpretation = "Save who these people are to you.";
+  }
+  // The classifier can still pick relationship_add for "I felt grateful for my family"; without a named person
+  // and their role it's a reflection or conversation instead.
+  if (!fileAttached && classified.intent === "relationship_add" && !namesPersonWithRole(text)) {
+    const reflective = /\b(i feel|i felt|feeling|grateful|thankful|proud|happy|sad|anxious|tired|miss|love|blessed|today was)\b/i.test(text);
+    classified.intent = reflective ? "journal" : "question";
+    classified.alternatives = (classified.alternatives || []).filter((item) => item?.intent !== "relationship_add");
+    classified.interpretation = reflective ? "Keep this as a reflection." : "Talk it through.";
   }
   return decide(classified);
 }

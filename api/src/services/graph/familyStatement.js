@@ -13,7 +13,24 @@ export function isRelationshipStatement(text) {
   if (!value || value.includes("?") || /^(who|how|what|where|when|why)\b/i.test(value) || isPeopleQuestion(value)) return false;
   const lower = value.toLowerCase();
   if (/\b(no longer|not my|sold the|amehama|si tena)\b/.test(lower)) return false;
-  return /\b(my\s+(father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?|family)|is my\s+(father|mother|son|daughter|sister|brother|wife|husband)|(?:i|we) have (?:\w+ )?(?:sisters|brothers|siblings|children|kids|sons|daughters)|supervises|anasimamia)\b/.test(lower);
+  const kinship = /\b(my\s+(father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?)|is (?:my|our)\s+(?:\w+\s+)?(father|mother|son|daughter|sister|brother|wife|husband)|(?:i|we) have (?:\w+ )?(?:sisters|brothers|siblings|children|kids|sons|daughters)|supervises|anasimamia)\b/.test(lower);
+  return kinship && namesPersonWithRole(value);
+}
+
+const ROLE_WORD = /\b(father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|siblings?|wife|husband|fianc[ée]e?|children|kids|sons?|daughters?|uncle|aunt|cousin|nephew|niece|grand(?:father|mother|son|daughter|parents?|children)|in-laws?|supervis\w*|caretaker|fundi|dada|kaka|mke|mume|mtoto|wangu|yangu|anasimamia)\b/i;
+const NOT_A_NAME = new Set([
+  "i", "i'm", "i've", "my", "our", "your", "we", "he", "she", "they", "it", "his", "her", "their", "the", "a", "an", "this", "that", "these",
+  "today", "yesterday", "tomorrow", "tonight", "and", "but", "so", "then", "also", "please", "when", "after", "before", "on", "in",
+  "father", "mother", "mum", "mom", "dad", "mama", "baba", "dada", "kaka", "sister", "brother", "wife", "husband", "son", "daughter", "family",
+  "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", ...Object.keys(MONTHS),
+]);
+
+// A connection to save needs someone named and what they are to you: "My sister Jeni", "Juma supervises Kitunda".
+// Feelings, counts and "my family" on their own never qualify.
+export function namesPersonWithRole(text) {
+  const value = String(text || "");
+  if (!ROLE_WORD.test(value)) return false;
+  return (value.match(/[\p{Lu}][\p{L}'’-]+/gu) || []).some((word) => !NOT_A_NAME.has(word.toLowerCase()));
 }
 
 export function parseFamilyStatement(text) {

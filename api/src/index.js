@@ -69,6 +69,8 @@ console.log(bridgeConfig() ? "[bridge] configured" : "[bridge] skipping: not con
 app.get("/health", async () => ({
   status: "ok",
   service: "dira-api",
+  // The golden runner refuses a live run against a server that doesn't list this.
+  capabilities: ["readonly-header"],
 }));
 
 app.setErrorHandler((error, request, reply) => {

@@ -2,6 +2,10 @@
 //   npm run golden                                   fixture mode: temp user seeded through /home, deleted after
 //   npm run golden -- --user <id> --readonly         live mode: ask an existing user with X-DIRA-Readonly: 1,
 //                                                    so the API saves nothing; any row that changes anyway fails the run
+//   npm run golden -- --base http://127.0.0.1:4800 --user <id> --readonly --allow-prod-readonly
+//                                                    production, readonly only: DATABASE_URL and JWT_SECRET must be
+//                                                    production's (passed in the environment), and the server must
+//                                                    advertise readonly support on /health; nothing is ever reverted there
 // Options: --only wife,parents   --base http://127.0.0.1:4801
 import "dotenv/config";
 import { randomUUID } from "crypto";
@@ -9,8 +13,8 @@ import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { CASES, SEED_MESSAGES, SELF_NAME } from "./cases.js";
 
-const REQUIRED_DB = "dira_dev";
-const REQUIRED_PORT = "4801";
+const DEV = { port: "4801", db: "dira_dev" };
+const PROD = { port: "4800", db: "dira" };
 const BUSY = /^DIRA is busy right now/i;
 const TABLES = ["user", "entity", "event", "vision", "diaryEntry", "relationship", "lifeEvent", "inputQueue"];
 const DELETE_ORDER = ["relationship", "lifeEvent", "inputQueue", "diaryEntry", "event", "vision", "entity"];
@@ -19,6 +23,7 @@ const args = parseArgs(process.argv.slice(2));
 const base = (args.base || `http://127.0.0.1:${process.env.PORT}`).replace(/\/$/, "");
 const prisma = new PrismaClient();
 let token = "";
+let production = false;
 
 try {
   guard();
@@ -40,6 +45,7 @@ function parseArgs(argv) {
     else if (arg === "--user") out.user = argv[++index];
     else if (arg === "--only") out.only = new Set(String(argv[++index] || "").split(",").filter(Boolean));
     else if (arg === "--base") out.base = argv[++index];
+    else if (arg === "--allow-prod-readonly") out.allowProdReadonly = true;
     else throw new Error(`unknown option ${arg}`);
   }
   return out;
@@ -52,9 +58,18 @@ function guard() {
   } catch {
     throw new Error("DATABASE_URL is not a URL");
   }
-  if (dbName !== REQUIRED_DB) throw new Error(`refusing to run: database is not ${REQUIRED_DB}`);
-  if (process.env.PORT === "4800") throw new Error("refusing to run: PORT is 4800 (production)");
-  if (new URL(base).port !== REQUIRED_PORT) throw new Error(`refusing to run: API must be on port ${REQUIRED_PORT}`);
+  const port = new URL(base).port;
+  production = port === PROD.port || process.env.PORT === PROD.port || dbName === PROD.db;
+  if (production) {
+    // Production is only ever asked questions: an existing user, readonly, and an explicit opt-in.
+    if (!args.allowProdReadonly) throw new Error("refusing to run against production (port 4800 / dira): pass --allow-prod-readonly");
+    if (!args.user || !args.readonly) throw new Error("refusing to run against production: only live mode with --user <id> --readonly is allowed");
+    if (port !== PROD.port || dbName !== PROD.db) throw new Error(`refusing to run against production: --base must be port ${PROD.port} and DATABASE_URL must be ${PROD.db}, so the no-writes check reads the same database`);
+  } else {
+    if (args.allowProdReadonly) throw new Error(`--allow-prod-readonly is only for --base on port ${PROD.port}`);
+    if (dbName !== DEV.db) throw new Error(`refusing to run: database is not ${DEV.db}`);
+    if (port !== DEV.port) throw new Error(`refusing to run: API must be on port ${DEV.port}`);
+  }
   const bridge = ["ALTIMETRIX_URL", "ALTIMETRIX_API_URL", "ALTIMETRIX_BRIDGE_SECRET", "ALTIMETRIX_WEBHOOK_SECRET"].filter((name) => process.env[name]);
   if (bridge.length) throw new Error(`refusing to run: Altimetrix bridge is configured (${bridge.join(", ")})`);
   if (args.user && !args.readonly) throw new Error("live mode needs --readonly");
@@ -64,6 +79,11 @@ function guard() {
 async function health() {
   const res = await fetch(`${base}/health`).catch(() => null);
   if (!res?.ok) throw new Error(`API is not answering at ${base}`);
+  // A server without X-DIRA-Readonly would save what live mode sends, so don't send it anything.
+  const body = await res.json().catch(() => ({}));
+  if (args.readonly && !(body.capabilities || []).includes("readonly-header")) {
+    throw new Error(`refusing to run: ${base} does not advertise readonly support (deploy the X-DIRA-Readonly change first)`);
+  }
 }
 
 function signIn(userId) {
@@ -132,7 +152,7 @@ async function seed(message) {
 
 async function live(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-  if (!user) throw new Error(`no user ${userId} in ${REQUIRED_DB}`);
+  if (!user) throw new Error(`no user ${userId} in ${production ? PROD.db : DEV.db}`);
   console.log(`live readonly run for ${userId}`);
   signIn(userId);
   await settle(userId);
@@ -144,7 +164,11 @@ async function live(userId) {
     await settle(userId);
     const after = await snapshot(userId);
     const changes = diff(before, after);
-    if (changes.length) {
+    if (changes.length && production) {
+      console.log(`\nREADONLY VIOLATION: the run wrote ${changes.length} row(s) in production; not touching them:`);
+      for (const change of changes) console.log(`  ${change.kind} ${change.table} ${change.id}`);
+      code = 1;
+    } else if (changes.length) {
       console.log(`\nREADONLY VIOLATION: the run wrote ${changes.length} row(s); reverting them`);
       for (const line of await revert(before, changes)) console.log(line);
       const left = diff(before, await snapshot(userId));
@@ -182,8 +206,8 @@ async function ask(userId, readonly) {
     }
     const writes = rowsBefore ? diff(rowsBefore, await snapshot(userId)) : [];
     if (writes.length) {
-      failures.push(`readonly violated: ${writes.map((change) => `${change.kind} ${change.table}`).join(", ")} (reverted)`);
-      failures.push(...(await revert(rowsBefore, writes)).map((line) => line.trim()));
+      failures.push(`readonly violated: ${writes.map((change) => `${change.kind} ${change.table}`).join(", ")}${production ? "" : " (reverted)"}`);
+      if (!production) failures.push(...(await revert(rowsBefore, writes)).map((line) => line.trim()));
     }
     if (failures.length) failed += 1;
     console.log(`\n${failures.length ? "FAIL" : "PASS"}  ${item.id}  [${turn?.response.routing?.intent || "?"}/${turn?.response.result?.type || "?"}]  ${startedAt}`);

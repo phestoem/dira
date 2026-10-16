@@ -122,6 +122,19 @@ export const CASES = [
     },
   },
   {
+    // A connection needs a named person and their role to you; feelings or "my family" alone never qualify.
+    id: "grateful-family",
+    turns: ["Today I felt grateful for my family."],
+    countsEvents: true,
+    check: ({ eventsCreated, turn }) => {
+      const intent = turn.response.routing?.intent;
+      const failures = ["journal", "question"].includes(intent) ? [] : [`routed as ${intent}, not journal or conversation`];
+      if (turn.response.result?.type === "relationship_preview") failures.push("offered connections");
+      if (eventsCreated) failures.push(`${eventsCreated} new event(s) created`);
+      return failures;
+    },
+  },
+  {
     id: "children-follow-up",
     turns: ["how many children do I have?", "what are their names?"],
     check: ({ answer, turn }) => {

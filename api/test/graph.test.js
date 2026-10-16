@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { prisma } from "../src/prisma.js";
 import { chooseSelfName, mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
-import { describeRelationshipLine, isRelationshipStatement, parseFamilyStatement } from "../src/services/graph/familyStatement.js";
+import { describeRelationshipLine, isRelationshipStatement, namesPersonWithRole, parseFamilyStatement } from "../src/services/graph/familyStatement.js";
 import { isNoiseReply, previousExchangeFrom, rejectsCorrection } from "../src/services/intentRouter.js";
 import { answerPeopleQuestion, buildPeopleContext, conflictEdgeData, contextualQuestion, deliverPeopleAnswer, groundAdvisorReply, isPeopleQuestion, peopleFromTree, resolvePeopleFollowUp } from "../src/services/graph/peopleGrounding.js";
 import { isReadonly, runReadonly } from "../src/readonly.js";
@@ -13,6 +13,11 @@ import { stripEntityIds } from "../src/services/graph/reset.js";
 import { alignPredicate, applySupersession, buildSelfAliasSet, dedupeProposedNames, groupSuggestions, mentionsSelf, prepareTriples } from "../src/services/graph/graphQuality.js";
 import { absorbDroppedPayment, commitTriples, deterministicEdgePlans, dropReason, extractWithRetry, graphExtractProvider, headerDelayFrom, retryDelayMs } from "../src/services/graph/relationshipExtractor.js";
 import { isSensitive, normalizeType } from "../src/services/graph/relationshipTypes.js";
+
+// The Prisma client keeps the process alive; close it so `npm test` exits on its own.
+test.after(async () => {
+  await prisma.$disconnect();
+});
 
 test("graph reset drops entity ids and keeps names", () => {
   const people = stripEntityIds([
@@ -559,7 +564,11 @@ test("event wording as saved in dira_dev answers family questions", () => {
 
   assert.equal(isPeopleQuestion("list my sisters"), true);
   assert.equal(isRelationshipStatement("list my sisters"), false);
-  assert.equal(isRelationshipStatement("I have four sisters"), true);
+  assert.equal(isRelationshipStatement("I have four sisters"), false);
+  assert.equal(isRelationshipStatement("Today I felt grateful for my family."), false);
+  assert.equal(namesPersonWithRole("Today I felt grateful for my family."), false);
+  assert.equal(namesPersonWithRole("My brother Juma Enock Mwakyusa was born on 1 March 1990."), true);
+  assert.equal(namesPersonWithRole("I have five children: Careen, Patrick and Presley."), true);
   const brother = parseFamilyStatement("My brother Juma Enock Mwakyusa was born on 1 March 1990.");
   assert.deepEqual(brother.triples.map((triple) => `${triple.subject.name} ${triple.predicate} ${triple.object.name}`), ["Juma Enock Mwakyusa sibling_of me"]);
   assert.equal(brother.entityFacts[0].birthDate, "1990-03-01");
@@ -678,6 +687,7 @@ test("graph records stay consistent", async (t) => {
       subject: { name: "Ada Tester", type: "self" },
       predicate: "sister",
       object: { name: "Lina Example", type: "person" },
+      evidence: "Lina Example is my sister.",
       confidence: 0.95,
     }], { source: "intake" });
     assert.ok(sensitive.suggested >= 1);
@@ -686,6 +696,7 @@ test("graph records stay consistent", async (t) => {
       subject: { name: "Ada Tester", type: "self" },
       predicate: "sister",
       object: { name: "Lina Example", type: "person" },
+      evidence: "Lina Example is my sister.",
       confidence: 1,
     }], { source: "user" });
     assert.ok(confirmed.updated + confirmed.created >= 1);
@@ -697,6 +708,7 @@ test("graph records stay consistent", async (t) => {
       subject: { name: "Ada Tester", type: "self" },
       predicate: "sister",
       object: { name: "Lina Example", type: "person" },
+      evidence: "Lina Example is my sister.",
       confidence: 0.99,
     }], { source: "intake" });
     const still = await prisma.relationship.findFirst({ where: { id: sibling.id } });
