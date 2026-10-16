@@ -17,7 +17,7 @@ import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 import { describeRelationshipLine, parseFamilyStatement } from "../services/graph/familyStatement.js";
 import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
-import { commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
+import { closeSupersededBy, commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
 import { findPaths, getFamilyTree, getMoneyFlows, getNeighbors, serializeForPrompt, getSubgraph } from "../services/graph/graphQuery.js";
 const UPLOAD_DIR = "/tmp/dira-uploads";
@@ -627,9 +627,10 @@ async function runRelationshipAdd(userId, routing, payload) {
     forceStatus: "suggested",
     entityFacts,
     message: payload.message,
+    restated: true,
   });
-  const count = committed.created + committed.updated;
-  const edges = count ? await recentSuggested(userId, count) : [];
+  // The card shows exactly what this message saved, never older suggestions that happen to be recent.
+  const edges = committed.edgeIds.length ? await prisma.relationship.findMany({ where: { userId, id: { in: committed.edgeIds } } }) : [];
   return relationshipCard(userId, routing, edges, "add");
 }
 
@@ -735,10 +736,12 @@ async function confirmRelationships(userId, entry, body) {
       });
       continue;
     }
+    // Only this card's open suggestions change; an edge that was already confirmed stays as it is.
     await prisma.relationship.updateMany({
-      where: { id, userId },
+      where: { id, userId, status: "suggested" },
       data: chosen.has(id) ? { status: "confirmed", source: "user" } : { status: "rejected" },
     });
+    if (chosen.has(id)) await closeSupersededBy(userId, await prisma.relationship.findFirst({ where: { id, userId } }));
   }
   return doneResponse(entry.routing, "saved", { message: entry.mode === "change" ? "Updated the history." : "Connections saved." }, null);
 }
@@ -762,15 +765,6 @@ async function relationshipCard(userId, routing, edges, mode) {
   };
 }
 
-async function recentSuggested(userId, count) {
-  return prisma.relationship.findMany({
-    // label is usually NULL, and SQL drops NULL rows from a plain `not`.
-    where: { userId, status: "suggested", OR: [{ label: null }, { label: { not: "conflict" } }] },
-    orderBy: { createdAt: "desc" },
-    take: Math.max(count, 1),
-  });
-}
-
 async function labelEdges(userId, edges) {
   const ids = [...new Set(edges.flatMap((edge) => [edge.fromId, edge.toId]))];
   const entities = ids.length ? await prisma.entity.findMany({ where: { userId, id: { in: ids } } }) : [];
@@ -785,8 +779,9 @@ async function labelEdges(userId, edges) {
       to: byId.get(edge.toId) || { id: edge.toId, name: "someone" },
       selfId: self?.id,
       attributes: edge.attributes,
-    }),
+    }) + (edge.status === "confirmed" && !edge.validTo ? " (already saved)" : ""),
     category: edge.category,
+    saved: edge.status === "confirmed" && !edge.validTo,
   }));
 }
 

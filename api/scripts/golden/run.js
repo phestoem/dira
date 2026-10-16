@@ -11,7 +11,7 @@ import "dotenv/config";
 import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { CASES, SEED_MESSAGES, SELF_NAME } from "./cases.js";
+import { CASES, MOTHER_SENTENCE, motherProblems, offeredLines, SEED_MESSAGES, SELF_NAME } from "./cases.js";
 
 const DEV = { port: "4801", db: "dira_dev" };
 const PROD = { port: "4800", db: "dira" };
@@ -122,7 +122,9 @@ async function fixture() {
     await settle(id);
     const code = await ask(id, false);
     const resetCode = !args.only || args.only.has("reset-gate") ? await resetGate(id) : 0;
-    return code || resetCode;
+    const motherCode = !args.only || args.only.has("mother-gate") ? await motherGate() : 0;
+    signIn(id);
+    return code || resetCode || motherCode;
   } finally {
     await settle(id).catch(() => {});
     await prisma.user.delete({ where: { id } });
@@ -190,8 +192,73 @@ async function resetGate(userId) {
   return failures.length ? 1 : 0;
 }
 
-// Confirms whatever DIRA offers, the way a person tapping Save would.
-async function seed(message) {
+// Production's shape when the mother vanished: the self still carries pronoun aliases, the father is confirmed,
+// Froidah exists as a person with a generic kind, an earlier card rejected her parent edge, and older suggested
+// residences sit on the self. The mother sentence and then the full introduction must link her, not the self.
+async function motherGate() {
+  const id = randomUUID();
+  const failures = [];
+  const startedAt = new Date().toISOString();
+  await prisma.user.create({ data: { id, email: `golden+${id}@example.invalid`, handle: `golden-${id.slice(0, 8)}`, name: SELF_NAME } });
+  try {
+    const entity = (name, entityType, kind, extra = {}) => prisma.entity.create({ data: { userId: id, name, entityType, kind, normalizedName: name.toLowerCase(), aliases: [name], status: "active", ...extra } });
+    const self = await entity(SELF_NAME, "person", "self", { isSelf: true, aliases: ["phesto", "me", "i", "mimi", SELF_NAME] });
+    const enock = await entity("Enock Mwakyusa", "person", "person");
+    const froidah = await entity("Froidah Biniala Kyando", "person", "person");
+    const mbeya = await entity("Mbeya", "place", null);
+    const home = await entity("family home", "property", null);
+    const edge = (fromId, type, toId, status, category) => prisma.relationship.create({ data: { userId: id, fromKind: "entity", fromId, toKind: "entity", toId, type, category, status, source: "conversation", attributes: {}, createdAt: new Date(Date.now() - 86400000) } });
+    await edge(enock.id, "parent_of", self.id, "confirmed", "family");
+    await edge(froidah.id, "parent_of", self.id, "rejected", "family");
+    await edge(self.id, "lives_at", mbeya.id, "suggested", "location");
+    await edge(self.id, "lives_at", home.id, "suggested", "location");
+    // Her Mbeya residence was ended once and "family home" is current, as in dira_dev.
+    const ended = await edge(froidah.id, "lives_at", mbeya.id, "confirmed", "location");
+    await prisma.relationship.update({ where: { id: ended.id }, data: { validTo: new Date(Date.now() - 3600000) } });
+    await edge(froidah.id, "lives_at", home.id, "confirmed", "location");
+    signIn(id);
+
+    const cards = [];
+    const motherSteps = await seed(MOTHER_SENTENCE, cards);
+    failures.push(...motherProblems(cards[0]).map((failure) => `mother sentence card: ${failure}`));
+    await settle(id, 4000);
+    const current = { userId: id, status: "confirmed", validTo: null };
+    if (!(await prisma.relationship.count({ where: { ...current, fromId: froidah.id, type: "parent_of", toId: self.id } }))) failures.push("Froidah → self parent_of not confirmed");
+    if (!(await prisma.relationship.count({ where: { ...current, fromId: froidah.id, type: "lives_at", toId: mbeya.id } }))) failures.push("Froidah lives_at Mbeya not confirmed");
+    const selfLives = await prisma.relationship.count({ where: { ...current, fromId: self.id, type: "lives_at" } });
+    if (selfLives) failures.push(`${selfLives} confirmed lives_at on the self`);
+    const pronouns = await prisma.entity.count({ where: { userId: id, normalizedName: { in: ["she", "her", "he", "my mother"] } } });
+    if (pronouns) failures.push(`${pronouns} entity named after a pronoun or "my mother"`);
+    const aliases = (await prisma.entity.findUnique({ where: { id: self.id } })).aliases.filter((alias) => ["i", "me", "mimi"].includes(alias.toLowerCase()));
+    if (aliases.length) failures.push(`self still has pronoun aliases: ${aliases.join(", ")}`);
+    if ((await prisma.entity.findUnique({ where: { id: froidah.id } })).kind !== "mother") failures.push("Froidah's kind is not mother");
+
+    const introSteps = await seed(SEED_MESSAGES[0], cards);
+    const introLines = offeredLines(cards[1]);
+    if (!introLines.some((line) => /^Froidah Biniala Kyando — your mother\b/.test(line))) failures.push("introduction card has no mother line");
+    for (const line of introLines) if (new RegExp(`^${SELF_NAME} — lives in`).test(line)) failures.push(`introduction card offers "${line}"`);
+    await settle(id, 4000);
+    const family = await prisma.relationship.count({ where: { ...current, category: "family", OR: [{ fromId: self.id }, { toId: self.id }] } });
+    if (family !== 12) failures.push(`${family} confirmed family edges on the self after the introduction, expected 12`);
+    if ((await prisma.relationship.count({ where: { ...current, fromId: self.id, type: "lives_at" } }))) failures.push("introduction confirmed a lives_at on the self");
+
+    console.log(`\n${failures.length ? "FAIL" : "PASS"}  mother-gate  [production shape]  ${startedAt}`);
+    console.log(`  Q: ${MOTHER_SENTENCE}  ⇢  full introduction`);
+    console.log(indent(`mother: ${motherSteps.join(" → ")}\n${offeredLines(cards[0]).join("\n")}\nintroduction: ${introSteps.join(" → ")}; ${introLines.length} card line(s); ${family} confirmed family edges`));
+  } catch (err) {
+    failures.push(`error: ${err.message}`);
+    console.log(`\nFAIL  mother-gate  [production shape]  ${startedAt}`);
+  } finally {
+    await settle(id).catch(() => {});
+    for (const table of DELETE_ORDER) await prisma[table].deleteMany({ where: { userId: id } });
+    await prisma.user.delete({ where: { id } });
+  }
+  for (const failure of failures) console.log(`  ✗ ${failure}`);
+  return failures.length ? 1 : 0;
+}
+
+// Confirms whatever DIRA offers, the way a person tapping Save would. Relationship cards are collected in `cards`.
+async function seed(message, cards = []) {
   let response = await sendWithRetry({ message, conversationHistory: [], lastAction: null });
   const steps = [`${response.routing?.intent}/${response.result?.type}`];
   for (let round = 0; round < 3; round += 1) {
@@ -203,6 +270,7 @@ async function seed(message) {
       continue;
     }
     if (response.sessionId && response.result?.confirmationRequired) {
+      if (response.result.type === "relationship_preview") cards.push(response);
       response = await post("/home/confirm", { sessionId: response.sessionId, confirmed: true });
       steps.push(`confirmed → ${response.result?.type}`);
       continue;

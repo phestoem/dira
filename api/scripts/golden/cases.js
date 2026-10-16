@@ -46,6 +46,8 @@ function answered(turn) {
 }
 
 // Each case is a conversation. Checks run on the last turn; `db` reads the user's graph without writing.
+export const MOTHER_SENTENCE = "Froidah Biniala Kyando is my mother. She lives in our family home in Mbeya.";
+
 export const CASES = [
   {
     id: "wife",
@@ -143,4 +145,37 @@ export const CASES = [
       return [...failures, ...has("Careen", "Patrick", "Presley", "Powell", "Prisha")(answer)];
     },
   },
+  {
+    // Production lost the mother here: "my mother" and "she" ended up on the self. Fixture mode reads the card;
+    // live readonly reads what DIRA would have suggested.
+    id: "mother-sentence",
+    turns: [MOTHER_SENTENCE],
+    check: ({ turn }) => motherProblems(turn.response),
+  },
 ];
+
+// The lines a relationship card (or a readonly preview) offers, as "<from> <type> <to>" or the card's own wording.
+export function offeredLines(response) {
+  const result = response?.result;
+  if (result?.type === "relationship_preview") return (result.content?.edges || []).map((edge) => edge.line);
+  if (result?.type === "readonly_skipped") {
+    const text = String(result.content?.message || "").replace(/^Readonly: would suggest /, "").replace(/\. Nothing was saved\.$/, "");
+    return text.split(/;\s*/).filter(Boolean);
+  }
+  return [];
+}
+
+export function motherProblems(response, selfName = SELF_NAME) {
+  const lines = offeredLines(response);
+  if (!lines.length) return [`offered no connections (${response?.routing?.intent}/${response?.result?.type})`];
+  const failures = [];
+  const self = new RegExp(`^(me|${selfName})\\b`, "i");
+  if (!lines.some((line) => /^Froidah Biniala Kyando (— your (mother|parent)|parent_of me)\b/.test(line))) failures.push("no Froidah → self parent_of");
+  if (!lines.some((line) => /^Froidah Biniala Kyando (— lives in|lives_at) Mbeya\b/.test(line))) failures.push("no Froidah lives_at Mbeya");
+  for (const line of lines) {
+    if (self.test(line) && /lives(_at| in)/.test(line)) failures.push(`lives_at on the self: "${line}"`);
+    if (/\b(she|her)\b/i.test(line.replace(/\(already saved\)/, ""))) failures.push(`pronoun as a node: "${line}"`);
+    if (/child of|child_of/.test(line)) failures.push(`reversed parent edge: "${line}"`);
+  }
+  return failures;
+}

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { prisma } from "../src/prisma.js";
-import { chooseSelfName, mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
+import { chooseSelfName, getOrCreateSelf, mergeEntities, resolveEntity } from "../src/services/graph/entityResolver.js";
 import { describeRelationshipLine, isRelationshipStatement, namesPersonWithRole, parseFamilyStatement } from "../src/services/graph/familyStatement.js";
 import { isNoiseReply, previousExchangeFrom, rejectsCorrection } from "../src/services/intentRouter.js";
 import { answerPeopleQuestion, buildPeopleContext, conflictEdgeData, contextualQuestion, deliverPeopleAnswer, groundAdvisorReply, isPeopleQuestion, peopleFromTree, resolvePeopleFollowUp } from "../src/services/graph/peopleGrounding.js";
@@ -13,7 +13,7 @@ import { extractAndLinkEntities } from "../src/routes/entities.js";
 import { assemblePaths, getFamilyTree } from "../src/services/graph/graphQuery.js";
 import { rebuildGraph } from "../src/services/graph/rebuild.js";
 import { stripEntityIds } from "../src/services/graph/reset.js";
-import { alignPredicate, applySupersession, buildSelfAliasSet, dedupeProposedNames, groupSuggestions, mentionsSelf, prepareTriples } from "../src/services/graph/graphQuality.js";
+import { alignPredicate, applySupersession, buildSelfAliasSet, dedupeProposedNames, groupSuggestions, mentionsSelf, prepareTriples, selfMatchKind } from "../src/services/graph/graphQuality.js";
 import { absorbDroppedPayment, commitTriples, deterministicEdgePlans, dropReason, extractWithRetry, graphExtractProvider, headerDelayFrom, retryDelayMs } from "../src/services/graph/relationshipExtractor.js";
 import { isSensitive, normalizeType } from "../src/services/graph/relationshipTypes.js";
 
@@ -453,10 +453,22 @@ test("graph rebuild quality rules keep self, family and places honest", () => {
   }], {
     selfAliases: aliases,
     selfName: "Phesto Enock Mwakyusa",
-    relatives: [{ role: "spouse", name: "Neema", id: "spouse-1" }],
+    relatives: [{ role: "spouse", name: "Neema", id: "spouse-1", gender: "female" }],
   });
   assert.equal(wife.kept[0].subject.name, "Neema");
   assert.equal(wife.reviewQuestions.length, 0);
+
+  // "my mother" never lands on the father, nor on a parent whose role is unknown.
+  for (const parent of [{ role: "parent", name: "Enock Mwakyusa", id: "father-1", gender: "male" }, { role: "parent", name: "Somebody", id: "parent-1", gender: null }]) {
+    const mother = prepareTriples([{
+      subject: { name: "my mother", type: "person" },
+      predicate: "lives_at",
+      object: { name: "Mbeya", type: "place" },
+      evidence: "my mother lives in Mbeya",
+    }], { selfAliases: aliases, selfName: "Phesto Enock Mwakyusa", relatives: [parent] });
+    assert.equal(mother.kept.length, 0);
+    assert.equal(mother.dropped[0].reason, "unresolved-kinship");
+  }
 
   const unknownWife = prepareTriples([{
     subject: { name: "wife", type: "person" },
@@ -684,6 +696,81 @@ test("after a reset, stated connections save and automatic extraction waits", as
   }
 });
 
+test("the mother sentence links the mother, not the self or the father", () => {
+  const parsed = parseFamilyStatement("Froidah Biniala Kyando is my mother. She lives in our family home in Mbeya.");
+  const lines = parsed.triples.map((triple) => `${triple.subject.name} ${triple.predicate} ${triple.object.name}`);
+  assert.deepEqual(lines, ["Froidah Biniala Kyando parent_of me", "Froidah Biniala Kyando lives_at Mbeya"]);
+  assert.equal(parsed.entityFacts[0].kind, "mother");
+  // A pronoun that does not fit the person, or "I live", never becomes a residence.
+  assert.deepEqual(parseFamilyStatement("My father is Enock Mwakyusa. She lives in Dar.").triples.map((triple) => triple.predicate), ["parent_of"]);
+  assert.deepEqual(parseFamilyStatement("I live in Mbeya. My mother is Froidah Biniala Kyando.").triples.map((triple) => triple.predicate), ["parent_of"]);
+
+  const aliases = buildSelfAliasSet({ names: ["Phesto Enock Mwakyusa"], aliases: ["phesto", "me", "i", "mimi"] });
+  assert.equal(aliases.some((alias) => ["i", "me", "mimi", "my"].includes(alias.toLowerCase())), false);
+  assert.equal(selfMatchKind("I", aliases), "pronoun");
+  for (const pronoun of ["she", "She", "he", "they", "her"]) assert.equal(selfMatchKind(pronoun, aliases), null);
+  const she = prepareTriples([{ subject: { name: "She", type: "person" }, predicate: "lives_at", object: { name: "family home", type: "property" }, evidence: "She lives in our family home" }], { selfAliases: aliases, selfName: "Phesto Enock Mwakyusa", relatives: [] });
+  assert.equal(she.kept.length, 0);
+  assert.equal(she.dropped[0].reason, "unresolved-pronoun");
+});
+
+test("with the father confirmed, the mother sentence creates her edges and the card lists them", async (t) => {
+  if (!(await databaseReady())) {
+    t.skip("Postgres is not ready for graph tests");
+    return;
+  }
+  const user = await prisma.user.create({
+    data: { email: `mother-${Date.now()}@example.com`, handle: `mother${Date.now()}`, name: "Phesto Enock Mwakyusa" },
+  });
+  try {
+    // Production's shape: legacy pronoun aliases on the self, the father confirmed, Froidah a separate person with a generic kind,
+    // an earlier card's rejection of her parent edge, and an older suggested residence on the self.
+    const self = await prisma.entity.create({
+      data: { userId: user.id, name: "Phesto Enock Mwakyusa", entityType: "person", kind: "self", isSelf: true, normalizedName: "phesto enock mwakyusa", aliases: ["phesto", "me", "i", "mimi", "Phesto Enock Mwakyusa"], status: "active" },
+    });
+    const enock = await prisma.entity.create({ data: { userId: user.id, name: "Enock Mwakyusa", entityType: "person", kind: "person", normalizedName: "enock mwakyusa", status: "active" } });
+    const froidah = await prisma.entity.create({ data: { userId: user.id, name: "Froidah Biniala Kyando", entityType: "person", kind: "person", normalizedName: "froidah biniala kyando", status: "active" } });
+    const mbeya = await prisma.entity.create({ data: { userId: user.id, name: "Mbeya", entityType: "place", normalizedName: "mbeya", status: "active" } });
+    const edge = (fromId, type, toId, status, category = "family") => prisma.relationship.create({ data: { userId: user.id, fromKind: "entity", fromId, toKind: "entity", toId, type, category, status, source: "conversation", attributes: {} } });
+    await edge(enock.id, "parent_of", self.id, "confirmed");
+    await edge(froidah.id, "parent_of", self.id, "rejected");
+    await edge(self.id, "lives_at", mbeya.id, "suggested", "location");
+    const home = await prisma.entity.create({ data: { userId: user.id, name: "family home", entityType: "property", normalizedName: "family home", status: "active" } });
+    const endedMbeya = await edge(froidah.id, "lives_at", mbeya.id, "confirmed", "location");
+    await prisma.relationship.update({ where: { id: endedMbeya.id }, data: { validTo: new Date("2025-01-01") } });
+    const atHome = await edge(froidah.id, "lives_at", home.id, "confirmed", "location");
+
+    assert.equal((await resolveEntity(user.id, { name: "my mother", entityType: "person" })).entity, null);
+    assert.equal((await resolveEntity(user.id, { name: "my mother Froidah Biniala Kyando", entityType: "person" })).entity?.id, froidah.id);
+    assert.equal((await resolveEntity(user.id, { name: "She", entityType: "person" })).entity, null);
+    assert.equal((await resolveEntity(user.id, { name: "me", entityType: "person" })).entity?.id, self.id);
+
+    const message = "Froidah Biniala Kyando is my mother. She lives in our family home in Mbeya.";
+    const parsed = parseFamilyStatement(message);
+    const committed = await commitTriples(user.id, parsed.triples, { source: "conversation", forceStatus: "suggested", entityFacts: parsed.entityFacts, message, restated: true });
+    const saved = await prisma.relationship.findMany({ where: { id: { in: committed.edgeIds } } });
+    const describe = (row) => `${row.fromId === froidah.id ? "Froidah" : row.fromId === self.id ? "self" : row.fromId} ${row.type} ${row.toId === self.id ? "self" : row.toId === mbeya.id ? "Mbeya" : row.toId}`;
+    assert.deepEqual(saved.map(describe).sort(), ["Froidah lives_at Mbeya", "Froidah parent_of self"]);
+    assert.equal(saved.find((row) => row.type === "parent_of").status, "suggested");
+    // Said again, her ended Mbeya residence is current again and replaces the family home.
+    assert.equal((await prisma.relationship.findUnique({ where: { id: endedMbeya.id } })).validTo, null);
+    assert.notEqual((await prisma.relationship.findUnique({ where: { id: atHome.id } })).validTo, null);
+    // A residence that is only suggested ends nothing.
+    await commitTriples(user.id, [{ subject: { name: "Froidah Biniala Kyando", type: "person" }, predicate: "lives_at", object: { name: "Arusha", type: "place" }, evidence: "Froidah moved to Arusha", confidence: 0.6 }], { source: "intake" });
+    assert.equal((await prisma.relationship.findUnique({ where: { id: endedMbeya.id } })).validTo, null);
+    assert.equal((await prisma.entity.findUnique({ where: { id: froidah.id } })).kind, "mother");
+    assert.equal(await prisma.entity.count({ where: { userId: user.id, normalizedName: { in: ["she", "my mother"] } } }), 0);
+    assert.equal(await prisma.relationship.count({ where: { userId: user.id, fromId: enock.id, type: "parent_of", status: "confirmed" } }), 1);
+
+    const refreshed = await getOrCreateSelf(user.id);
+    assert.deepEqual(refreshed.aliases.filter((alias) => ["i", "me", "mimi"].includes(alias.toLowerCase())), []);
+  } finally {
+    await prisma.relationship.deleteMany({ where: { userId: user.id } });
+    await prisma.entity.deleteMany({ where: { userId: user.id } });
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+  }
+});
+
 test("graph records stay consistent", async (t) => {
   if (!(await databaseReady())) {
     t.skip("Postgres is not ready for graph tests");
@@ -694,7 +781,7 @@ test("graph records stay consistent", async (t) => {
   });
   try {
     const parent = await prisma.entity.create({
-      data: { userId: user.id, name: "Mara Test", entityType: "person", normalizedName: "mara test", status: "active" },
+      data: { userId: user.id, name: "Mara Test", entityType: "person", kind: "mother", normalizedName: "mara test", status: "active" },
     });
     const self = await prisma.entity.create({
       data: { userId: user.id, name: "Ada Tester", entityType: "person", isSelf: true, normalizedName: "ada tester", status: "active" },
@@ -716,6 +803,10 @@ test("graph records stay consistent", async (t) => {
     const kinship = await resolveEntity(user.id, { name: "my mother", entityType: "person" });
     assert.equal(kinship.entity?.id, parent.id);
     assert.equal(kinship.matchedBy, "kinship");
+    // "my father" must not resolve to the only parent when she is known as a mother; nothing is invented either.
+    const father = await resolveEntity(user.id, { name: "my father", entityType: "person" });
+    assert.equal(father.entity, null);
+    assert.equal(father.matchedBy, "unresolved-kinship");
 
     await prisma.entity.create({
       data: { userId: user.id, name: "Nia Solo", entityType: "person", normalizedName: "nia solo", status: "active" },

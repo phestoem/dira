@@ -1,3 +1,4 @@
+import { pronounFits } from "./kinship.js";
 import { isPeopleQuestion } from "./peopleGrounding.js";
 
 const MONTHS = {
@@ -49,7 +50,15 @@ function kinshipClauses(text) {
   const pattern = /\b(?:my|our)\s+(?:father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?)\b|\b(?:i|we)\s+have\s+(?:\w+\s+)?(?:sisters|brothers|children|sons|daughters)\b|\b(?:mke|mume)\s+wangu\b|\b(?:baba|mama)\s+yangu\b/gi;
   const marks = [...String(text || "").matchAll(pattern)];
   if (!marks.length) return [String(text || "").trim()].filter(Boolean);
-  return marks.map((mark, index) => text.slice(mark.index, marks[index + 1]?.index ?? text.length).trim()).filter(Boolean);
+  // "Froidah Biniala Kyando is my mother": the clause starts at the name, not at "my mother".
+  const starts = marks.map((mark) => {
+    const named = text.slice(0, mark.index).match(/((?:[\p{Lu}][\p{L}'’-]+\s+)+)is\s+$/u);
+    if (!named) return mark.index;
+    const words = named[1].trim().split(/\s+/);
+    while (words.length && NOT_A_NAME.has(words[0].toLowerCase())) words.shift();
+    return words.length ? mark.index - named[0].length + named[0].indexOf(words[0]) : mark.index;
+  });
+  return starts.map((start, index) => text.slice(start, starts[index + 1] ?? text.length).trim()).filter(Boolean);
 }
 
 export function describeRelationshipLine({ type, from, to, selfId, attributes }) {
@@ -155,6 +164,7 @@ function readPerson(clause, triples, facts, seen) {
     } else {
       addTriple(triples, seen, { subject: person, predicate: "spouse_of", object: SELF, evidence: clause.trim(), attributes: {}, confidence: 0.9 });
     }
+    addResidence(clause, person, triples, seen);
     return;
   }
   // "My brother Juma Enock Mwakyusa was born on 1 March 1990", "my son Powell"
@@ -172,6 +182,7 @@ function readPerson(clause, triples, facts, seen) {
       attributes: {},
       confidence: 0.9,
     });
+    addResidence(clause, person, triples, seen);
     return;
   }
   const parent = matchRole(clause, /\bmy (father|mother|mum|mom|dad|mama|baba)\s+(?:is\s+)?/i);
@@ -189,19 +200,29 @@ function readPerson(clause, triples, facts, seen) {
     attributes: {},
     confidence: 0.9,
   });
-  if (/\blives in\b/i.test(clause)) {
-    const place = placeFrom(clause);
-    if (place) {
-      addTriple(triples, seen, {
-        subject: { name, type: "person", kind },
-        predicate: "lives_at",
-        object: { name: place, type: "place" },
-        evidence: clause.trim(),
-        attributes: {},
-        confidence: 0.9,
-      });
-    }
-  }
+  addResidence(clause, { name, type: "person", kind }, triples, seen);
+}
+
+// "She lives in our family home in Mbeya" belongs to the person this clause is about. The pronoun must fit
+// that person ("she" for a mother, "he" for a father); "I live in" never matches, so it never lands on the self.
+function addResidence(clause, person, triples, seen) {
+  const match = clause.match(/\b([\p{L}'’-]+)\s+lives\s+in\b/iu);
+  if (!match) return;
+  const subject = match[1].toLowerCase();
+  const names = person.name.toLowerCase().split(/\s+/);
+  const role = String(person.kind || "").toLowerCase();
+  if (!names.includes(subject) && subject !== role && !pronounFits(subject, person.kind)) return;
+  const sentence = clause.slice(match.index).split(/(?<=[.;!?])\s+/)[0];
+  const place = placeFrom(sentence);
+  if (!place) return;
+  addTriple(triples, seen, {
+    subject: person,
+    predicate: "lives_at",
+    object: { name: place, type: "place" },
+    evidence: clause.trim(),
+    attributes: {},
+    confidence: 0.9,
+  });
 }
 
 function matchRole(text, prefix) {

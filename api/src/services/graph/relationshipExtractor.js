@@ -1,6 +1,7 @@
 import { prisma } from "../../prisma.js";
 import { isReadonly } from "../../readonly.js";
 import { autoExtractOn } from "./autoExtract.js";
+import { isGenericKind } from "./kinship.js";
 import { getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
 import { buildSelfAliasSet, dropReason, fullNameFromProfile, prepareTriples as refineTriples, relativesFromEdges } from "./graphQuality.js";
 import { categoryOf, isSensitive, isSymmetric, listRelationshipTypes, normalizeType } from "./relationshipTypes.js";
@@ -10,6 +11,7 @@ const GROQ_MODEL = "qwen/qwen3.8-27b";
 const OPENAI_MODEL = "gpt-4o-mini";
 const BACKOFF_MS = [2000, 4000, 8000, 16000, 32000];
 const MAX_EXTRACT_ATTEMPTS = 5;
+const SUPERSEDED_TYPES = new Set(["located_in", "lives_at", "owns"]);
 
 function extractPrompt() {
   const predicates = listRelationshipTypes().map((item) => item.type).join(", ");
@@ -203,7 +205,7 @@ export function absorbDroppedPayment(plans, triple, event, selfName) {
 
 export async function commitTriples(userId, triples, options = {}) {
   const source = options.source || "intake";
-  const result = { created: 0, updated: 0, suggested: 0, conflicts: [], dropped: [], reviewQuestions: [], createdEntities: [] };
+  const result = { created: 0, updated: 0, suggested: 0, conflicts: [], dropped: [], reviewQuestions: [], createdEntities: [], edgeIds: [] };
   const self = await getOrCreateSelf(userId);
   const quality = options.quality || await loadQualityContext(userId, self);
   const prepared = prepareTriples(triples, {
@@ -262,8 +264,10 @@ export async function commitTriples(userId, triples, options = {}) {
       attributes: isObject(triple.attributes) ? triple.attributes : {},
       occurredAt: options.occurredAt || null,
       correction: Boolean(options.correction),
+      restated: Boolean(options.restated),
     });
     if (!saved) continue;
+    if (!result.edgeIds.includes(saved.edge.id)) result.edgeIds.push(saved.edge.id);
     if (saved.created) result.created += 1;
     else result.updated += 1;
     if (saved.edge.status === "suggested") result.suggested += 1;
@@ -448,11 +452,11 @@ export async function loadQualityContext(userId, self) {
     where: { userId, status: "confirmed", category: "family", OR: [{ fromId: self.id }, { toId: self.id }] },
   }) : [];
   const ids = [...new Set(edges.flatMap((edge) => [edge.fromId, edge.toId]))];
-  const people = ids.length ? await prisma.entity.findMany({ where: { userId, id: { in: ids } }, select: { id: true, name: true } }) : [];
+  const people = ids.length ? await prisma.entity.findMany({ where: { userId, id: { in: ids } }, select: { id: true, name: true, kind: true } }) : [];
   return {
     selfAliases: aliases,
     selfName: self?.name || user?.name || "Me",
-    relatives: relativesFromEdges(edges, self?.id, new Map(people.map((person) => [person.id, person.name]))),
+    relatives: relativesFromEdges(edges, self?.id, new Map(people.map((person) => [person.id, person.name])), new Map(people.map((person) => [person.id, person.kind]))),
   };
 }
 
@@ -479,7 +483,8 @@ async function upsertEdge(userId, input) {
     },
   };
   const existing = await prisma.relationship.findUnique({ where }).catch(() => null);
-  if (existing?.status === "rejected" && input.source !== "user") return null;
+  // A rejected edge stays rejected unless the person says it again themselves; then it is offered on the card again.
+  if (existing?.status === "rejected" && input.source !== "user" && !input.restated) return null;
   if (!existing) {
     const edge = await prisma.relationship.create({
       data: {
@@ -503,10 +508,12 @@ async function upsertEdge(userId, input) {
       },
     });
     maybeNotify(userId, edge, false);
-    await closeSuperseded(userId, { ...input, edgeId: edge.id });
+    if (edge.status === "confirmed") await closeSuperseded(userId, { ...input, edgeId: edge.id });
     return { edge, created: true };
   }
   const ended = Boolean(input.validTo) && !existing.validTo;
+  // "She lives in Mbeya" said again makes an ended residence current again; closeSuperseded then ends the other one.
+  const reopened = input.restated && !input.validTo && existing.validTo && SUPERSEDED_TYPES.has(input.type);
   const attributes = mergeAttributes(existing.attributes, input.attributes, input);
   const edge = await prisma.relationship.update({
     where: { id: existing.id },
@@ -514,17 +521,23 @@ async function upsertEdge(userId, input) {
       status: existing.status === "confirmed" ? "confirmed" : input.status,
       confidence: Math.max(existing.confidence || 0, input.confidence || 0),
       attributes,
-      validTo: input.validTo || existing.validTo,
+      validTo: input.validTo || (reopened ? null : existing.validTo),
       evidenceText: existing.evidenceText || input.evidenceText || null,
     },
   });
   if (ended) maybeNotify(userId, edge, true);
-  await closeSuperseded(userId, { ...input, edgeId: edge.id });
+  if (edge.status === "confirmed") await closeSuperseded(userId, { ...input, edgeId: edge.id });
   return { edge, created: false };
 }
 
+// A suggestion never ends the current residence or owner; that happens when it is confirmed (here or on the card).
+export async function closeSupersededBy(userId, edge) {
+  if (edge?.status !== "confirmed") return;
+  await closeSuperseded(userId, { type: edge.type, fromId: edge.fromId, toId: edge.toId, validFrom: edge.validFrom, validTo: edge.validTo, edgeId: edge.id });
+}
+
 async function closeSuperseded(userId, input) {
-  if (!["located_in", "lives_at", "owns"].includes(input.type) || input.validTo) return;
+  if (!SUPERSEDED_TYPES.has(input.type) || input.validTo) return;
   const where = {
     userId,
     type: input.type,
@@ -614,7 +627,8 @@ async function applyEntityFacts(userId, facts, source) {
     else if (death && entity.deathDate && entity.deathDate.toISOString().slice(0, 10) !== death.toISOString().slice(0, 10)) {
       conflicts.push(await conflictSuggestion(userId, entity, "deathDate", entity.deathDate, death, source));
     }
-    if (fact.kind && !entity.kind) data.kind = String(fact.kind).slice(0, 40);
+    // A stated role ("mother") replaces a kind that only repeats the type ("person"), never a different role.
+    if (fact.kind && (!entity.kind || (isGenericKind(entity.kind) && !isGenericKind(fact.kind)))) data.kind = String(fact.kind).slice(0, 40);
     if (fact.birthOrder && !(isObject(entity.attributes) && entity.attributes.birthOrder)) {
       const attributes = isObject(entity.attributes) ? { ...entity.attributes } : {};
       attributes.birthOrder = fact.birthOrder;

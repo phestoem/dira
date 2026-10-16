@@ -1,7 +1,9 @@
 import { normalizeName } from "./entityResolver.js";
+import { fitsGender, genderOf, knownGender, SELF_PRONOUNS, THIRD_PERSON } from "./kinship.js";
 import { categoryOf, inverseOf, normalizeType, typeMeta } from "./relationshipTypes.js";
 
-const ROLE_WORDS = ["I", "me", "my", "mimi", "yangu", "the individual", "the user", "the owner", "the occupier", "the buyer"];
+// Self pronouns are matched on their own (selfMatchKind), never stored or compared as aliases.
+const ROLE_WORDS = ["the individual", "the user", "the owner", "the occupier", "the buyer"];
 const KINSHIP_WORD = /\b(mothers?|fathers?|sisters?|brothers?|sons?|daughters?|wives|husbands?|wife|mama|baba|dada|kaka|mtoto|mke|mume|parents|children)\b/i;
 const PLACEHOLDER_ROLES = {
   wife: ["spouse"],
@@ -13,6 +15,10 @@ const PLACEHOLDER_ROLES = {
   father: ["parent"],
   children: ["child"],
   child: ["child"],
+  sons: ["child"],
+  son: ["child"],
+  daughters: ["child"],
+  daughter: ["child"],
   sisters: ["sibling"],
   sister: ["sibling"],
   brothers: ["sibling"],
@@ -29,7 +35,7 @@ export function buildSelfAliasSet({ names = [], aliases = [] } = {}) {
   const out = [];
   for (const item of [...ROLE_WORDS, ...names, ...aliases]) {
     const key = normalizeName(item);
-    if (!key || seen.has(key)) continue;
+    if (!key || seen.has(key) || SELF_PRONOUNS.has(key)) continue;
     seen.add(key);
     out.push(String(item).trim());
   }
@@ -43,6 +49,7 @@ export function mentionsSelf(name, aliases = []) {
 export function selfMatchKind(name, aliases = []) {
   const normalized = normalizeName(name);
   if (!normalized) return null;
+  if (SELF_PRONOUNS.has(normalized)) return "pronoun";
   const keys = aliases.map((item) => normalizeName(item)).filter(Boolean);
   if (keys.includes(normalized)) return "exact";
   const parts = normalized.split(" ");
@@ -71,7 +78,7 @@ export function fullNameFromProfile(event) {
   return null;
 }
 
-export function relativesFromEdges(edges, selfId, namesById = new Map()) {
+export function relativesFromEdges(edges, selfId, namesById = new Map(), kindsById = new Map()) {
   const relatives = [];
   for (const edge of edges || []) {
     if (edge.status !== "confirmed" || edge.category !== "family") continue;
@@ -84,7 +91,7 @@ export function relativesFromEdges(edges, selfId, namesById = new Map()) {
     else if (edge.type === "sibling_of") role = "sibling";
     else if (edge.type === "parent_of") role = selfTo ? "parent" : "child";
     else if (edge.type === "child_of") role = selfFrom ? "parent" : "child";
-    relatives.push({ role, id: otherId, name: namesById.get(otherId) || otherId });
+    relatives.push({ role, id: otherId, name: namesById.get(otherId) || otherId, gender: knownGender({ kind: kindsById.get(otherId) }, edge) });
   }
   return relatives;
 }
@@ -192,6 +199,7 @@ export function dropReason(triple, context = {}) {
   const subject = sideName(triple?.subject);
   const object = sideName(triple?.object);
   if (isIssued(triple?.predicate)) return "administrative";
+  if (THIRD_PERSON.has(normalizeName(subject)) || THIRD_PERSON.has(normalizeName(object))) return "unresolved-pronoun";
   if (lifeFactOf(triple)) return "life-fact";
   if (unresolvedPlaceholder(subject, context) || unresolvedPlaceholder(object, context)) return "unresolved-kinship";
   if (isDateName(subject) || isDateName(object)) return "date-as-node";
@@ -302,7 +310,8 @@ function resolvePlaceholder(name, relatives) {
   const key = placeholderKey(name);
   const roles = PLACEHOLDER_ROLES[key];
   if (!roles) return { placeholder: false, resolved: [] };
-  return { placeholder: true, resolved: relatives.filter((person) => roles.includes(person.role)) };
+  const gender = genderOf(key);
+  return { placeholder: true, resolved: relatives.filter((person) => roles.includes(person.role) && fitsGender(gender, person.gender)) };
 }
 
 function placeholderKey(name) {

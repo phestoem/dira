@@ -1,14 +1,14 @@
 import { prisma } from "../../prisma.js";
 import { isReadonly } from "../../readonly.js";
+import { fitsGender, genderOf, knownGender, SELF_PRONOUNS, THIRD_PERSON } from "./kinship.js";
 import { inverseOf, isSymmetric } from "./relationshipTypes.js";
 
 const HONORIFIC = /^(mr|mrs|ms|dr|prof|ndugu|bi|bwana|mzee)\.?\s+/i;
 const KINSHIP = [
-  { pattern: /\b(my|our)\s+(mother|mum|mom|mama)\b|\bmama\s+yangu\b/i, type: "parent_of", kind: "parent" },
-  { pattern: /\b(my|our)\s+(father|dad|baba)\b|\bbaba\s+yangu\b/i, type: "parent_of", kind: "parent" },
-  { pattern: /\b(my|our)\s+(wife|husband|spouse)\b|\b(mke|mume)\s+yangu\b/i, type: "spouse_of", kind: "spouse" },
-  { pattern: /\b(my|our)\s+(sister|brother|sibling)\b|\b(dada|kaka)\s+yangu\b/i, type: "sibling_of", kind: "sibling" },
-  { pattern: /\b(my|our)\s+(son|daughter|child)\b|\bmtoto\s+wangu\b/i, type: "child_of", kind: "child" },
+  { pattern: /\b(?:my|our)\s+(mother|mum|mom|mama|father|dad|baba)\b|\b(mama|baba)\s+(?:yangu|wangu)\b/i, type: "parent_of" },
+  { pattern: /\b(?:my|our)\s+(wife|husband|spouse)\b|\b(mke|mume)\s+(?:yangu|wangu)\b/i, type: "spouse_of" },
+  { pattern: /\b(?:my|our)\s+(sister|brother|sibling)\b|\b(dada|kaka)\s+(?:yangu|wangu)\b/i, type: "sibling_of" },
+  { pattern: /\b(?:my|our)\s+(son|daughter|child)\b|\b(mtoto)\s+(?:yangu|wangu)\b/i, type: "child_of" },
 ];
 
 export function normalizeName(value) {
@@ -50,7 +50,8 @@ export async function getOrCreateSelf(userId) {
     best = chooseSelfName({ profileName: profile, handle: user?.handle, eventNames: found, current: existing?.name });
   }
   if (!best) best = profile || existing?.name || "Me";
-  const aliases = mergeAliases(existing?.aliases, [user?.handle, existing?.name, "me", "i", "mimi"]);
+  // Pronouns (I, me, mimi) are resolved by the clause, never through aliases; older selves carried them, so they are dropped here.
+  const aliases = mergeAliases(existing?.aliases, [user?.handle, existing?.name]).filter((item) => !SELF_PRONOUNS.has(normalizeName(item)));
   // A readonly request reads the self as it is; it never creates or renames it.
   if (isReadonly()) return existing || { id: null, userId, name: best, entityType: "person", kind: "self", isSelf: true, aliases };
   if (!existing) {
@@ -92,18 +93,24 @@ export async function resolveEntity(userId, input, options = {}) {
     return { entity: self, created: false, matchedBy: "self", confidence: 1, candidates: [] };
   }
 
+  // She, he, they: the clause says who they are; an entity name never does.
+  if (THIRD_PERSON.has(normalizeName(name))) return { entity: null, created: false, matchedBy: "pronoun", confidence: 0, candidates: [] };
+
   const kinship = kinshipOf(name);
   if (kinship) {
+    // "my mother Froidah Biniala Kyando": the name wins over any lookup through existing edges.
+    const named = nameBesideKinship(name, kinship);
+    if (named) return resolveEntity(userId, { ...input, name: named, kind: input?.kind || kinship.word }, options);
     const self = await prisma.entity.findFirst({ where: { userId, isSelf: true, status: { not: "archived" } } });
-    if (self) {
-      const matches = await kinshipMatches(userId, self.id, kinship.type);
-      if (matches.length === 1) {
-        return { entity: matches[0], created: false, matchedBy: "kinship", confidence: 0.92, candidates: [] };
-      }
-      if (matches.length > 1) {
-        return { entity: null, created: false, matchedBy: "ambiguous", confidence: 0.4, candidates: matches };
-      }
+    const matches = self ? await kinshipMatches(userId, self.id, kinship.type, genderOf(kinship.word)) : [];
+    if (matches.length === 1) {
+      return { entity: matches[0], created: false, matchedBy: "kinship", confidence: 0.92, candidates: [] };
     }
+    if (matches.length > 1) {
+      return { entity: null, created: false, matchedBy: "ambiguous", confidence: 0.4, candidates: matches };
+    }
+    // Nobody fits "my mother" yet; never invent a person called "my mother".
+    return { entity: null, created: false, matchedBy: "unresolved-kinship", confidence: 0, candidates: [] };
   }
 
   const normalized = normalizeName(name);
@@ -116,7 +123,8 @@ export async function resolveEntity(userId, input, options = {}) {
   const exact = pool.find((entity) => entity.normalizedName === normalized || normalizeName(entity.name) === normalized);
   if (exact) return { entity: exact, created: false, matchedBy: "name", confidence: 0.98, candidates: [] };
 
-  const alias = pool.find((entity) => (entity.aliases || []).some((item) => normalizeName(item) === normalized));
+  // Tokens under 3 characters ("i", "me") never match through an alias.
+  const alias = normalized.length >= 3 && pool.find((entity) => (entity.aliases || []).some((item) => normalizeName(item) === normalized));
   if (alias) return { entity: alias, created: false, matchedBy: "alias", confidence: 0.9, candidates: [] };
 
   const first = normalized.split(" ")[0];
@@ -267,7 +275,7 @@ export async function findDuplicateCandidates(userId) {
   return pairs.sort((a, b) => b.score - a.score).slice(0, 20);
 }
 
-async function kinshipMatches(userId, selfId, type) {
+async function kinshipMatches(userId, selfId, type, gender = null) {
   const inverse = inverseOf(type);
   const edges = await prisma.relationship.findMany({
     where: {
@@ -282,7 +290,9 @@ async function kinshipMatches(userId, selfId, type) {
   });
   const ids = [...new Set(edges.map((edge) => (edge.fromId === selfId ? edge.toId : edge.fromId)))];
   if (!ids.length) return [];
-  return prisma.entity.findMany({ where: { userId, id: { in: ids }, status: { not: "archived" } } });
+  const people = await prisma.entity.findMany({ where: { userId, id: { in: ids }, status: { not: "archived" } } });
+  const edgeFor = (id) => edges.find((edge) => edge.fromId === id || edge.toId === id);
+  return people.filter((person) => fitsGender(gender, knownGender(person, edgeFor(person.id))));
 }
 
 async function repointJson(userId, mergeId, keep) {
@@ -318,7 +328,17 @@ function rewriteRefs(value, mergeId, keep) {
 }
 
 function kinshipOf(name) {
-  return KINSHIP.find((item) => item.pattern.test(name)) || null;
+  for (const item of KINSHIP) {
+    const match = String(name || "").match(item.pattern);
+    if (match) return { ...item, word: (match[1] || match[2] || "").toLowerCase(), match: match[0] };
+  }
+  return null;
+}
+
+function nameBesideKinship(name, kinship) {
+  const rest = String(name).replace(kinship.match, " ").replace(/[(),:;—-]+/g, " ").replace(/\s+/g, " ").trim();
+  const words = rest.split(" ").filter((word) => /^[\p{Lu}][\p{L}'’-]{2,}$/u.test(word) && !THIRD_PERSON.has(word.toLowerCase()) && !SELF_PRONOUNS.has(word.toLowerCase()));
+  return words.length ? words.join(" ") : "";
 }
 
 function isSelfName(name) {
