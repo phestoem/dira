@@ -9,12 +9,12 @@ import { CASES, MOTHER_SENTENCE, SEED_MESSAGES } from "../scripts/golden/cases.j
 // appear in a prompt, regex, example or comment. Golden scores only mean something if the code never saw the answers.
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
 // The synthetic family and the hold-out set must be as unseen as the owner's own records.
-const SETS = ["../scripts/golden/sets/synthetic.json", "./holdout/holdout.json"].map((path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8")));
+const SETS = ["../scripts/golden/sets/synthetic.json", "./holdout/holdout.json", "./holdout/holdout2.json"].map((path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8")));
 const SET_SEEDS = SETS.flatMap((set) => set.seeds);
 const SET_TURNS = SETS.flatMap((set) => set.questions.flatMap((question) => question.turns));
 
 // Proper nouns from the golden seeds are found automatically; these words in them are ordinary English or brands.
-const ORDINARY = new Set(["my", "she", "i", "i'm", "mum", "eur", "jina", "mama", "dada", "after", "in", "our", "her", "jeroen's", "eoin's", "januari", "februari", "machi", "aprili", "mei", "juni", "julai", "agosti", "septemba", "oktoba", "novemba", "desemba", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "tsh", "toyota", "suzuki"]);
+const ORDINARY = new Set(["my", "she", "i", "i'm", "mum", "eur", "jina", "mama", "dada", "after", "in", "our", "her", "jeroen's", "eoin's", "marek's", "zofia's", "we", "our", "my", "is", "jan", "januari", "februari", "machi", "aprili", "mei", "juni", "julai", "agosti", "septemba", "oktoba", "novemba", "desemba", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "tsh", "toyota", "suzuki"]);
 // Personal identifiers that are not in the golden seeds.
 const PERSONAL = ["Burton", "Ntagha", "Makoba", "Emmiliana", "Hassani", "Mrisho", "Juma Enock", "RZJ1200017194", "P9200", "Tent Camping Plans", "Dar es Salaam", "Finland", "Tanzania", "Arusha", "Nairobi"];
 

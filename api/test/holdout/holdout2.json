@@ -1,0 +1,29 @@
+{
+  "name": "holdout2",
+  "note": "Score only. Written before the tools engine existed. Never read individual failures or tune code for these sentences.",
+  "selfName": "Katarzyna Nowak",
+  "seeds": [
+    "I'm Katarzyna Nowak, and I live in Gdańsk with my husband Marek Wiśniewski.",
+    "We got married on 12 August 2011 in Sopot.",
+    "Our daughter Zofia was born on 3 January 2013, and her little brother Jan on 27 May 2016.",
+    "My dad, Andrzej Nowak, is retired; my mum Ewa passed away on 14 February 2020.",
+    "Marek's mother, Halina Wiśniewska, looks after the kids on Fridays.",
+    "My cousin Piotr Zieliński runs a bakery in Łódź.",
+    "Zofia's godmother is my best friend Agnieszka Lis.",
+    "Marek and I bought a flat in Gdańsk in 2014.",
+    "My grandfather left me a forest plot near Olsztyn when he died in 2009.",
+    "I sold our old Skoda to Piotr last spring."
+  ],
+  "questions": [
+    { "id": "k-husband", "turns": ["who is my husband?"], "expect": { "has": ["Marek Wiśniewski"] } },
+    { "id": "k-married", "turns": ["when did I get married?"], "expect": { "dates": ["2011-08-12"] } },
+    { "id": "k-children-count", "turns": ["how many children do I have?"], "expect": { "count": 2 } },
+    { "id": "k-jan-born", "turns": ["when was Jan born?"], "expect": { "dates": ["2016-05-27"] } },
+    { "id": "k-mother", "turns": ["is my mother still alive?"], "expect": { "dates": ["2020-02-14"] } },
+    { "id": "k-halina", "turns": ["who is Halina Wiśniewska?"], "expect": { "has": ["Marek"] } },
+    { "id": "k-cousin", "turns": ["who is my cousin?"], "expect": { "has": ["Piotr Zieliński"] } },
+    { "id": "k-godmother", "turns": ["who is Zofia's godmother?"], "expect": { "has": ["Agnieszka Lis"] } },
+    { "id": "k-skoda", "turns": ["who has our Skoda now?"], "expect": { "has": ["Piotr"] } },
+    { "id": "k-property", "turns": ["what property do I own?"], "expect": { "has": ["Gdańsk", "Olsztyn"], "lacks": ["Skoda"] } }
+  ]
+}

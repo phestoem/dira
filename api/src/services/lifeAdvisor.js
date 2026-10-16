@@ -3,6 +3,8 @@ import { prisma } from "../prisma.js";
 import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 import { isNoiseReply } from "./intentRouter.js";
+import { peopleEngine } from "./graph/engine.js";
+import { answerWithTools } from "./graph/peopleTools.js";
 import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, usesRecordedAnswer } from "./graph/peopleGrounding.js";
 
 const GROQ_MODEL = "qwen/qwen3.8-27b";
@@ -115,8 +117,16 @@ export async function chat(messages, userId) {
   const userTurns = history.filter((message) => message.role === "user");
   const latest = userTurns.at(-1)?.content || "";
   const priorAnswer = [...history].reverse().find((message) => message.role === "assistant" && !isNoiseReply(message.content))?.content || "";
+  // Tools engine: the model reads the conversation and picks tools itself; no question wording is parsed here.
+  if (peopleEngine() === "tools") {
+    const answered = await answerWithTools(userId, history).catch((err) => {
+      console.error("[advisor] tools answer failed:", err.message);
+      return null;
+    });
+    if (answered) return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: 0, tools: answered.toolsUsed } };
+  }
   const question = contextualQuestion(latest, userTurns.at(-2)?.content || "", priorAnswer);
-  if (isPeopleQuestion(question)) {
+  if (peopleEngine() !== "tools" && isPeopleQuestion(question)) {
     const answered = await answerPeople(userId, question);
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
   }

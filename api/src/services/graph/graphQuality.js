@@ -213,8 +213,9 @@ export function dropReason(triple, context = {}) {
   const aligned = alignPredicate(triple?.subject?.type, triple?.predicate, triple?.object?.type);
   if (aligned.reason) return aligned.reason;
   const evidence = `${triple?.evidence || ""} ${context.message || ""} ${context.sourceText || ""}`;
-  if (possessiveMismatch(triple, aligned.type, evidence, context)) return "possessive-mismatch";
-  if (categoryOf(aligned.type) === "family" && !KINSHIP_WORD.test(evidence) && !(aligned.type === "spouse_of" && MARRIAGE_WORD.test(evidence))) return "unsupported-family";
+  // Schema-engine facts were already judged by their verbatim evidence; the wording checks below are the rules engine's.
+  if (!triple?.validated && possessiveMismatch(triple, aligned.type, evidence, context)) return "possessive-mismatch";
+  if (!triple?.validated && categoryOf(aligned.type) === "family" && !KINSHIP_WORD.test(evidence) && !(aligned.type === "spouse_of" && MARRIAGE_WORD.test(evidence))) return "unsupported-family";
   if (subject && object && normalizeName(subject) === normalizeName(object)) return "same-node";
   return null;
 }

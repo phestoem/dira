@@ -16,6 +16,7 @@ import { extractConversationalFacts, previousExchangeFrom, routeIntent } from ".
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 import { describeRelationshipLine, isRelationshipStatement } from "../services/graph/familyStatement.js";
+import { peopleEngine } from "../services/graph/engine.js";
 import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
 import { closeSupersededBy, commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
@@ -682,7 +683,7 @@ async function runRelationshipChange(userId, routing, payload) {
 
 async function runGraphQuery(userId, routing, payload) {
   const text = payload.message;
-  if (isPeopleQuestion(text)) {
+  if (peopleEngine() === "tools" || isPeopleQuestion(text)) {
     const reply = await chat(advisorMessages(payload.history, text), userId);
     return answerResponse(routing, reply.reply, false);
   }

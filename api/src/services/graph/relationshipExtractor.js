@@ -2,7 +2,9 @@ import { prisma } from "../../prisma.js";
 import { isReadonly } from "../../readonly.js";
 import { autoExtractOn } from "./autoExtract.js";
 import { genderOf, isGenericKind, refinesKind } from "./kinship.js";
+import { peopleEngine } from "./engine.js";
 import { PEOPLE_EXTRACT_PROMPT, peopleToGraph, validatePeople } from "./peopleFacts.js";
+import { PEOPLE_SCHEMA, PEOPLE_SCHEMA_PROMPT, schemaFactsToGraph, validateSchemaFacts } from "./peopleSchema.js";
 import { getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
 import { buildSelfAliasSet, dropReason, fullNameFromProfile, prepareTriples as refineTriples, relativesFromEdges } from "./graphQuality.js";
 import { categoryOf, isSensitive, isSymmetric, listRelationshipTypes, normalizeType } from "./relationshipTypes.js";
@@ -64,6 +66,19 @@ export async function extractTriples(text, context = {}) {
   try {
     const known = await knownPeople(context.userId);
     const roster = known.list.length ? `Known people (name — role to the narrator): ${known.list.map((person) => `${person.name} — ${person.kind}`).join("; ")}` : "";
+    if (peopleEngine() === "tools") {
+      const [generalRaw, schemaRaw] = await Promise.all([
+        completeJson(extractPrompt(), user),
+        completeJsonSchema(PEOPLE_SCHEMA_PROMPT, [`Narrator: ${selfName}`, context.today ? `Today: ${context.today}` : "", roster, "Text:", body.slice(0, 3500)].filter(Boolean).join("\n"), PEOPLE_SCHEMA),
+      ]);
+      const general = parseJson(generalRaw);
+      const triples = (Array.isArray(general?.triples) ? general.triples.slice(0, 15) : [])
+        .filter((triple) => categoryOf(normalizeType(triple?.predicate)?.type) !== "family" && !PEOPLE_PASS_TYPES.has(normalizeType(triple?.predicate)?.type));
+      const checked = validateSchemaFacts(parseJson(schemaRaw), { text: body, selfName, selfAliases: context.selfAliases || [], known: known.list });
+      for (const item of checked.dropped) console.debug(`[graph] people(tools): dropped ${item.item?.person || item.item?.name || "?"} (${item.reason})`);
+      const graph = schemaFactsToGraph(checked, selfName);
+      return { triples: [...triples, ...graph.triples], entityFacts: graph.entityFacts, people: checked.relations, dropped: checked.dropped };
+    }
     const [generalRaw, peopleRaw] = await Promise.all([
       completeJson(extractPrompt(), user),
       completeJson(PEOPLE_EXTRACT_PROMPT, [context.today ? `Today: ${context.today}` : "", roster, body.slice(0, 3500)].filter(Boolean).join("\n")),
@@ -793,6 +808,27 @@ function parseAmount(text) {
   }
   const amount = Number(num);
   return Number.isFinite(amount) ? amount : null;
+}
+
+// Structured output against a JSON schema (OpenAI); other providers get the schema in the prompt as JSON mode.
+async function completeJsonSchema(system, user, schema) {
+  const key = usableKey(process.env.OPENAI_API_KEY);
+  if (graphExtractProvider() !== "openai" || !key) return completeJson(`${system}\nReturn JSON matching this schema:\n${JSON.stringify(schema.schema)}`, user);
+  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+    method: "POST",
+    headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
+    body: JSON.stringify({
+      model: OPENAI_MODEL,
+      temperature: 0,
+      response_format: { type: "json_schema", json_schema: schema },
+      messages: [{ role: "system", content: system }, { role: "user", content: user }],
+    }),
+    signal: AbortSignal.timeout(30000),
+  });
+  if (response.status === 429) throw rateLimitError("OpenAI", response);
+  if (!response.ok) throw new Error(`OpenAI schema status ${response.status}`);
+  const data = await response.json();
+  return String(data.choices?.[0]?.message?.content || "");
 }
 
 async function completeJson(system, user) {
