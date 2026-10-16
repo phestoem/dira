@@ -104,7 +104,7 @@ export default async function graphRoutes(fastify) {
     const self = await getOrCreateSelf(request.userId);
     let extracted;
     try {
-      extracted = await extractTriples(text, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
+      extracted = await extractTriples(text, { userId: request.userId, selfName: self.name, today: new Date().toISOString().slice(0, 10) });
     } catch (err) {
       const busy = err.status === 429;
       return reply.code(busy ? 503 : 502).send({ error: busy ? "DIRA is busy right now. Send that again." : "Could not read that connection" });

@@ -52,7 +52,7 @@ export const CASES = [
   {
     id: "wife",
     turns: ["who is my wife?"],
-    check: ({ answer }) => has("Zelda Goodluck Mambosho")(answer),
+    check: ({ answer }) => [...has("Zelda Goodluck Mambosho")(answer), ...(mentionsDate(answer, "2006-08-05") ? [] : ["missing the marriage date 2006-08-05"])],
   },
   {
     id: "parents",

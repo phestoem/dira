@@ -4,6 +4,8 @@ import { categoryOf, inverseOf, normalizeType, typeMeta } from "./relationshipTy
 
 // Self pronouns are matched on their own (selfMatchKind), never stored or compared as aliases.
 const ROLE_WORDS = ["the individual", "the user", "the owner", "the occupier", "the buyer"];
+// "I married Ana on …" states a spouse without a kinship word; it supports spouse_of and nothing else.
+const MARRIAGE_WORD = /\b(married|marriage|marry|wed|wedding|ndoa|alioa|aliolewa|tulioana)\b/i;
 const KINSHIP_WORD = /\b(mothers?|fathers?|sisters?|brothers?|sons?|daughters?|wives|husbands?|wife|mama|baba|dada|kaka|mtoto|mke|mume|parents|children)\b/i;
 const PLACEHOLDER_ROLES = {
   wife: ["spouse"],
@@ -211,7 +213,7 @@ export function dropReason(triple, context = {}) {
   if (aligned.reason) return aligned.reason;
   const evidence = `${triple?.evidence || ""} ${context.message || ""} ${context.sourceText || ""}`;
   if (possessiveMismatch(triple, aligned.type, evidence, context)) return "possessive-mismatch";
-  if (categoryOf(aligned.type) === "family" && !KINSHIP_WORD.test(evidence)) return "unsupported-family";
+  if (categoryOf(aligned.type) === "family" && !KINSHIP_WORD.test(evidence) && !(aligned.type === "spouse_of" && MARRIAGE_WORD.test(evidence))) return "unsupported-family";
   if (subject && object && normalizeName(subject) === normalizeName(object)) return "same-node";
   return null;
 }
@@ -249,6 +251,15 @@ export function prepareTriples(triples, context = {}) {
     }
   }
   return { kept, dropped, entityFacts, reviewQuestions, selfSpellings };
+}
+
+// Why a name cannot be a person: an amount, a date, a count, a status or a generic word.
+export function notPersonReason(name) {
+  if (isMoneyName(name)) return "amount-as-person";
+  if (isDateName(name)) return "date-as-person";
+  if (isQuantityName(name)) return "quantity-as-person";
+  if (isStatusName(name) || isGenericNode(name)) return "generic-as-person";
+  return null;
 }
 
 export function editDistance(left, right) {

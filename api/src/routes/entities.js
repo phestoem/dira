@@ -1,7 +1,7 @@
 import { prisma } from "../prisma.js";
 import { autoExtractOn } from "../services/graph/autoExtract.js";
 import { normalizeName } from "../services/graph/entityResolver.js";
-import { anchorEventEdges, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
+import { anchorEventEdges, eventSourceText, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getNeighbors } from "../services/graph/graphQuery.js";
 import { categoryOf, normalizeType } from "../services/graph/relationshipTypes.js";
 
@@ -285,9 +285,7 @@ export async function extractAndLinkEntities(event, userId, understood) {
   } catch (err) {
     console.error("[graph] anchor failed:", err.message);
   }
-  const text = [understood?.understoodMeaning, understood?.summary, event.title, String(event.fullText || "").slice(0, 3000)]
-    .filter((part) => typeof part === "string" && part.trim())
-    .join("\n");
+  const text = eventSourceText(event, understood);
   scheduleExtraction(userId, text, { source: "intake", evidenceEventId: event.id, title: event.title });
   return linked;
 }

@@ -15,7 +15,7 @@ import {
 import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
-import { describeRelationshipLine, parseFamilyStatement } from "../services/graph/familyStatement.js";
+import { describeRelationshipLine } from "../services/graph/familyStatement.js";
 import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
 import { closeSupersededBy, commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
@@ -598,24 +598,23 @@ async function saveJournal(userId, content) {
 
 async function runRelationshipAdd(userId, routing, payload) {
   const self = await getOrCreateSelf(userId);
-  const parsed = parseFamilyStatement(payload.message);
-  let triples = parsed.triples;
-  let entityFacts = parsed.entityFacts;
-  if (!triples.length) {
-    try {
-      const extracted = await extractTriples(payload.message, {
-        selfName: self.name,
-        today: new Date().toISOString().slice(0, 10),
-      });
-      triples = extracted.triples;
-      entityFacts = extracted.entityFacts;
-    } catch (err) {
-      console.error("[graph] relationship extract failed:", err.message);
-      return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
-    }
+  let triples;
+  let entityFacts;
+  try {
+    const extracted = await extractTriples(payload.message, {
+      userId,
+      selfName: self.name,
+      selfAliases: self.aliases || [],
+      today: new Date().toISOString().slice(0, 10),
+    });
+    triples = extracted.triples;
+    entityFacts = extracted.entityFacts;
+  } catch (err) {
+    console.error("[graph] relationship extract failed:", err.message);
+    return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
   }
-  // "My sisters' birthdays: Jeni was born on 4 December 1980 …" names no new connection but records dates.
-  if (!triples.length && /\b\d{4}\b/.test(payload.message)) {
+  // Dates for people already known name no new connection; save the message as an event so the dates are kept.
+  if (!triples.length && entityFacts.some((fact) => fact.birthDate || fact.deathDate)) {
     return runIntakeText(userId, { ...routing, intent: "intake_text", interpretation: "Save this as something that happened." }, payload);
   }
   if (isReadonly()) {
@@ -638,7 +637,7 @@ async function runRelationshipChange(userId, routing, payload) {
   const self = await getOrCreateSelf(userId);
   let extracted;
   try {
-    extracted = await extractTriples(payload.message, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
+    extracted = await extractTriples(payload.message, { userId, selfName: self.name, today: new Date().toISOString().slice(0, 10) });
   } catch (err) {
     console.error("[graph] relationship extract failed:", err.message);
     return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);

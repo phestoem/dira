@@ -22,18 +22,9 @@ export function fitsGender(wanted, known) {
   return !wanted || known === wanted;
 }
 
-// "they" can refer to anyone; "she" and "he" only to someone of that gender. None of them ever means the self.
+// Third-person pronouns are resolved by the clause they sit in; none of them ever means the self.
 export const THIRD_PERSON = new Set(["she", "he", "they", "her", "him", "them", "hers", "his", "their", "yeye"]);
 export const SELF_PRONOUNS = new Set(["i", "me", "my", "myself", "mimi", "yangu", "wangu"]);
-
-export function pronounFits(pronoun, kind) {
-  const word = String(pronoun || "").toLowerCase();
-  if (word === "they" || word === "yeye") return true;
-  const gender = genderOf(kind);
-  if (word === "she" || word === "her") return gender === "female";
-  if (word === "he" || word === "him") return gender === "male";
-  return false;
-}
 
 // Kinds that only restate the entity type say nothing about the person's role and may be replaced by one that does.
 export function isGenericKind(kind) {

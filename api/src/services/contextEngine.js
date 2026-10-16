@@ -4,6 +4,7 @@ import { prisma } from "../prisma.js";
 import { getAltimetrixContext } from "./altimetrixBridge.js";
 import { expandGraphNames } from "./graph/entityResolver.js";
 import { autoExtractOn } from "./graph/autoExtract.js";
+import { knownPlacesIn } from "./graph/knownPlaces.js";
 import { anchorVision, markGraphExtracted } from "./graph/relationshipExtractor.js";
 import {
   extractFromCsv,
@@ -744,7 +745,7 @@ export async function detectVisionInJournalEntry(entry, userId) {
 async function understandWithContext(rawText, userId, eventType) {
   const understood = await interpretContent(rawText);
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  const topics = contextTopics(rawText, understood);
+  const topics = contextTopics(rawText, understood, await knownPlacesIn(userId, rawText).catch(() => []));
   const entityNames = await expandGraphNames(userId, contextNames(rawText, understood)).catch(() => contextNames(rawText, understood));
   console.log(
     "[intake] altimetrix query:",
@@ -819,12 +820,13 @@ function contextQuery(rawText, understood) {
   return [bits.join(". "), note].filter(Boolean).join(" — ").slice(0, 700);
 }
 
-function contextTopics(rawText, understood) {
+function contextTopics(rawText, understood, places = []) {
   const people = Array.isArray(understood?.people) ? understood.people : [];
   return uniqueNeedles([
     ...phraseParts(understood?.location),
     ...phraseParts(understood?.project),
     ...people.flatMap((person) => phraseParts(person)),
+    ...places.map((place) => place.toLowerCase()),
     ...extractQuickTopics(rawText),
     ...phraseParts(understood?.title),
   ]).slice(0, 8);
@@ -853,16 +855,10 @@ function phraseParts(value) {
 
 function extractQuickTopics(text) {
   const source = String(text || "");
-  const locationWords = source.match(
-    /\b(Tanzania|Zanzibar|Mbeya|Dar|Helsinki|Finland|Jambiani|Arusha|Nairobi)\b/gi,
-  ) || [];
   const activityWords = source.match(
     /\b(farming|electrical|construction|fence|property|house|land|investment|business|family|health|travel|retirement|project|camp(?:ing)?|tent|visitors?|stays?|guesthouse|lodge|hotel)\b/gi,
   ) || [];
-  return [...new Set([
-    ...locationWords.map((word) => word.toLowerCase()),
-    ...activityWords.map((word) => word.toLowerCase()),
-  ])].slice(0, 8);
+  return [...new Set(activityWords.map((word) => word.toLowerCase()))].slice(0, 8);
 }
 
 function extractEntityNames(text) {

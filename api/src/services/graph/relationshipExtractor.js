@@ -1,7 +1,8 @@
 import { prisma } from "../../prisma.js";
 import { isReadonly } from "../../readonly.js";
 import { autoExtractOn } from "./autoExtract.js";
-import { isGenericKind } from "./kinship.js";
+import { genderOf, isGenericKind } from "./kinship.js";
+import { PEOPLE_EXTRACT_PROMPT, peopleToGraph, validatePeople } from "./peopleFacts.js";
 import { getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
 import { buildSelfAliasSet, dropReason, fullNameFromProfile, prepareTriples as refineTriples, relativesFromEdges } from "./graphQuality.js";
 import { categoryOf, isSensitive, isSymmetric, listRelationshipTypes, normalizeType } from "./relationshipTypes.js";
@@ -12,43 +13,43 @@ const OPENAI_MODEL = "gpt-4o-mini";
 const BACKOFF_MS = [2000, 4000, 8000, 16000, 32000];
 const MAX_EXTRACT_ATTEMPTS = 5;
 const SUPERSEDED_TYPES = new Set(["located_in", "lives_at", "owns"]);
+// Where people live and were born comes from the people pass, which checks it against the text.
+const PEOPLE_PASS_TYPES = new Set(["lives_at", "born_in"]);
 
 function extractPrompt() {
-  const predicates = listRelationshipTypes().map((item) => item.type).join(", ");
+  const predicates = listRelationshipTypes().filter((item) => categoryOf(item.type) !== "family").map((item) => item.type).join(", ");
   return `Extract relationship triples that are actually stated in the text.
 Return JSON only:
-{ "triples": [{ "subject": { "name": "", "type": "person|place|property|project|organisation|asset|vehicle|self" }, "predicate": "", "object": { "name": "", "type": "" }, "validFrom": null, "validTo": null, "attributes": {}, "confidence": 0.5, "evidence": "" }], "entityFacts": [{ "name": "", "birthDate": null, "deathDate": null, "kind": null }] }
+{ "triples": [{ "subject": { "name": "", "type": "person|place|property|project|organisation|asset|vehicle|self" }, "predicate": "", "object": { "name": "", "type": "" }, "validFrom": null, "validTo": null, "attributes": {}, "confidence": 0.5, "evidence": "" }] }
 Rules:
-- Subjects and objects must be real-world things: a person, place, property, project, organisation, vehicle, or named asset (for example "Plot P9104").
+- Subjects and objects must be real-world things: a person, place, property, project, organisation, vehicle, or named asset (for example "Lot 14B").
 - Money amounts, dates, durations, percentages, quantities and statuses go in "attributes", never in subject or object.
 - Predicates must be one of: ${predicates}.
-  Synonyms are accepted: mama, mum, mother, dada, mke, mume, mtoto, fundi, msimamizi, ananunua, alinunua, supervises, owns, occupies, married, alioa, studies at, sold to, sent money to.
+  Synonyms are accepted: fundi, msimamizi, ananunua, alinunua, supervises, owns, occupies, studies at, sold to, sent money to.
   If no listed predicate fits, omit the triple.
+- Family relationships (parents, children, siblings, spouses), births, deaths, marriages and where people live are extracted separately. Never output them here.
 - Prefer relationships between people, places and assets over describing a single event's properties.
 - The narrator is the SELF named in the user message. "I", "me", "my", "mimi", "yangu", and every spelling of that person's name are type self. Never map the narrator to any other person.
-- Possessive kinship ("my wife", "my husband", "my father", "my mother", "my children", "mke wangu", "baba yangu") always connects that person to the narrator, one clause at a time. Never attach "my wife" to another person mentioned nearby. Keep every word of a name ("Zelda Goodluck Mambosho", "Prisha Neema").
-- Only output a family relationship when the text states it explicitly. A shared surname or middle name is not evidence of any relationship.
-- Words such as wife, husband, parents, mother, father, children, sisters and family are not names. Use the person's name, or omit the triple.
-- Do not output generic activities (landscaping, purchase, renovation), money words (cash, payment, cost, fee), or identifier numbers (TIN, application, chassis) as subject or object. A named project such as "Kisarawe House Renovation" is allowed.
+- Do not output generic activities (landscaping, purchase, renovation), money words (cash, payment, cost, fee), or identifier numbers (TIN, application, chassis) as subject or object. A named project such as "Harbour Cottage Renovation" is allowed.
 - "issued" is administrative. Omit it.
-- A death or birth is an entityFact (deathDate or birthDate), never a triple.
-- Do not invent family links that were not said.
-- A death does not end a family edge. Put the date on entityFacts.deathDate.
 - Selling, moving out, or a role ending sets validTo.
 - Money transfers set attributes.amount and attributes.currency.
 - At most 15 triples.
 - Work in English or Swahili.
 
-Bad: { "subject": { "name": "Electrical Works", "type": "project" }, "predicate": "hasTotalContractValue", "object": { "name": "2,399,500 TSH", "type": "asset" } }
-Bad: { "subject": { "name": "Plot P9104", "type": "property" }, "predicate": "dated", "object": { "name": "12 May 2024", "type": "other" } }
-Good: { "subject": { "name": "Burton", "type": "person" }, "predicate": "supervises", "object": { "name": "Mbeya Home", "type": "property" } }
-Good: { "subject": { "name": "me", "type": "self" }, "predicate": "owns", "object": { "name": "Plot P9104", "type": "property" } }
-Good: { "subject": { "name": "me", "type": "self" }, "predicate": "sent_money_to", "object": { "name": "Makoba", "type": "person" }, "attributes": { "amount": 50000, "currency": "TSH" } }`;
+Bad: { "subject": { "name": "Roof Repair", "type": "project" }, "predicate": "hasTotalContractValue", "object": { "name": "12,450 EUR", "type": "asset" } }
+Bad: { "subject": { "name": "Lot 14B", "type": "property" }, "predicate": "dated", "object": { "name": "12 May 2024", "type": "other" } }
+Good: { "subject": { "name": "Tomás Ferreira", "type": "person" }, "predicate": "supervises", "object": { "name": "Coimbra House", "type": "property" } }
+Good: { "subject": { "name": "me", "type": "self" }, "predicate": "owns", "object": { "name": "Lot 14B", "type": "property" } }
+Good: { "subject": { "name": "me", "type": "self" }, "predicate": "sent_money_to", "object": { "name": "Rafael", "type": "person" }, "attributes": { "amount": 300, "currency": "EUR" } }`;
 }
 
+// Two structured passes over the same text: general triples (work, places, assets, money) and people (who they are
+// to the narrator, their dates, where they live). Family edges and person dates come only from the people pass,
+// after validatePeople has checked them against the text.
 export async function extractTriples(text, context = {}) {
   const body = String(text || "").trim();
-  if (body.length < 8) return { triples: [], entityFacts: [] };
+  if (body.length < 8) return { triples: [], entityFacts: [], people: [], dropped: [] };
   const known = Array.isArray(context.known) ? context.known.slice(0, 40) : [];
   const selfName = context.selfName || "me";
   const others = known.filter((item) => !item.isSelf && normalizeName(item.name) !== normalizeName(selfName));
@@ -61,15 +62,44 @@ export async function extractTriples(text, context = {}) {
     body.slice(0, 3500),
   ].filter(Boolean).join("\n");
   try {
-    const raw = await completeJson(extractPrompt(), user);
-    const parsed = parseJson(raw);
-    const triples = Array.isArray(parsed?.triples) ? parsed.triples.slice(0, 15) : [];
-    const entityFacts = Array.isArray(parsed?.entityFacts) ? parsed.entityFacts.slice(0, 15) : [];
-    return { triples, entityFacts };
+    const [generalRaw, peopleRaw, genders] = await Promise.all([
+      completeJson(extractPrompt(), user),
+      completeJson(PEOPLE_EXTRACT_PROMPT, [context.today ? `Today: ${context.today}` : "", body.slice(0, 3500)].filter(Boolean).join("\n")),
+      knownGenders(context.userId),
+    ]);
+    const general = parseJson(generalRaw);
+    const triples = (Array.isArray(general?.triples) ? general.triples.slice(0, 15) : [])
+      .filter((triple) => categoryOf(normalizeType(triple?.predicate)?.type) !== "family" && !PEOPLE_PASS_TYPES.has(normalizeType(triple?.predicate)?.type));
+    const checked = validatePeople(parseJson(peopleRaw)?.people, { text: body, selfName, selfAliases: context.selfAliases || [], knownGender: genders });
+    for (const item of checked.dropped) console.debug(`[graph] people: dropped ${item.name || "?"} (${item.reason})`);
+    const graph = peopleToGraph(checked.people);
+    const narratorFacts = graph.narrator && (graph.narrator.birthDate || graph.narrator.deathDate)
+      ? [{ name: selfName, birthDate: graph.narrator.birthDate, deathDate: graph.narrator.deathDate, kind: null, birthOrder: null }]
+      : [];
+    return { triples: [...triples, ...graph.triples], entityFacts: [...graph.entityFacts, ...narratorFacts], people: checked.people, dropped: checked.dropped };
   } catch (err) {
     if (err.status !== 429) console.error("[graph] extract failed:", err.message);
     throw err;
   }
+}
+
+// What the graph already knows about each person's gender, from their role.
+async function knownGenders(userId) {
+  if (!userId) return () => null;
+  const people = await prisma.entity.findMany({ where: { userId, entityType: "person", isSelf: false, status: { not: "archived" }, mergedIntoId: null }, select: { name: true, kind: true }, take: 300 });
+  return (name) => {
+    const key = normalizeName(name);
+    const exact = people.find((person) => normalizeName(person.name) === key);
+    return genderOf(exact?.kind) || null;
+  };
+}
+
+// What the person actually wrote (or the document's own text) is the evidence. The model's paraphrase ("The
+// individual married …") loses who "I" is, so it is used only when nothing else was kept.
+export function eventSourceText(event, understood = null) {
+  const own = [event?.rawInput, String(event?.fullText || "").slice(0, 6000)].filter((part) => typeof part === "string" && part.trim());
+  if (own.length) return [...new Set(own)].join("\n").slice(0, 8000);
+  return [understood?.understoodMeaning, understood?.summary, event?.title, event?.understoodMeaning].filter((part) => typeof part === "string" && part.trim()).join("\n").slice(0, 8000);
 }
 
 export function graphExtractProvider() {
@@ -350,6 +380,7 @@ export function scheduleExtraction(userId, text, options = {}) {
         orderBy: { updatedAt: "desc" },
       });
       const extracted = await extractWithRetry(() => extractTriples(text, {
+        userId,
         selfName: self?.name,
         today: new Date().toISOString().slice(0, 10),
         title: options.title,
@@ -512,7 +543,7 @@ async function upsertEdge(userId, input) {
     return { edge, created: true };
   }
   const ended = Boolean(input.validTo) && !existing.validTo;
-  // "She lives in Mbeya" said again makes an ended residence current again; closeSuperseded then ends the other one.
+  // "She lives in Cusco" said again makes an ended residence current again; closeSuperseded then ends the other one.
   const reopened = input.restated && !input.validTo && existing.validTo && SUPERSEDED_TYPES.has(input.type);
   const attributes = mergeAttributes(existing.attributes, input.attributes, input);
   const edge = await prisma.relationship.update({
@@ -522,6 +553,8 @@ async function upsertEdge(userId, input) {
       confidence: Math.max(existing.confidence || 0, input.confidence || 0),
       attributes,
       validTo: input.validTo || (reopened ? null : existing.validTo),
+      // A marriage or start date stated later fills the edge it belongs to; a recorded one is never overwritten.
+      ...(input.validFrom && !existing.validFrom ? { validFrom: input.validFrom } : {}),
       evidenceText: existing.evidenceText || input.evidenceText || null,
     },
   });

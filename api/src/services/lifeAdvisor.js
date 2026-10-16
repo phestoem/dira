@@ -3,7 +3,7 @@ import { prisma } from "../prisma.js";
 import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 import { isNoiseReply } from "./intentRouter.js";
-import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts, usesRecordedAnswer } from "./graph/peopleGrounding.js";
+import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, usesRecordedAnswer } from "./graph/peopleGrounding.js";
 
 const GROQ_MODEL = "qwen/qwen3.8-27b";
 const FACT_MODEL = "gpt-4o-mini";
@@ -39,8 +39,8 @@ Your responses:
    lists for options or action items)
 - Be conversational but substantive
 - Reference specific data points naturally
-  ('your Ntabha land purchase in July',
-   'the 2.4M TSH electrical project')
+  ('your Coimbra land purchase in July',
+   'the 12,450 EUR roof repair')
 - Connect dots across different areas when relevant`;
 
 const FORMAT_RULES = `RESPONSE FORMAT RULES — follow these precisely:
@@ -50,7 +50,7 @@ USE A MARKDOWN TABLE when:
 - Comparing two or more things side by side
 - Listing records with consistent attributes
 - Financial line items from documents
-Format: | Item | Amount (TSH) | with header row
+Format: | Item | Amount (EUR) | with header row
 
 USE A BULLET LIST when:
 - Listing conditions, features, or requirements
@@ -70,9 +70,9 @@ USE A SINGLE LINE when:
 - Confirming an action was taken
 
 AMOUNT FORMATTING:
-- Always write amounts with commas: 2,399,500 TSH
+- Always write amounts with commas: 12,450 EUR
 - Always include the currency: TSH, EUR, USD
-- For totals: bold the amount using **2,399,500 TSH**
+- For totals: bold the amount using **12,450 EUR**
 
 NEVER:
 - Mix a table and a list in the same response
@@ -88,24 +88,24 @@ NEVER:
   A separate control offers to save a fact.
 
 GOOD EXAMPLE — cost breakdown request:
-| Item | Cost (TSH) |
+| Item | Cost (EUR) |
 |------|-----------|
-| Wire 1.5mm² | 666,000 |
-| Main switch | 180,000 |
-| Labour | 600,000 |
-| **Total** | **2,399,500** |
+| Roof tiles | 6,200 |
+| Gutters | 1,850 |
+| Labour | 4,400 |
+| **Total** | **12,450** |
 
 BAD EXAMPLE — same request:
-'Based on your records, the electrical works
-cost 2,399,500 TSH. The items include wire,
-switches, and labour.'
+'Based on your records, the roof repair
+cost 12,450 EUR. The items include tiles,
+gutters, and labour.'
 
 GOOD EXAMPLE — factual question:
-'Your Toyota Prado chassis number is RZJ1200017194.'
+'Your van's chassis number is WF0XXXTTGXKA00001.'
 
 BAD EXAMPLE — same question:
-'Based on the Motor Vehicle Registration document
-dated March 20, 2014, I can see that the vehicle
+'Based on the vehicle registration document
+dated 3 May 2017, I can see that the vehicle
 details include... the chassis number is...'
 
 Be direct. Use the right format. Let the data speak.`;
@@ -343,7 +343,7 @@ function buildSystemPrompt(context) {
 You have access to ALL of the user's events.
 Use semantic understanding to find relevant ones —
 do not rely on exact keyword matching.
-'Mbeya project' should find events about Mbeya
+'Cusco project' should find events about Cusco
 even if the word 'project' doesn't appear.
 'car' should find vehicle registration events.
 'land' should find property purchase events.
@@ -421,7 +421,6 @@ async function graphContext(userId, text) {
 
 async function answerPeople(userId, question) {
   const context = await loadPeopleContext(userId);
-  await persistConflicts(userId, context.conflicts);
   if (usesRecordedAnswer(question)) {
     return { reply: answerPeopleQuestion(question, context), sourceIds: context.facts.map((fact) => `${fact.source.type}:${fact.source.id}`) };
   }

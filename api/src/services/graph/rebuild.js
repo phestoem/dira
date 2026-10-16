@@ -8,6 +8,7 @@ import {
   anchorVision,
   commitTriples,
   deterministicEdgePlans,
+  eventSourceText,
   extractTriples,
   extractWithRetry,
   loadQualityContext,
@@ -78,6 +79,7 @@ export async function rebuildGraph(userId, options = {}) {
       const plans = deterministicEdgePlans(event, quality.selfName || self?.name);
       const sourceText = eventText(event);
       const extracted = await extractWithRetry(() => extractTriples(sourceText, {
+        userId,
         selfName: quality.selfName,
         today: new Date().toISOString().slice(0, 10),
         title: event.title,
@@ -177,6 +179,7 @@ export async function rebuildGraph(userId, options = {}) {
     try {
       const sourceText = String(entry.rawContent || "").slice(0, 3000);
       const extracted = await extractWithRetry(() => extractTriples(sourceText, {
+        userId,
         selfName: quality.selfName,
         today: new Date().toISOString().slice(0, 10),
         known,
@@ -221,7 +224,6 @@ export async function rebuildGraph(userId, options = {}) {
     if (moreEntries && !paused.paused) await sleep(1500);
   }
 
-  if (!dryRun) await applyLifeDates(userId, events);
   console.log(`[graph-rebuild] done: ${report.counts.eventsProcessed} extracted, ${report.counts.eventsSkipped} skipped`);
   if (!dryRun) await setGraphAutoExtract(userId, true);
   report.duplicateCandidates = dryRun ? [] : await findDuplicateCandidates(userId);
@@ -399,7 +401,7 @@ function visionPlans(vision) {
 }
 
 function eventText(event) {
-  return [event.title, event.understoodMeaning, event.fullText, event.rawInput].filter(Boolean).join("\n").slice(0, 8000);
+  return eventSourceText(event);
 }
 
 async function loadRecords(kind, userId, onlyMissing, budget) {
@@ -446,24 +448,6 @@ function skipReason(err) {
 function entryTitle(entry) {
   const text = String(entry?.rawContent || "").trim();
   return text ? text.slice(0, 80) : "journal";
-}
-
-async function applyLifeDates(userId, events) {
-  for (const event of events) {
-    const title = String(event.title || "");
-    if (!/\bbirth\b/i.test(title) || !event.occurredAt) continue;
-    const people = Array.isArray(event.people) ? event.people : [];
-    for (const person of people) {
-      const name = typeof person === "string" ? person : person?.name;
-      if (!name) continue;
-      const entity = await prisma.entity.findFirst({
-        where: { userId, name: { equals: name, mode: "insensitive" }, status: { not: "archived" } },
-      });
-      if (entity && !entity.birthDate) {
-        await prisma.entity.update({ where: { id: entity.id }, data: { birthDate: event.occurredAt } });
-      }
-    }
-  }
 }
 
 function addCounts(report, committed) {

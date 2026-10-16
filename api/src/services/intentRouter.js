@@ -36,10 +36,10 @@ Intent types:
 - correction: they are correcting something DIRA
   said or did in this conversation
 - relationship_add: they state a connection to remember
-  ("Burton supervises the house", "Neema is my sister",
-   "Otina anasimamia nyumba")
+  ("Tomás supervises the house", "Inês is my sister",
+   "Rafael anasimamia nyumba")
 - relationship_change: a connection ended or changed
-  ("Burton no longer supervises", "we sold the car",
+  ("Tomás no longer supervises", "we sold the car",
    "dada yangu amehama")
 - graph_query: they ask who is connected, how they are
   connected, for a family tree, or who they sent
@@ -95,32 +95,32 @@ If unsure, none.
 alternatives has at most 2 other readings.
 
 Examples:
-'Here is the receipt for Ntabha land purchase' + file
+'Here is the receipt for the Coimbra land purchase' + file
 → intent: intake_file, confidence: 0.95
 
-'How much have I spent in Tanzania this year?'
+'How much have I spent in Portugal this year?'
 → intent: question, confidence: 0.92
 
-'Burton supervises all my Mbeya projects'
+'Tomás Ferreira supervises all my Coimbra projects'
 → intent: relationship_add, confidence: 0.9
 
-'Neema ni dada yangu'
+'Inês ni dada yangu'
 → intent: relationship_add, confidence: 0.9
 
-'My family: my father Enock Mwakyusa passed away on 25 April 2004 and my mother Froidah Biniala Kyando lives in our family home in Mbeya. My sisters are Jeni, Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda Goodluck Mambosho. My children are Careen (my eldest daughter, born before my marriage), Patrick, Presley, Powell and Prisha.'
+'My father Rafael Quispe died in 1999 and my mother lives in Cusco. My brothers are Diego and Mateo.'
 → intent: relationship_add, confidence: 0.93
    Dates and places in a family introduction are facts about those people, not a new event.
 
-'Burton no longer supervises Mbeya'
+'Tomás no longer supervises the Coimbra house'
 → intent: relationship_change, confidence: 0.88
 
-'Who is connected to the Mbeya home?'
+'Who is connected to the Coimbra house?'
 → intent: graph_query, confidence: 0.9
 
-'How am I connected to Otina?'
+'How am I connected to Rafael?'
 → intent: graph_query, confidence: 0.9
 
-'Nani ameunganishwa na Mbeya?'
+'Nani ameunganishwa na Coimbra?'
 → intent: graph_query, confidence: 0.86
 
 'Fix the dates on my events'
@@ -133,12 +133,12 @@ Examples:
 'I felt really proud of my children today'
 → intent: journal, confidence: 0.90
 
-'The Mbeya electrical cost was 2.4M TSH not 2.3M'
+'The Coimbra roof repair was 4,200 EUR not 3,900'
 → intent: correction, confidence: 0.85
 
 conversationHistory shows DIRA just described
-Tent Camping Plans in Tuliza Nafsi.
-'Not that, I meant the tent spots are part of the landscaping'
+the garden plans for the Valparaíso cottage.
+'Not that, I meant the terrace is part of the garden work'
 → intent: correction, confidence: 0.9
    The previous exchange is the subject, not a new event.
 
@@ -159,7 +159,7 @@ USE A MARKDOWN TABLE when:
 - Comparing two or more things side by side
 - Listing records with consistent attributes
 - Financial line items from documents
-Format: | Item | Amount (TSH) | with header row
+Format: | Item | Amount (EUR) | with header row
 
 USE A BULLET LIST when:
 - Listing conditions, features, or requirements
@@ -179,9 +179,9 @@ USE A SINGLE LINE when:
 - Confirming an action was taken
 
 AMOUNT FORMATTING:
-- Always write amounts with commas: 2,399,500 TSH
+- Always write amounts with commas: 12,450 EUR
 - Always include the currency: TSH, EUR, USD
-- For totals: bold the amount using **2,399,500 TSH**
+- For totals: bold the amount using **12,450 EUR**
 
 NEVER:
 - Mix a table and a list in the same response
@@ -192,24 +192,24 @@ NEVER:
 - Start every response the same way
 
 GOOD EXAMPLE — cost breakdown request:
-| Item | Cost (TSH) |
+| Item | Cost (EUR) |
 |------|-----------|
-| Wire 1.5mm² | 666,000 |
-| Main switch | 180,000 |
-| Labour | 600,000 |
-| **Total** | **2,399,500** |
+| Roof tiles | 6,200 |
+| Gutters | 1,850 |
+| Labour | 4,400 |
+| **Total** | **12,450** |
 
 BAD EXAMPLE — same request:
-'Based on your records, the electrical works
-cost 2,399,500 TSH. The items include wire,
-switches, and labour.'
+'Based on your records, the roof repair
+cost 12,450 EUR. The items include tiles,
+gutters, and labour.'
 
 GOOD EXAMPLE — factual question:
-'Your Toyota Prado chassis number is RZJ1200017194.'
+'Your van's chassis number is WF0XXXTTGXKA00001.'
 
 BAD EXAMPLE — same question:
-'Based on the Motor Vehicle Registration document
-dated March 20, 2014, I can see that the vehicle
+'Based on the vehicle registration document
+dated 3 May 2017, I can see that the vehicle
 details include... the chassis number is...'
 
 Be direct. Use the right format. Let the data speak.`;
@@ -767,7 +767,7 @@ function stripThink(text) {
 const FACT_CATEGORIES = new Set(["person", "date", "place", "event", "financial", "relationship"]);
 const FACT_PROMPT = `Extract any specific biographical or life facts from this message. Return JSON:
 { "facts": [{ "fact": string, "category": "person" | "date" | "place" | "event" | "financial" | "relationship", "suggestedTitle": string, "confidence": 0-1 }] }
-A relationship fact uses suggestedTitle like "Link: Neema — sister of you".
+A relationship fact uses suggestedTitle like "Link: Inês — sister of you".
 Only return facts that are specific and saveable.
 Names, dates, and places are facts.
 Opinions and questions are not facts.

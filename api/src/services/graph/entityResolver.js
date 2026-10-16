@@ -98,7 +98,7 @@ export async function resolveEntity(userId, input, options = {}) {
 
   const kinship = kinshipOf(name);
   if (kinship) {
-    // "my mother Froidah Biniala Kyando": the name wins over any lookup through existing edges.
+    // "my mother Elena Rojas": the name wins over any lookup through existing edges.
     const named = nameBesideKinship(name, kinship);
     if (named) return resolveEntity(userId, { ...input, name: named, kind: input?.kind || kinship.word }, options);
     const self = await prisma.entity.findFirst({ where: { userId, isSelf: true, status: { not: "archived" } } });
