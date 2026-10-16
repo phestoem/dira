@@ -20,6 +20,7 @@ import emailRoutes from "./routes/email.js";
 import queueRoutes from "./routes/queue.js";
 import digestRoutes from "./routes/digest.js";
 import graphRoutes from "./routes/graph.js";
+import { bridgeConfig } from "./services/altimetrixBridge.js";
 import { runScheduledDigests } from "./services/digestService.js";
 import { catchUpGraphExtractions } from "./services/graph/rebuild.js";
 
@@ -50,15 +51,20 @@ await app.register(queueRoutes);
 await app.register(digestRoutes);
 await app.register(graphRoutes);
 
-cron.schedule("0 * * * *", () => {
-  console.log("[digest] running daily digest...");
-  runScheduledDigests().catch((err) => {
-    console.error("[digest] run failed:", err.message);
-  });
-  catchUpGraphExtractions().catch((err) => {
-    console.error("[graph-rebuild] catch-up failed:", err.message);
-  });
-}, { timezone: "Europe/Helsinki" });
+if (process.env.DIRA_DISABLE_CRON === "true") {
+  console.log("[cron] disabled by DIRA_DISABLE_CRON: no digest, no graph catch-up");
+} else {
+  cron.schedule("0 * * * *", () => {
+    console.log("[digest] running daily digest...");
+    runScheduledDigests().catch((err) => {
+      console.error("[digest] run failed:", err.message);
+    });
+    catchUpGraphExtractions().catch((err) => {
+      console.error("[graph-rebuild] catch-up failed:", err.message);
+    });
+  }, { timezone: "Europe/Helsinki" });
+}
+console.log(bridgeConfig() ? "[bridge] configured" : "[bridge] skipping: not configured");
 
 app.get("/health", async () => ({
   status: "ok",

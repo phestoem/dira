@@ -53,7 +53,7 @@ export default async function emailRoutes(fastify) {
 
 function authorized(request) {
   const expected = process.env.INBOUND_WEBHOOK_SECRET;
-  if (!expected) return true;
+  if (!expected) return process.env.NODE_ENV === "production";
   const headerSecret = request.headers["x-webhook-secret"];
   const querySecret = request.query?.secret;
   const provided = typeof headerSecret === "string" ? headerSecret : querySecret;

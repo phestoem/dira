@@ -55,13 +55,8 @@ export async function sendLifeEvent(event, userId, diraUser) {
       return { sent: false };
     }
 
-    const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
-    const base = (process.env.ALTIMETRIX_URL || process.env.ALTIMETRIX_API_URL || "http://localhost:4700").replace(
-      /\/$/,
-      "",
-    );
-    if (!secret) {
-      console.error("[bridge] error: ALTIMETRIX_BRIDGE_SECRET is not set");
+    if (!bridgeConfig()) {
+      console.log("[bridge] skipping: not configured");
       return { sent: false };
     }
 
@@ -89,9 +84,13 @@ export async function sendLifeEvent(event, userId, diraUser) {
 
 async function postLifeEvent(diraUser, payload, markEventId) {
   try {
-    const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
-    const base = (process.env.ALTIMETRIX_URL || process.env.ALTIMETRIX_API_URL || "http://localhost:4700").replace(/\/$/, "");
-    if (!secret || !diraUser?.altimetrixUserId) return { sent: false };
+    const config = bridgeConfig();
+    if (!config) {
+      console.log("[bridge] skipping: not configured");
+      return { sent: false };
+    }
+    if (!diraUser?.altimetrixUserId) return { sent: false };
+    const { base, secret } = config;
     const response = await fetch(`${base}/life-events/ingest`, {
       method: "POST",
       headers: {
@@ -127,9 +126,12 @@ export async function getAltimetrixContext(topics, entityNames, eventType, diraU
     const names = cleanList(entityNames);
     if (topicList.length === 0 && names.length === 0) return null;
 
-    const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
-    const base = bridgeBase();
-    if (!secret) return null;
+    const config = bridgeConfig();
+    if (!config) {
+      console.log("[bridge] skipping: not configured");
+      return null;
+    }
+    const { base, secret } = config;
 
     const subject = [...topicList, ...names].join(", ");
     const query = typeof queryText === "string" && queryText.trim()
@@ -170,12 +172,15 @@ export async function getAltimetrixContext(topics, entityNames, eventType, diraU
 export async function fetchAltimetrixNudge(diraUser) {
   try {
     if (!diraUser?.altimetrixUserId) return null;
-    const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
-    if (!secret) return null;
-    const url = new URL("/bridge/pending-nudges", bridgeBase());
+    const config = bridgeConfig();
+    if (!config) {
+      console.log("[bridge] skipping: not configured");
+      return null;
+    }
+    const url = new URL("/bridge/pending-nudges", config.base);
     url.searchParams.set("userId", diraUser.altimetrixUserId);
     const response = await fetch(url, {
-      headers: { "X-Bridge-Secret": secret },
+      headers: { "X-Bridge-Secret": config.secret },
       signal: AbortSignal.timeout(8000),
     });
     if (!response.ok) return null;
@@ -191,8 +196,12 @@ export async function fetchAltimetrixNudge(diraUser) {
   }
 }
 
-function bridgeBase() {
-  return (process.env.ALTIMETRIX_URL || process.env.ALTIMETRIX_API_URL || "http://localhost:4700").replace(/\/$/, "");
+// Null when no bridge secret is set; every outbound call to Altimetrix checks this first.
+export function bridgeConfig() {
+  const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
+  if (!secret) return null;
+  const base = (process.env.ALTIMETRIX_URL || process.env.ALTIMETRIX_API_URL || "http://localhost:4700").replace(/\/$/, "");
+  return { base, secret };
 }
 
 function cleanList(value) {

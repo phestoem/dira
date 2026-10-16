@@ -159,6 +159,10 @@ export async function sendDigestEmail(userId) {
     console.log(`[digest] nothing new for ${user.email}, skipping`);
     return { sent: false, sections };
   }
+  if (process.env.NODE_ENV === "development") {
+    console.log(`[digest] development: not sending to ${user.email} (${sections.join(", ")})`);
+    return { sent: false, sections };
+  }
   const when = helsinkiDate(new Date());
   const apiKey = usableKey(process.env.RESEND_API_KEY);
   if (!apiKey) {
