@@ -1,7 +1,7 @@
 import { prisma } from "../../prisma.js";
 import { isReadonly } from "../../readonly.js";
 import { autoExtractOn } from "./autoExtract.js";
-import { genderOf, isGenericKind } from "./kinship.js";
+import { genderOf, isGenericKind, refinesKind } from "./kinship.js";
 import { PEOPLE_EXTRACT_PROMPT, peopleToGraph, validatePeople } from "./peopleFacts.js";
 import { getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
 import { buildSelfAliasSet, dropReason, fullNameFromProfile, prepareTriples as refineTriples, relativesFromEdges } from "./graphQuality.js";
@@ -62,15 +62,16 @@ export async function extractTriples(text, context = {}) {
     body.slice(0, 3500),
   ].filter(Boolean).join("\n");
   try {
-    const [generalRaw, peopleRaw, genders] = await Promise.all([
+    const known = await knownPeople(context.userId);
+    const roster = known.list.length ? `Known people (name — role to the narrator): ${known.list.map((person) => `${person.name} — ${person.kind}`).join("; ")}` : "";
+    const [generalRaw, peopleRaw] = await Promise.all([
       completeJson(extractPrompt(), user),
-      completeJson(PEOPLE_EXTRACT_PROMPT, [context.today ? `Today: ${context.today}` : "", body.slice(0, 3500)].filter(Boolean).join("\n")),
-      knownGenders(context.userId),
+      completeJson(PEOPLE_EXTRACT_PROMPT, [context.today ? `Today: ${context.today}` : "", roster, body.slice(0, 3500)].filter(Boolean).join("\n")),
     ]);
     const general = parseJson(generalRaw);
     const triples = (Array.isArray(general?.triples) ? general.triples.slice(0, 15) : [])
       .filter((triple) => categoryOf(normalizeType(triple?.predicate)?.type) !== "family" && !PEOPLE_PASS_TYPES.has(normalizeType(triple?.predicate)?.type));
-    const checked = validatePeople(parseJson(peopleRaw)?.people, { text: body, selfName, selfAliases: context.selfAliases || [], knownGender: genders });
+    const checked = validatePeople(parseJson(peopleRaw)?.people, { text: body, selfName, selfAliases: context.selfAliases || [], knownGender: known.genderOf, known: known.list });
     for (const item of checked.dropped) console.debug(`[graph] people: dropped ${item.name || "?"} (${item.reason})`);
     const graph = peopleToGraph(checked.people);
     const narratorFacts = graph.narrator && (graph.narrator.birthDate || graph.narrator.deathDate)
@@ -83,14 +84,13 @@ export async function extractTriples(text, context = {}) {
   }
 }
 
-// What the graph already knows about each person's gender, from their role.
-async function knownGenders(userId) {
-  if (!userId) return () => null;
-  const people = await prisma.entity.findMany({ where: { userId, entityType: "person", isSelf: false, status: { not: "archived" }, mergedIntoId: null }, select: { name: true, kind: true }, take: 300 });
-  return (name) => {
-    const key = normalizeName(name);
-    const exact = people.find((person) => normalizeName(person.name) === key);
-    return genderOf(exact?.kind) || null;
+// The people the graph already knows, with their role to the narrator, and each one's gender from that role.
+async function knownPeople(userId) {
+  if (!userId) return { list: [], genderOf: () => null };
+  const people = await prisma.entity.findMany({ where: { userId, entityType: "person", isSelf: false, status: { not: "archived" }, mergedIntoId: null }, select: { name: true, kind: true }, orderBy: { updatedAt: "desc" }, take: 300 });
+  return {
+    list: people.filter((person) => !isGenericKind(person.kind)).slice(0, 40),
+    genderOf: (name) => genderOf(people.find((person) => normalizeName(person.name) === normalizeName(name))?.kind) || null,
   };
 }
 
@@ -661,7 +661,7 @@ async function applyEntityFacts(userId, facts, source) {
       conflicts.push(await conflictSuggestion(userId, entity, "deathDate", entity.deathDate, death, source));
     }
     // A stated role ("mother") replaces a kind that only repeats the type ("person"), never a different role.
-    if (fact.kind && (!entity.kind || (isGenericKind(entity.kind) && !isGenericKind(fact.kind)))) data.kind = String(fact.kind).slice(0, 40);
+    if (fact.kind && (!entity.kind || refinesKind(entity.kind, fact.kind))) data.kind = String(fact.kind).slice(0, 40);
     if (fact.birthOrder && !(isObject(entity.attributes) && entity.attributes.birthOrder)) {
       const attributes = isObject(entity.attributes) ? { ...entity.attributes } : {};
       attributes.birthOrder = fact.birthOrder;

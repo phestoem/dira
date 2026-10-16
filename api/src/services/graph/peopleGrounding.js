@@ -1,5 +1,7 @@
 import { prisma } from "../../prisma.js";
+import { normalizeName } from "./entityResolver.js";
 import { getFamilyTree } from "./graphQuery.js";
+import { isOrdinalKin, KIN_PATTERN, kinOf } from "./kinship.js";
 
 const MONTHS = {
   january: 1, february: 2, march: 3, april: 4, may: 5, june: 6,
@@ -22,7 +24,9 @@ export function isPeopleQuestion(text) {
   if (/\b(my|our)\s+(sisters|brothers|children|sons|daughters|wife|husband|father|mother)\s+(are|is)\b/i.test(value)) return false;
   // "My brothers' birthdays: Diego was born on 4 May 1990, …" tells; it doesn't ask.
   if (!value.includes("?") && !/^(?:please\s+)?(?:who|what|when|where|which|how|list|show|name|tell|give|remind|do|does|did|is|are)\b/i.test(value) && /\b(born|married|died|passed away)\b/i.test(value)) return false;
-  if (/\b(family tree|who is|who's|who are|how old|birthdays?|birth dates?|relatives)\b/i.test(value)) return true;
+  if (/\b(family tree|who is|who's|who are|who was|how old|birthdays?|birth dates?|relatives)\b/i.test(value)) return true;
+  // Any role word or birth-order word after my/our in a question: "when was my stepbrother born?", "who is our eldest?"
+  if (asks(value) && (MY_KIN.test(value) || MY_ORDINAL.test(value))) return true;
   if (/\bhow many\b/i.test(value) && /\b(kids|children|sons|daughters|sisters|brothers)\b/i.test(value)) return true;
   if (/\b(children|kids|sisters|brothers|parents)'?s?\s+names\b/i.test(value)) return true;
   if (/^(?:please\s+)?(?:list|show|name|tell me|give me|remind me of)\b/i.test(value) && /\b(my|our)\s+(parents|wife|husband|spouse|father|mother|sisters|brothers|siblings|children|kids|sons|daughters|family)\b/i.test(value)) return true;
@@ -36,17 +40,15 @@ export function isPeopleQuestion(text) {
 // recorded. Event text is never parsed at question time.
 export async function loadPeopleContext(userId) {
   const tree = await getFamilyTree(userId);
+  const selfId = tree.self?.id;
   const [edges, conflictRows] = await Promise.all([
-    prisma.relationship.findMany({ where: { userId, category: "family", status: { in: ["confirmed", "suggested"] }, validTo: null } }),
+    // Ended marriages stay in view as former spouses; any other ended edge is history, not a current relative.
+    prisma.relationship.findMany({ where: { userId, category: { in: ["family", "social"] }, status: { in: ["confirmed", "suggested"] }, OR: [{ validTo: null }, { type: "spouse_of" }] } }),
     prisma.relationship.findMany({ where: { userId, label: "conflict", status: "suggested" } }),
   ]);
   const people = peopleFromTree(tree);
-  const selfId = tree.self?.id;
-  const pendingIds = edges
-    .filter((edge) => edge.status === "suggested" && (edge.fromId === selfId || edge.toId === selfId))
-    .map((edge) => (edge.fromId === selfId ? edge.toId : edge.fromId))
-    .filter((id) => !people.some((person) => person.id === id));
-  const others = pendingIds.length ? await prisma.entity.findMany({ where: { userId, id: { in: pendingIds }, status: { not: "archived" } } }) : [];
+  const otherIds = [...new Set(edges.flatMap((edge) => [edge.fromId, edge.toId]))].filter((id) => !people.some((person) => person.id === id));
+  const others = otherIds.length ? await prisma.entity.findMany({ where: { userId, id: { in: otherIds }, status: { not: "archived" } } }) : [];
   const nameOf = (id) => people.find((person) => person.id === id)?.name || others.find((person) => person.id === id)?.name || "";
   const namedEdges = edges.map((edge) => ({
     id: edge.id,
@@ -55,6 +57,8 @@ export async function loadPeopleContext(userId) {
     fromId: edge.fromId,
     toId: edge.toId,
     validFrom: edge.validFrom,
+    validTo: edge.validTo,
+    attributes: edge.attributes || {},
     fromName: nameOf(edge.fromId),
     toName: nameOf(edge.toId),
   }));
@@ -64,28 +68,76 @@ export async function loadPeopleContext(userId) {
     field: row.attributes?.conflictWith || "birthDate",
     values: [row.attributes?.current, row.attributes?.incoming].filter(Boolean).sort(),
   })).filter((conflict) => conflict.values.length === 2);
-  return buildPeopleContext({ self: tree.self, people, others, edges: namedEdges, conflicts });
+  return buildPeopleContext({ self: tree.self, people, others, edges: namedEdges, conflicts, about: await aboutPeople(userId, selfId, [...people, ...others]) });
 }
 
-export function buildPeopleContext({ self, people = [], others = [], edges = [], conflicts = [] } = {}) {
-  const roster = people.filter((person) => person?.name);
-  const selfId = self?.id || roster.find((person) => person.kind === "self")?.id;
-  const confirmed = edges.filter((edge) => edge.status !== "suggested");
-  const suggested = edges.filter((edge) => edge.status === "suggested");
+// What else is recorded about each person (work, places, ownership, family between others), for "who is X?".
+async function aboutPeople(userId, selfId, people) {
+  const ids = people.map((person) => person.id).filter((id) => id && id !== selfId);
+  if (!ids.length) return {};
+  const rows = await prisma.relationship.findMany({
+    where: { userId, status: { in: ["confirmed", "suggested"] }, validTo: null, label: null, OR: [{ fromId: { in: ids } }, { toId: { in: ids } }] },
+    take: 400,
+  });
+  const nodeIds = [...new Set(rows.flatMap((row) => [row.fromId, row.toId]))];
+  const nodes = nodeIds.length ? await prisma.entity.findMany({ where: { userId, id: { in: nodeIds } }, select: { id: true, name: true, isSelf: true } }) : [];
+  const label = (id) => (id === selfId ? "you" : nodes.find((node) => node.id === id)?.name || "");
+  const about = {};
+  for (const row of rows) {
+    if (row.fromId === selfId || row.toId === selfId || row.fromKind !== "entity" || row.toKind !== "entity") continue;
+    const from = label(row.fromId);
+    const to = label(row.toId);
+    if (!from || !to) continue;
+    const line = `${from} ${String(row.type).replaceAll("_", " ")} ${to}${row.status === "suggested" ? " (unconfirmed)" : ""}`;
+    for (const id of [row.fromId, row.toId]) if (ids.includes(id)) (about[id] ||= []).push(line);
+  }
+  return about;
+}
+
+export function buildPeopleContext({ self, people = [], others = [], edges = [], conflicts = [], about = {} } = {}) {
+  const selfId = self?.id || people.find((person) => person?.kind === "self")?.id;
+  const ended = (edge) => Boolean(edge.validTo || edge.attributes?.ended);
+  const touchesSelf = (edge) => edge.fromId === selfId || edge.toId === selfId;
+  const otherEnd = (edge) => (edge.fromId === selfId ? edge.toId : edge.fromId);
+  const entityOf = (id, fallback) => people.find((person) => person.id === id) || others.find((person) => person.id === id) || { id, name: fallback };
+  // A spouse whose only marriage to you has ended is a former spouse, not "your wife".
+  const former = [];
+  for (const edge of edges.filter((item) => item.type === "spouse_of" && touchesSelf(item) && ended(item))) {
+    const id = otherEnd(edge);
+    if (edges.some((item) => item.type === "spouse_of" && touchesSelf(item) && !ended(item) && otherEnd(item) === id)) continue;
+    const person = entityOf(id, edge.fromId === selfId ? edge.toName : edge.fromName);
+    if (!person.name || former.some((item) => item.id === id)) continue;
+    former.push({ ...person, role: "former-spouse", kind: kinOf(person.kind)?.group === "spouse" ? kinOf(person.kind).base : "spouse", married: normalizeDate(edge.validFrom), until: edge.attributes?.endPrecision === "year" ? String(edge.validTo || "").slice(0, 4) || null : normalizeDate(edge.validTo), pending: edge.status === "suggested" });
+  }
+  const roster = people.filter((person) => person?.name && !(person.role === "spouse" && former.some((item) => item.id === person.id)));
+  const current = edges.filter((edge) => !(edge.type === "spouse_of" && ended(edge)));
+  const confirmed = current.filter((edge) => edge.status !== "suggested");
+  const suggested = current.filter((edge) => edge.status === "suggested");
+  // Grandparents, step- and in-law relatives, uncles, cousins, and people you know (a neighbour, a friend).
+  const extended = [];
+  for (const edge of current.filter((item) => touchesSelf(item) && ["grandparent_of", "relative_of", "knows", "friend_of"].includes(item.type))) {
+    const id = otherEnd(edge);
+    if (roster.some((person) => person.id === id) || extended.some((person) => person.id === id)) continue;
+    const person = entityOf(id, edge.fromId === selfId ? edge.toName : edge.fromName);
+    if (!person.name) continue;
+    const role = edge.type === "grandparent_of" ? (edge.toId === selfId ? "grandparent" : "grandchild") : edge.type === "relative_of" ? "relative" : "social";
+    const kind = edge.attributes?.kind || (person.kind && kinOf(person.kind) ? person.kind : role);
+    extended.push({ ...person, role, kind, pending: edge.status === "suggested" });
+  }
   // People who are only on a suggested edge to the self: unconfirmed, in the role that edge gives them.
   const pending = [];
   for (const edge of suggested) {
     if (edge.fromId !== selfId && edge.toId !== selfId) continue;
     const otherId = edge.fromId === selfId ? edge.toId : edge.fromId;
-    if (roster.some((person) => person.id === otherId) || pending.some((person) => person.id === otherId)) continue;
-    const entity = others.find((item) => item.id === otherId) || { id: otherId, name: edge.fromId === selfId ? edge.toName : edge.fromName };
+    if (roster.some((person) => person.id === otherId) || pending.some((person) => person.id === otherId) || extended.some((person) => person.id === otherId)) continue;
+    const entity = entityOf(otherId, edge.fromId === selfId ? edge.toName : edge.fromName);
     if (!entity.name) continue;
     const role = edge.type === "spouse_of" ? "spouse" : edge.type === "sibling_of" ? "sibling" : edge.type === "parent_of" ? (edge.toId === selfId ? "parent" : "child") : null;
     if (!role) continue;
     const own = String(entity.kind || "").toLowerCase();
     pending.push({ ...entity, role, kind: ROLE_KINDS[role]?.includes(own) ? own : role, pending: true });
   }
-  const everyone = [...roster, ...pending];
+  const everyone = [...roster, ...pending, ...extended, ...former];
   const allowedNames = everyone.map((person) => person.name);
   const allowedDates = new Set();
   const facts = [];
@@ -100,7 +152,7 @@ export function buildPeopleContext({ self, people = [], others = [], edges = [],
     }
     facts.push({ text: bits.join(" | "), source: { type: "entity", id: person.id } });
   }
-  const spouseEdge = [...confirmed, ...suggested].find((edge) => edge.type === "spouse_of" && (edge.fromId === selfId || edge.toId === selfId));
+  const spouseEdge = [...confirmed, ...suggested].find((edge) => edge.type === "spouse_of" && touchesSelf(edge));
   const marriageDate = normalizeDate(spouseEdge?.validFrom);
   if (marriageDate) allowedDates.add(marriageDate);
   for (const edge of confirmed) {
@@ -110,8 +162,16 @@ export function buildPeopleContext({ self, people = [], others = [], edges = [],
   for (const edge of suggested) {
     facts.push({ text: `unconfirmed: ${edge.fromName || edge.fromId} ${edge.type} ${edge.toName || edge.toId}`, source: { type: "edge", id: edge.id } });
   }
+  for (const person of former) {
+    if (person.married) allowedDates.add(person.married);
+    facts.push({ text: `${person.name} | former ${person.kind}${person.married ? ` | married ${person.married}` : ""}${person.until ? ` | ended ${person.until}` : ""}`, source: { type: "entity", id: person.id } });
+  }
+  for (const [id, lines] of Object.entries(about)) {
+    for (const line of lines.slice(0, 6)) facts.push({ text: line, source: { type: "entity", id } });
+    allowedNames.push(...lines.flatMap((line) => line.match(/[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+)*/gu) || []));
+  }
   for (const conflict of conflicts) for (const value of conflict.values) allowedDates.add(value);
-  return { self, people: roster, pending, edges: confirmed, suggested, facts, marriageDate, allowedNames, allowedDates, conflicts };
+  return { self, people: roster, pending, extended, former, about, edges: confirmed, suggested, facts, marriageDate, allowedNames, allowedDates, conflicts };
 }
 
 export function peopleContextBlock(context) {
@@ -143,8 +203,28 @@ export function contextualQuestion(latest, priorUser, priorAnswer) {
   return `${question}\n\nPrevious answer: ${answer}`;
 }
 
-export function usesRecordedAnswer(question) {
+// my/our + any role word the vocabulary knows; my/our + a birth-order word.
+const MY_KIN = new RegExp(`\\b(?:my|our)\\s+(?:late\\s+|dear\\s+)?(${KIN_PATTERN})\\b`, "i");
+const MY_ORDINAL = /\b(?:my|our)\s+(firstborn|first-born|eldest|oldest|youngest|last-born|baby)\b/i;
+
+function asks(value) {
+  return value.includes("?") || /^(?:please\s+)?(?:who|what|when|where|which|how|list|show|name|tell|give|remind|do|does|did|is|are|was)\b/i.test(value);
+}
+
+// The known person a question is about by name ("who is Ana Lopes?"): the full name, or a first name only one person has.
+export function namedPerson(question, context) {
+  const q = ` ${normalizeName(question)} `;
+  const everyone = [...(context?.people || []), ...(context?.pending || []), ...(context?.extended || []), ...(context?.former || [])].filter((person) => person.kind !== "self");
+  const full = everyone.filter((person) => q.includes(` ${normalizeName(person.name)} `)).sort((a, b) => b.name.length - a.name.length);
+  if (full.length) return full[0];
+  const firsts = everyone.filter((person) => q.includes(` ${normalizeName(person.name).split(" ")[0]} `));
+  return firsts.length === 1 ? firsts[0] : null;
+}
+
+export function usesRecordedAnswer(question, context = null) {
   const q = String(question || "");
+  if (MY_ORDINAL.test(q) || MY_KIN.test(q)) return true;
+  if (context && /\b(who is|who's|who was|tell me about)\b/i.test(q) && namedPerson(q, context)) return true;
   if (/\bfamily tree\b/i.test(q)) return true;
   if (/\b(wife|husband|spouse)\b/i.test(q)) return true;
   if (/\b(father|mother|dad|mum|baba|mama|parents?)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return true;
@@ -156,6 +236,14 @@ export function usesRecordedAnswer(question) {
 export function answerPeopleQuestion(question, context) {
   const q = String(question || "");
   if (/\bfamily tree\b/i.test(q) && !/\b(father|mother)'s\b/i.test(q)) return familyTreeAnswer(context);
+  const ordinal = q.match(MY_ORDINAL) || q.match(/\b(firstborn|first-born|eldest|oldest|youngest|last-born)\s+(?:child|son|daughter)\b/i);
+  if (ordinal) return ordinalAnswer(ordinal[1].toLowerCase(), q, context);
+  const roleAnswer = extendedKinAnswer(q, context);
+  if (roleAnswer) return roleAnswer;
+  if (/\b(who is|who's|who was|tell me about)\b/i.test(q)) {
+    const person = namedPerson(q, context);
+    if (person && !MY_KIN.test(q)) return personAnswer(person, context);
+  }
   if (/\b(wife|husband|spouse)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return spouseAnswer(q, context);
   if (/\bparents?\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentsAnswer(context);
   if (/\b(father|dad|baba)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentRoleAnswer("father", context);
@@ -283,6 +371,7 @@ function anyCase(word) {
 
 function spouseAnswer(question, context) {
   const word = /\bhusband\b/i.test(question) && !/\bwife\b/i.test(question) ? "husband" : "wife";
+  if (/\b(ex|former|first|previous|old)[- ]?(wife|husband|spouse|partner)\b/i.test(question)) return formerSpouseAnswer(context);
   const confirmed = (context?.people || []).find((person) => ["wife", "husband", "spouse"].includes(person.kind));
   const record = spouseRecord(context);
   if (confirmed) {
@@ -408,11 +497,89 @@ function familyTreeAnswer(context) {
     const kind = person.kind && person.kind !== "spouse" ? person.kind : (record?.kind && record.kind !== "spouse" ? record.kind : "spouse");
     lines.push(`Spouse: ${describe(person, kind, record?.marriageDate ? `married ${prettyDate(record.marriageDate)}` : "")}`);
   }
+  for (const person of context?.former || []) {
+    lines.push(`Former spouse: ${describe(person, person.kind, person.married ? `married ${prettyDate(person.married)}` : "", person.until ? `ended ${/^\d{4}$/.test(person.until) ? person.until : prettyDate(person.until)}` : "")}`);
+  }
+  const grand = (context?.extended || []).filter((person) => person.role === "grandparent");
+  if (grand.length) lines.push(`Grandparents: ${grand.map((person) => describe(person, person.kind !== "grandparent" ? person.kind : "", born(person))).join("; ")}`);
   const siblings = siblingsFor("siblings", context).people;
   if (siblings.length) lines.push(`Siblings: ${siblings.map((person) => describe(person, kindOf(person, context, ["sister", "brother"]).replace("sibling", ""), born(person))).join("; ")}`);
   const children = relatives(context, ["child", "son", "daughter"]).all;
   if (children.length) lines.push(`Children: ${children.map((person) => describe(person, kindOf(person, context, ["son", "daughter"]).replace("child", ""), born(person))).join("; ")}`);
+  const grandchildren = (context?.extended || []).filter((person) => person.role === "grandchild");
+  if (grandchildren.length) lines.push(`Grandchildren: ${grandchildren.map((person) => describe(person, born(person))).join("; ")}`);
+  const relativesOther = (context?.extended || []).filter((person) => person.role === "relative");
+  if (relativesOther.length) lines.push(`Other relatives: ${relativesOther.map((person) => describe(person, person.kind, born(person))).join("; ")}`);
   if (lines.length <= 1) return "Your family tree isn't recorded yet.";
+  return lines.join("\n");
+}
+
+// "my firstborn", "our youngest": the children by birth date (an explicit birth order wins).
+function ordinalAnswer(word, question, context) {
+  const children = relatives(context, ["child", "son", "daughter"]).all;
+  if (!children.length) return "Your children aren't recorded yet.";
+  const order = (person) => Number(person.attributes?.birthOrder) || null;
+  const dated = children.filter((person) => birthOf(person) || order(person));
+  const key = (person) => (order(person) ? String(order(person)).padStart(4, "0") : birthOf(person).iso);
+  dated.sort((a, b) => key(a).localeCompare(key(b)));
+  const youngest = /^(youngest|last-born|baby)$/.test(word);
+  const person = youngest ? dated.at(-1) : dated[0];
+  if (!person || (dated.length < children.length && youngest)) return `Which child is your ${word} isn't recorded yet — not every child has a birth date.`;
+  const born = birthOf(person);
+  const line = `${person.name} — your ${word}${born ? ` (b. ${prettyDate(born.iso)})` : ""}.`;
+  return person.pending ? `${line}\n${RECORD_LINE}` : line;
+}
+
+// Roles the core answers do not cover: grand-, step-, half-, in-law, ex-, uncles, cousins, neighbours, friends.
+function extendedKinAnswer(question, context) {
+  for (const match of question.matchAll(new RegExp(MY_KIN.source, "gi"))) {
+    const kin = kinOf(match[1]);
+    if (!kin) continue;
+    const special = kin.ex || kin.half || kin.step || kin.inLaw || ["grandparent", "grandchild", "relative", "social"].includes(kin.group);
+    if (!special) continue;
+    if (kin.ex) return formerSpouseAnswer(context);
+    const want = kin.word.replace(/(?<=[a-z])s$/, "");
+    const pool = [...(context?.people || []), ...(context?.pending || []), ...(context?.extended || [])];
+    const found = pool.filter((person) => {
+      const has = kinOf(person.kind);
+      if (!has) return false;
+      if (kin.half) return has.half && has.base === kin.base;
+      if (has.word === want || has.base === kin.base && has.step === kin.step && has.inLaw === kin.inLaw && has.half === kin.half) return true;
+      return kin.base === kin.group && has.group === kin.group;
+    });
+    if (!found.length) return `Your ${want} isn't recorded yet.`;
+    const aboutBirth = /\b(born|birth|birthday|age|old)\b/i.test(question);
+    const lines = found.map((person) => {
+      const born = birthOf(person);
+      if (aboutBirth) return born ? `${person.name} — your ${person.kind}, born ${prettyDate(born.iso)}.` : `${person.name} — your ${person.kind}; birth date not recorded yet.`;
+      return `${person.name} — your ${person.kind}${passed(person)}.`;
+    });
+    if (found.some((person) => person.pending)) lines.push(RECORD_LINE);
+    return lines.join("\n");
+  }
+  return null;
+}
+
+function formerSpouseAnswer(context) {
+  const former = context?.former || [];
+  if (!former.length) return "No former spouse is recorded.";
+  const lines = former.map((person) => {
+    const bits = [person.married ? `married ${prettyDate(person.married)}` : "", person.until ? `ended ${/^\d{4}$/.test(person.until) ? person.until : prettyDate(person.until)}` : ""].filter(Boolean);
+    return `${person.name} — your former ${person.kind}${bits.length ? ` (${bits.join(", ")})` : ""}.`;
+  });
+  if (former.some((person) => person.pending)) lines.push(RECORD_LINE);
+  return lines.join("\n");
+}
+
+// "Who is Ana Lopes?": their role to you, if any, and what else is recorded about them.
+function personAnswer(person, context) {
+  const role = person.role === "former-spouse" ? `your former ${person.kind}` : person.role && person.kind && person.kind !== "self" ? `your ${person.kind}` : "";
+  const born = birthOf(person);
+  const bits = [role, born ? `born ${prettyDate(born.iso)}` : "", person.deathDate ? `passed ${prettyDate(normalizeDate(person.deathDate))}` : ""].filter(Boolean);
+  const lines = [`${person.name}${bits.length ? ` — ${bits.join(", ")}` : ""}.`];
+  for (const line of (context?.about?.[person.id] || []).slice(0, 5)) lines.push(line);
+  if (lines.length === 1 && !bits.length) return `${person.name} is in your records, but nothing more about them is recorded yet.`;
+  if (person.pending) lines.push(RECORD_LINE);
   return lines.join("\n");
 }
 

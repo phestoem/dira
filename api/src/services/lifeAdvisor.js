@@ -421,7 +421,7 @@ async function graphContext(userId, text) {
 
 async function answerPeople(userId, question) {
   const context = await loadPeopleContext(userId);
-  if (usesRecordedAnswer(question)) {
+  if (usesRecordedAnswer(question, context)) {
     return { reply: answerPeopleQuestion(question, context), sourceIds: context.facts.map((fact) => `${fact.source.type}:${fact.source.id}`) };
   }
   let modelText = "";

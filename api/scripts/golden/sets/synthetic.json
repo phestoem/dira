@@ -1,0 +1,34 @@
+{
+  "name": "synthetic",
+  "selfName": "Declan Byrne",
+  "seeds": [
+    "My name is Declan Byrne. My late dad, Liam Byrne, died on 12 March 2015. My mother Siobhán Byrne lives in Galway with my stepfather Conor Walsh.",
+    "I have a brother, Eoin Byrne, born on 2 February 1978, and a half-sister, Aoife Byrne, from my dad's first marriage to Gráinne Doyle.",
+    "Jina langu ni Declan Byrne. Mama yangu ni Siobhán Byrne na anaishi Galway. Dada yangu wa baba mmoja, Aoife Byrne, alizaliwa tarehe 8 Septemba 1985. Mama yake ni Gráinne Doyle.",
+    "My grandmother Nora Byrne was born on 14 July 1931. My uncle Fergal Byrne still farms near Westport. Eoin's wife, Clodagh Byrne, is my sister-in-law.",
+    "I married Róisín Kelly on 4 June 2005 and we divorced in 2016. My firstborn, Cian, was born on 9 January 2007, and our daughter Saoirse on 22 August 2010.",
+    "My ex-wife Róisín now lives in Limerick with Cian and Saoirse.",
+    "My partner Maeve O'Connor and I married on 30 April 2019. Her son Darragh O'Connor, born on 17 October 2012, is my stepson.",
+    "Our youngest, Oisín, was born on 5 November 2020.",
+    "Cian Murphy, my neighbour, looks after the cottage in Dingle.",
+    "I inherited my late dad's cottage in Dingle in 2015. I bought a flat in Cork on 3 May 2018 for 240,000 EUR. Eoin and I co-own a field in Kinsale.",
+    "I bought a sailing boat called the Kittiwake in 2014 and sold it to Cian Murphy on 1 July 2021."
+  ],
+  "questions": [
+    { "id": "wife", "turns": ["who is my wife?"], "expect": { "has": ["Maeve O'Connor"] } },
+    { "id": "parents", "turns": ["who are my parents?"], "expect": { "has": ["Siobhán Byrne", "Liam Byrne"] } },
+    { "id": "stepfather", "turns": ["who is my stepfather?"], "expect": { "has": ["Conor Walsh"] } },
+    { "id": "siblings", "turns": ["list my siblings"], "expect": { "has": ["Eoin", "Aoife"], "lacks": ["Clodagh"] } },
+    { "id": "half-sister-born", "turns": ["when was my half-sister born?"], "expect": { "dates": ["1985-09-08"] } },
+    { "id": "children-count", "turns": ["how many children do I have?"], "expect": { "count": 3 } },
+    { "id": "firstborn-born", "turns": ["when was my firstborn born?"], "expect": { "has": ["Cian"], "dates": ["2007-01-09"] } },
+    { "id": "youngest", "turns": ["who is my youngest child?"], "expect": { "has": ["Oisín"] } },
+    { "id": "ex-wife", "turns": ["who is my ex-wife?"], "expect": { "has": ["Róisín Kelly"] } },
+    { "id": "remarried-on", "turns": ["when did I marry Maeve?"], "expect": { "dates": ["2019-04-30"] } },
+    { "id": "grandmother-born", "turns": ["when was my grandmother born?"], "expect": { "has": ["Nora"], "dates": ["1931-07-14"] } },
+    { "id": "sister-in-law", "turns": ["who is my sister-in-law?"], "expect": { "has": ["Clodagh"] } },
+    { "id": "same-first-name", "turns": ["who is Cian Murphy?"], "expect": { "has": ["neighbour"], "lacks": ["your son"] } },
+    { "id": "family-tree", "turns": ["show my family tree"], "expect": { "has": ["Siobhán", "Liam", "Eoin", "Aoife", "Maeve", "Cian", "Saoirse", "Oisín"], "lacks": ["Cian Murphy"] } },
+    { "id": "owned-now", "turns": ["what property do I own now?"], "expect": { "has": ["Dingle", "Cork", "Kinsale"], "lacks": ["Kittiwake"] } }
+  ]
+}

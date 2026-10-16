@@ -274,3 +274,101 @@ async function databaseReady() {
     return false;
   }
 }
+
+test("every role group maps to its edge; ended marriages carry their end", () => {
+  const text = "My stepmother Rosa Ferrer lives in Vigo. My half-brother Hugo Andrade was born on 1 April 1990. My grandmother Pilar Andrade died on 3 May 2001. My uncle Ramón Pinto farms. My neighbour Bea Soto waters the plants. My ex-husband Óscar Gil and I divorced in 2012. My partner Pablo Ruiz and I married on 14 February 2009. Our youngest, Nico, was born on 6 June 2016.";
+  const { people, dropped } = validatePeople([
+    { name: "Rosa Ferrer", relation: "step mother", relationOf: "narrator", livesIn: "Vigo", evidence: "My stepmother Rosa Ferrer lives in Vigo" },
+    { name: "Hugo Andrade", relation: "half brother", relationOf: "narrator", birthDate: "1990-04-01", evidence: "My half-brother Hugo Andrade was born on 1 April 1990" },
+    { name: "Pilar Andrade", relation: "grandmother", relationOf: "narrator", deathDate: "2001-05-03", evidence: "My grandmother Pilar Andrade died on 3 May 2001" },
+    { name: "Ramón Pinto", relation: "uncle", relationOf: "narrator", evidence: "My uncle Ramón Pinto farms" },
+    { name: "Bea Soto", relation: "neighbour", relationOf: "narrator", evidence: "My neighbour Bea Soto waters the plants" },
+    { name: "Óscar Gil", relation: "ex-husband", relationOf: "narrator", endDate: "2012", evidence: "My ex-husband Óscar Gil and I divorced in 2012" },
+    { name: "Pablo Ruiz", relation: "partner", relationOf: "narrator", marriageDate: "2009-02-14", evidence: "My partner Pablo Ruiz and I married on 14 February 2009" },
+    { name: "Nico", relation: "youngest", relationOf: "narrator", birthDate: "2016-06-06", evidence: "Our youngest, Nico, was born on 6 June 2016" },
+  ], { text, selfName: SELF });
+  assert.deepEqual(dropped, []);
+  const graph = peopleToGraph(people);
+  const lines = graph.triples.filter((triple) => triple.predicate !== "lives_at").map((triple) => `${triple.subject.name} ${triple.predicate} ${triple.object.name}${triple.attributes.kind ? ` (${triple.attributes.kind})` : ""}${triple.validTo ? ` until ${triple.validTo}` : ""}`);
+  assert.deepEqual(lines, [
+    "Rosa Ferrer relative_of me (stepmother)",
+    "Hugo Andrade sibling_of me",
+    "Pilar Andrade grandparent_of me",
+    "Ramón Pinto relative_of me (uncle)",
+    "Bea Soto knows me (neighbour)",
+    "Óscar Gil spouse_of me until 2012-01-01",
+    "Pablo Ruiz spouse_of me",
+    "me parent_of Nico",
+  ]);
+  assert.equal(graph.entityFacts.find((fact) => fact.name === "Hugo Andrade").kind, "half-brother");
+  assert.equal(graph.entityFacts.find((fact) => fact.name === "Óscar Gil").kind, "husband");
+  assert.equal(graph.triples.find((triple) => triple.subject.name === "Óscar Gil").attributes.ended, true);
+  // Each of these evidence lines satisfies the family-evidence rule.
+  const prepared = prepareTriples(graph.triples, { selfAliases: buildSelfAliasSet({ names: [SELF] }), selfName: SELF, relatives: [], message: text });
+  assert.equal(prepared.kept.length, graph.triples.length);
+});
+
+test("a saved note addressed to you, and a known person named only by role, still count", () => {
+  const note = "Your father Héctor Andrade passed away on 9 October 2011. The speaker is the mother of Sara.";
+  const first = validatePeople([
+    { name: "Héctor Andrade", relation: "father", relationOf: "narrator", deathDate: "2011-10-09", evidence: "Your father Héctor Andrade passed away on 9 October 2011" },
+    { name: "Sara", relation: "daughter", relationOf: "narrator", evidence: "The speaker is the mother of Sara" },
+  ], { text: note, selfName: SELF });
+  assert.deepEqual(first.dropped, []);
+  assert.equal(first.people.every((person) => person.relationOf === "narrator"), true);
+  // "my husband" with no name: accepted for the husband the graph already knows, refused for anyone else.
+  const text = "My husband and I married on 14 February 2009.";
+  const known = [{ name: "Pablo Ruiz", kind: "husband" }, { name: "Héctor Andrade", kind: "father" }];
+  const byRole = validatePeople([{ name: "Pablo Ruiz", relation: "husband", relationOf: "narrator", marriageDate: "2009-02-14", evidence: text }], { text, selfName: SELF, known });
+  assert.equal(byRole.people[0].marriageDate, "2009-02-14");
+  const wrong = validatePeople([{ name: "Héctor Andrade", relation: "husband", relationOf: "narrator", evidence: text }], { text, selfName: SELF, known });
+  assert.equal(wrong.dropped[0].reason, "name-not-in-text");
+});
+
+test("answers cover birth order, extended roles, former spouses and named people", () => {
+  const family = buildPeopleContext({
+    self: { id: "self", name: SELF },
+    people: [
+      { id: "self", name: SELF, kind: "self", role: "self" },
+      { id: "pablo", name: "Pablo Ruiz", kind: "husband", role: "spouse" },
+      { id: "oscar", name: "Óscar Gil", kind: "husband", role: "spouse" },
+      { id: "sara", name: "Sara", kind: "daughter", role: "child", birthDate: "2010-03-03" },
+      { id: "nico", name: "Nico", kind: "child", role: "child", birthDate: "2016-06-06" },
+      { id: "hugo", name: "Hugo Andrade", kind: "half-brother", role: "sibling", birthDate: "1990-04-01" },
+    ],
+    others: [
+      { id: "rosa", name: "Rosa Ferrer", kind: "stepmother" },
+      { id: "pilar", name: "Pilar Andrade", kind: "grandmother", deathDate: "2001-05-03" },
+      { id: "bea", name: "Bea Soto", kind: "neighbour" },
+    ],
+    edges: [
+      { id: "s1", type: "spouse_of", status: "confirmed", fromId: "pablo", toId: "self", validFrom: "2009-02-14" },
+      { id: "s2", type: "spouse_of", status: "confirmed", fromId: "oscar", toId: "self", validFrom: "2001-09-01", validTo: "2012-01-01", attributes: { ended: true, endPrecision: "year" } },
+      { id: "r1", type: "relative_of", status: "confirmed", fromId: "rosa", toId: "self", attributes: { kind: "stepmother" } },
+      { id: "g1", type: "grandparent_of", status: "confirmed", fromId: "pilar", toId: "self" },
+      { id: "k1", type: "knows", status: "confirmed", fromId: "bea", toId: "self", attributes: { kind: "neighbour" } },
+    ],
+    about: { bea: ["Bea Soto caretaker of Vigo flat"] },
+  });
+  assert.match(answerPeopleQuestion("who is my husband?", family), /^Pablo Ruiz — your husband \(married 14 Feb 2009\)\.$/);
+  assert.match(answerPeopleQuestion("who is my ex-husband?", family), /Óscar Gil — your former husband \(married 1 Sep 2001, ended 2012\)/);
+  assert.match(answerPeopleQuestion("when was my firstborn born?", family), /Sara — your firstborn \(b\. 3 Mar 2010\)/);
+  assert.match(answerPeopleQuestion("who is our youngest?", family), /Nico — your youngest/);
+  assert.match(answerPeopleQuestion("who is my stepmother?", family), /Rosa Ferrer — your stepmother/);
+  assert.match(answerPeopleQuestion("when was my half-brother born?", family), /Hugo Andrade — your half-brother, born 1 Apr 1990/);
+  assert.match(answerPeopleQuestion("who was my grandmother?", family), /Pilar Andrade — your grandmother \(passed 3 May 2001\)/);
+  assert.equal(answerPeopleQuestion("who is my sister-in-law?", family), "Your sister-in-law isn't recorded yet.");
+  const bea = answerPeopleQuestion("who is Bea Soto?", family);
+  assert.match(bea, /Bea Soto — your neighbour/);
+  assert.match(bea, /caretaker of Vigo flat/);
+  assert.match(answerPeopleQuestion("how many children do I have?", family), /You have 2 children/);
+  const tree = answerPeopleQuestion("show my family tree", family);
+  assert.match(tree, /Spouse: Pablo Ruiz/);
+  assert.match(tree, /Former spouse: Óscar Gil \(husband, married 1 Sep 2001, ended 2012\)/);
+  assert.match(tree, /Grandparents: Pilar Andrade \(grandmother\)/);
+  assert.match(tree, /Other relatives: Rosa Ferrer \(stepmother\)/);
+  assert.equal(tree.includes("Bea Soto"), false);
+  assert.equal(isPeopleQuestion("when was my stepbrother born?"), true);
+  assert.equal(isRelationshipStatement("Bea Soto, my neighbour, waters the plants."), true);
+  assert.equal(isRelationshipStatement("Our youngest, Nico, was born on 6 June 2016."), true);
+});

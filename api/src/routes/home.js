@@ -15,7 +15,7 @@ import {
 import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
-import { describeRelationshipLine } from "../services/graph/familyStatement.js";
+import { describeRelationshipLine, isRelationshipStatement } from "../services/graph/familyStatement.js";
 import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
 import { closeSupersededBy, commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
@@ -656,6 +656,11 @@ async function runRelationshipChange(userId, routing, payload) {
   for (const edge of edges) {
     if (!messageMentions(payload.message, edge)) continue;
     proposals.push({ ...edge, proposedValidTo: today });
+  }
+  // Nothing current to end ("my ex-wife now lives in …" after the divorce is recorded): the message still states
+  // something about people, so it is saved the way any such statement is.
+  if (!proposals.length && (isRelationshipStatement(payload.message) || extracted.triples.length)) {
+    return runRelationshipAdd(userId, { ...routing, intent: "relationship_add", interpretation: "Save who these people are to you." }, payload);
   }
   if (!proposals.length) {
     return answerResponse(routing, "I couldn't find a confirmed connection to end. It may still be a suggestion in Review.", false);

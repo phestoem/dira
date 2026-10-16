@@ -11,13 +11,17 @@ import "dotenv/config";
 import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { CASES, MOTHER_SENTENCE, motherProblems, offeredLines, SEED_MESSAGES, SELF_NAME } from "./cases.js";
+import { readFileSync } from "fs";
+import { CASES, mentionsDate, MOTHER_SENTENCE, motherProblems, offeredLines, SEED_MESSAGES, SELF_NAME } from "./cases.js";
 
 const DEV = { port: "4801", db: "dira_dev" };
 const PROD = { port: "4800", db: "dira" };
 const BUSY = /^DIRA is busy right now/i;
 const TABLES = ["user", "entity", "event", "vision", "diaryEntry", "relationship", "lifeEvent", "inputQueue"];
 const DELETE_ORDER = ["relationship", "lifeEvent", "inputQueue", "diaryEntry", "event", "vision", "entity"];
+// Other families as JSON: --set synthetic, or --set holdout (test/holdout/, run with --score-only and never tuned for).
+const SETS = { synthetic: new URL("./sets/synthetic.json", import.meta.url), holdout: new URL("../../test/holdout/holdout.json", import.meta.url) };
+const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
 const args = parseArgs(process.argv.slice(2));
 const base = (args.base || `http://127.0.0.1:${process.env.PORT}`).replace(/\/$/, "");
@@ -46,6 +50,8 @@ function parseArgs(argv) {
     else if (arg === "--only") out.only = new Set(String(argv[++index] || "").split(",").filter(Boolean));
     else if (arg === "--base") out.base = argv[++index];
     else if (arg === "--allow-prod-readonly") out.allowProdReadonly = true;
+    else if (arg === "--set") out.set = argv[++index];
+    else if (arg === "--score-only") out.scoreOnly = true;
     else throw new Error(`unknown option ${arg}`);
   }
   return out;
@@ -73,6 +79,7 @@ function guard() {
   const bridge = ["ALTIMETRIX_URL", "ALTIMETRIX_API_URL", "ALTIMETRIX_BRIDGE_SECRET", "ALTIMETRIX_WEBHOOK_SECRET"].filter((name) => process.env[name]);
   if (bridge.length) throw new Error(`refusing to run: Altimetrix bridge is configured (${bridge.join(", ")})`);
   if (args.user && !args.readonly) throw new Error("live mode needs --readonly");
+  if (args.set && args.user) throw new Error("--set seeds its own fixture user; it has no live mode");
   if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is not set");
 }
 
@@ -105,22 +112,49 @@ async function post(path, body) {
   return json;
 }
 
+
+function loadSet(name) {
+  const set = JSON.parse(readFileSync(SETS[name] || name, "utf8"));
+  const cases = set.questions.map((question) => ({ id: question.id, turns: question.turns, check: ({ answer }) => expectProblems(answer, question.expect || {}) }));
+  return { selfName: set.selfName, seeds: set.seeds, cases };
+}
+
+
+// Unicode-aware whole-word match, so "Siobhán" and "O'Connor" match the way they are written.
+function mentions(answer, text) {
+  const flat = (value) => String(value || "").replace(/[’‘]/g, "'").normalize("NFC");
+  const escaped = flat(text).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  return new RegExp(`(?<![\\p{L}\\p{N}])${escaped}(?![\\p{L}\\p{N}])`, "iu").test(flat(answer));
+}
+
+function expectProblems(answer, expect) {
+  const failures = [];
+  for (const text of expect.has || []) if (!mentions(answer, text)) failures.push(`missing "${text}"`);
+  for (const text of expect.lacks || []) if (mentions(answer, text)) failures.push(`must not mention "${text}"`);
+  for (const iso of expect.dates || []) if (!mentionsDate(answer, iso)) failures.push(`missing date ${iso}`);
+  if (expect.count != null && !mentions(answer, String(expect.count)) && !mentions(answer, NUMBER_WORDS[expect.count] || "")) failures.push(`does not say ${expect.count}`);
+  return failures;
+}
+
 async function fixture() {
+  const set = args.set ? loadSet(args.set) : { selfName: SELF_NAME, seeds: SEED_MESSAGES, cases: CASES };
+  const quiet = Boolean(args.scoreOnly);
   const id = randomUUID();
   await prisma.user.create({
     // Auto-extract on, like an account that was never reset; the reset case turns it off.
-    data: { id, email: `golden+${id}@example.invalid`, handle: `golden-${id.slice(0, 8)}`, name: SELF_NAME, settings: { graphAutoExtract: true } },
+    data: { id, email: `golden+${id}@example.invalid`, handle: `golden-${id.slice(0, 8)}`, name: set.selfName, settings: { graphAutoExtract: true } },
   });
-  console.log(`fixture user ${id}`);
+  if (!quiet) console.log(`fixture user ${id}`);
   signIn(id);
   try {
-    console.log("\n== seeding through /home ==");
-    for (const message of SEED_MESSAGES) {
+    if (!quiet) console.log("\n== seeding through /home ==");
+    for (const message of set.seeds) {
       const steps = await seed(message);
-      console.log(`- ${message.slice(0, 70)}${message.length > 70 ? "…" : ""}\n    ${steps.join(" → ")}`);
+      if (!quiet) console.log(`- ${message.slice(0, 70)}${message.length > 70 ? "…" : ""}\n    ${steps.join(" → ")}`);
     }
     await settle(id);
-    const code = await ask(id, false);
+    const code = await ask(id, false, set.cases);
+    if (args.set) return code;
     const resetCode = !args.only || args.only.has("reset-gate") ? await resetGate(id) : 0;
     const motherCode = !args.only || args.only.has("mother-gate") ? await motherGate() : 0;
     signIn(id);
@@ -128,7 +162,7 @@ async function fixture() {
   } finally {
     await settle(id).catch(() => {});
     await prisma.user.delete({ where: { id } });
-    console.log(`\nfixture user ${id} deleted`);
+    if (!quiet) console.log(`\nfixture user ${id} deleted`);
   }
 }
 
@@ -312,10 +346,11 @@ async function live(userId) {
   return code;
 }
 
-async function ask(userId, readonly) {
-  const cases = CASES.filter((item) => !args.only || args.only.has(item.id));
+async function ask(userId, readonly, all = CASES) {
+  const cases = all.filter((item) => !args.only || args.only.has(item.id));
   let failed = 0;
-  console.log(`\n== ${cases.length} golden cases ==`);
+  const quiet = Boolean(args.scoreOnly);
+  if (!quiet) console.log(`\n== ${cases.length} golden cases ==`);
   for (const item of cases) {
     const startedAt = new Date().toISOString();
     const eventsBefore = await prisma.event.count({ where: { userId } });
@@ -341,6 +376,7 @@ async function ask(userId, readonly) {
       if (!production) failures.push(...(await revert(rowsBefore, writes)).map((line) => line.trim()));
     }
     if (failures.length) failed += 1;
+    if (quiet) continue;
     console.log(`\n${failures.length ? "FAIL" : "PASS"}  ${item.id}  [${turn?.response.routing?.intent || "?"}/${turn?.response.result?.type || "?"}]  ${startedAt}`);
     console.log(`  Q: ${item.turns.join("  ⇢  ")}`);
     console.log(indent(answerText(turn?.response) || "(no answer)"));

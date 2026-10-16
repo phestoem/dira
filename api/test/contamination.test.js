@@ -8,9 +8,13 @@ import { CASES, MOTHER_SENTENCE, SEED_MESSAGES } from "../scripts/golden/cases.j
 // src/ must work for anyone: no golden sentence and no name, place or identifier from the owner's own records may
 // appear in a prompt, regex, example or comment. Golden scores only mean something if the code never saw the answers.
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
+// The synthetic family and the hold-out set must be as unseen as the owner's own records.
+const SETS = ["../scripts/golden/sets/synthetic.json", "./holdout/holdout.json"].map((path) => JSON.parse(readFileSync(new URL(path, import.meta.url), "utf8")));
+const SET_SEEDS = SETS.flatMap((set) => set.seeds);
+const SET_TURNS = SETS.flatMap((set) => set.questions.flatMap((question) => question.turns));
 
 // Proper nouns from the golden seeds are found automatically; these words in them are ordinary English or brands.
-const ORDINARY = new Set(["my", "she", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "tsh", "toyota", "suzuki"]);
+const ORDINARY = new Set(["my", "she", "i", "i'm", "mum", "eur", "jina", "mama", "dada", "after", "in", "our", "her", "jeroen's", "eoin's", "januari", "februari", "machi", "aprili", "mei", "juni", "julai", "agosti", "septemba", "oktoba", "novemba", "desemba", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "tsh", "toyota", "suzuki"]);
 // Personal identifiers that are not in the golden seeds.
 const PERSONAL = ["Burton", "Ntagha", "Makoba", "Emmiliana", "Hassani", "Mrisho", "Juma Enock", "RZJ1200017194", "P9200", "Tent Camping Plans", "Dar es Salaam", "Finland", "Tanzania", "Arusha", "Nairobi"];
 
@@ -26,7 +30,7 @@ function sourceFiles(dir) {
 
 function personalWords() {
   const words = new Set(PERSONAL);
-  for (const message of [...SEED_MESSAGES, MOTHER_SENTENCE]) {
+  for (const message of [...SEED_MESSAGES, MOTHER_SENTENCE, ...SET_SEEDS]) {
     for (const word of message.match(/\b[\p{Lu}][\p{L}\d]+\b/gu) || []) {
       if (!ORDINARY.has(word.toLowerCase())) words.add(word);
     }
@@ -35,7 +39,7 @@ function personalWords() {
 }
 
 function fixtureSentences() {
-  const sentences = [...SEED_MESSAGES, MOTHER_SENTENCE, ...CASES.flatMap((item) => item.turns)];
+  const sentences = [...SEED_MESSAGES, MOTHER_SENTENCE, ...CASES.flatMap((item) => item.turns), ...SET_SEEDS, ...SET_TURNS];
   // Whole messages, and each sentence of the longer ones.
   return [...new Set(sentences.flatMap((text) => [text, ...text.split(/(?<=[.!?])\s+/)]).map((text) => text.trim().replace(/\s+/g, " ")).filter((text) => text.length >= 12))];
 }

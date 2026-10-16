@@ -1,12 +1,13 @@
 import { normalizeName } from "./entityResolver.js";
-import { fitsGender, genderOf, knownGender, SELF_PRONOUNS, THIRD_PERSON } from "./kinship.js";
+import { fitsGender, genderOf, KIN_PATTERN, knownGender, SELF_PRONOUNS, THIRD_PERSON } from "./kinship.js";
 import { categoryOf, inverseOf, normalizeType, typeMeta } from "./relationshipTypes.js";
 
 // Self pronouns are matched on their own (selfMatchKind), never stored or compared as aliases.
 const ROLE_WORDS = ["the individual", "the user", "the owner", "the occupier", "the buyer"];
 // "I married Ana on …" states a spouse without a kinship word; it supports spouse_of and nothing else.
 const MARRIAGE_WORD = /\b(married|marriage|marry|wed|wedding|ndoa|alioa|aliolewa|tulioana)\b/i;
-const KINSHIP_WORD = /\b(mothers?|fathers?|sisters?|brothers?|sons?|daughters?|wives|husbands?|wife|mama|baba|dada|kaka|mtoto|mke|mume|parents|children)\b/i;
+// Any role word the vocabulary knows ("stepfather", "sister-in-law", "bibi"), or a birth-order word ("our youngest").
+const KINSHIP_WORD = new RegExp(`\\b(${KIN_PATTERN}|firstborn|first-born|eldest|oldest|youngest|last-born|twins)\\b`, "i");
 const PLACEHOLDER_ROLES = {
   wife: ["spouse"],
   husband: ["spouse"],

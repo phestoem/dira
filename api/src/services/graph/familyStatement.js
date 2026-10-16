@@ -1,3 +1,6 @@
+import { KIN_PATTERN } from "./kinship.js";
+
+const ORDINAL_WORDS = "firstborn|first-born|eldest|oldest|youngest|last-born";
 import { isPeopleQuestion } from "./peopleGrounding.js";
 
 const MONTHS = {
@@ -12,11 +15,13 @@ export function isRelationshipStatement(text) {
   if (!value || value.includes("?") || /^(who|how|what|where|when|why)\b/i.test(value) || isPeopleQuestion(value)) return false;
   const lower = value.toLowerCase();
   if (/\b(no longer|not my|sold the|amehama|si tena)\b/.test(lower)) return false;
-  const kinship = /\b(my\s+(father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|wife|husband|children|sons?|daughters?)|is (?:my|our)\s+(?:\w+\s+)?(father|mother|son|daughter|sister|brother|wife|husband)|(?:i|we) have (?:\w+ )?(?:sisters|brothers|siblings|children|kids|sons|daughters)|supervises|anasimamia)\b/.test(lower);
-  return kinship && namesPersonWithRole(value);
+  return STATES_ROLE.test(lower) && namesPersonWithRole(value);
 }
 
-const ROLE_WORD = /\b(father|mother|mum|mom|dad|mama|baba|sisters?|brothers?|siblings?|wife|husband|fianc[ée]e?|children|kids|sons?|daughters?|uncle|aunt|cousin|nephew|niece|grand(?:father|mother|son|daughter|parents?|children)|in-laws?|supervis\w*|caretaker|fundi|dada|kaka|mke|mume|mtoto|wangu|yangu|anasimamia)\b/i;
+// "my stepfather", "is our youngest", "I have two brothers", "mama yangu", "supervises": a role stated about someone.
+const STATES_ROLE = new RegExp(`\\b((?:my|our)\\s+(?:late\\s+|dear\\s+)?(?:${KIN_PATTERN}|${ORDINAL_WORDS})|is (?:my|our)\\s+(?:\\w+\\s+)?(?:${KIN_PATTERN})|(?:i|we) have (?:\\w+ )?(?:${KIN_PATTERN})|(?:${KIN_PATTERN})\\s+(?:yangu|wangu|wetu)|supervises|anasimamia)\\b`, "i");
+
+const ROLE_WORD = new RegExp(`\\b(${KIN_PATTERN}|${ORDINAL_WORDS}|in-laws?|supervis\\w*|caretaker|fundi|wangu|yangu|anasimamia)\\b`, "i");
 const NOT_A_NAME = new Set([
   "i", "i'm", "i've", "my", "our", "your", "we", "he", "she", "they", "it", "his", "her", "their", "the", "a", "an", "this", "that", "these",
   "today", "yesterday", "tomorrow", "tonight", "and", "but", "so", "then", "also", "please", "when", "after", "before", "on", "in",

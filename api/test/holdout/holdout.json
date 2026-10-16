@@ -1,0 +1,29 @@
+{
+  "name": "holdout",
+  "note": "Score only. Never read individual failures or tune code for these sentences.",
+  "selfName": "Femke de Jong",
+  "seeds": [
+    "I'm Femke de Jong; my husband Jeroen Bakker and I live in Utrecht.",
+    "Jeroen and I have twins, Lotte and Sem, born on 19 March 2014.",
+    "My father Henk de Jong passed away in Delft on 2 December 2019.",
+    "Mum, Ingrid de Jong, is 81 and still lives in Delft.",
+    "My older sister Marloes de Jong has a daughter called Noor.",
+    "Jeroen's brother Ruben Bakker is godfather to our twins.",
+    "My first husband, Bas Visser, and I separated in 2009; we had no children.",
+    "In 2016 Jeroen and I bought a house on the Oudegracht together.",
+    "I sold my old car, a red Fiat Panda, to Marloes in 2022.",
+    "After my father died I inherited his allotment garden in Delft."
+  ],
+  "questions": [
+    { "id": "h-husband", "turns": ["who is my husband?"], "expect": { "has": ["Jeroen Bakker"] } },
+    { "id": "h-children-count", "turns": ["how many kids do I have?"], "expect": { "count": 2 } },
+    { "id": "h-children-born", "turns": ["when were my children born?"], "expect": { "has": ["Lotte", "Sem"], "dates": ["2014-03-19"] } },
+    { "id": "h-father-died", "turns": ["when did my father die?"], "expect": { "dates": ["2019-12-02"] } },
+    { "id": "h-mother-lives", "turns": ["where does my mother live?"], "expect": { "has": ["Delft"] } },
+    { "id": "h-niece", "turns": ["who is my niece?"], "expect": { "has": ["Noor"] } },
+    { "id": "h-ruben", "turns": ["who is Ruben Bakker?"], "expect": { "has": ["Jeroen"] } },
+    { "id": "h-first-husband", "turns": ["who was my first husband?"], "expect": { "has": ["Bas Visser"] } },
+    { "id": "h-panda-owner", "turns": ["who owns the Fiat Panda now?"], "expect": { "has": ["Marloes"] } },
+    { "id": "h-owned", "turns": ["what do I own?"], "expect": { "has": ["Oudegracht", "allotment"], "lacks": ["Panda"] } }
+  ]
+}
