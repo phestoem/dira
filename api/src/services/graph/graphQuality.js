@@ -357,7 +357,8 @@ function expandSale(triple) {
 
 function applyMarriageDate(triple) {
   const normalized = normalizeType(triple?.predicate);
-  if (normalized?.type !== "spouse_of" || triple.validFrom) return triple;
+  // Schema-engine triples carry their own checked dates; guessing one from a year in the evidence would invent 1 January.
+  if (normalized?.type !== "spouse_of" || triple.validFrom || triple.validated) return triple;
   const date = dateIn(triple.evidence) || triple.attributes?.date || null;
   return date ? { ...triple, validFrom: date } : triple;
 }

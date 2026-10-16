@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { currentMetrics, withMetrics } from "./metrics.js";
 import { mkdirSync } from "fs";
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
@@ -31,6 +32,18 @@ const port = Number(process.env.PORT) || 4800;
 
 const app = Fastify({ logger: true });
 
+// Evaluation runs send x-dira-metrics: 1 and get model calls, time and answer path back on the response.
+app.addHook("onRequest", (request, reply, done) => {
+  withMetrics(done);
+});
+app.addHook("onSend", async (request, reply, payload) => {
+  if (request.headers["x-dira-metrics"] !== "1" || typeof payload !== "string" || !payload.startsWith("{")) return payload;
+  try {
+    return JSON.stringify({ ...JSON.parse(payload), metrics: currentMetrics() });
+  } catch {
+    return payload;
+  }
+});
 await app.register(corsPlugin);
 await app.register(authPlugin);
 await app.register(multipart, {

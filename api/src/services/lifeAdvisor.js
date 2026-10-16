@@ -4,7 +4,8 @@ import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 import { isNoiseReply } from "./intentRouter.js";
 import { peopleEngine } from "./graph/engine.js";
-import { answerWithTools } from "./graph/peopleTools.js";
+import { allowedFrom, answerWithTools, groundToolReply } from "./graph/peopleTools.js";
+import { notePath } from "../metrics.js";
 import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, usesRecordedAnswer } from "./graph/peopleGrounding.js";
 
 const GROQ_MODEL = "qwen/qwen3.8-27b";
@@ -123,7 +124,10 @@ export async function chat(messages, userId) {
       console.error("[advisor] tools answer failed:", err.message);
       return null;
     });
-    if (answered) return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: 0, tools: answered.toolsUsed } };
+    if (answered) {
+      notePath("tools", { rounds: answered.rounds, tools: answered.toolsUsed });
+      return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: 0, tools: answered.toolsUsed } };
+    }
   }
   const question = contextualQuestion(latest, userTurns.at(-2)?.content || "", priorAnswer);
   if (peopleEngine() !== "tools" && isPeopleQuestion(question)) {
@@ -136,7 +140,16 @@ export async function chat(messages, userId) {
   context.familyLines = graph.family;
   context.holdingLines = HOLDINGS_QUESTION.test(latest) ? await holdingLines(userId) : [];
   const system = buildSystemPrompt(context);
-  const reply = await completeChat(history, system);
+  let reply = await completeChat(history, system);
+  if (peopleEngine() === "tools") {
+    // The agent needed no tool, so the old advisor answered; its names and dates are still checked, against
+    // everything it was shown.
+    const checked = groundToolReply(reply, allowedFrom([context, latest], latest));
+    notePath("fallback", { removed: checked.removed.length });
+    reply = checked.reply || "I couldn't find that in your records.";
+  } else {
+    notePath("model");
+  }
   console.log(
     "[advisor] chat",
     context.events.length,
@@ -432,9 +445,11 @@ async function graphContext(userId, text) {
 async function answerPeople(userId, question) {
   const context = await loadPeopleContext(userId);
   if (usesRecordedAnswer(question, context)) {
+    notePath("recorded");
     return { reply: answerPeopleQuestion(question, context), sourceIds: context.facts.map((fact) => `${fact.source.type}:${fact.source.id}`) };
   }
   let modelText = "";
+  notePath("model");
   try {
     modelText = await completeChat(
       [{ role: "user", content: question }],

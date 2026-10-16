@@ -19,6 +19,8 @@ const PROD = { port: "4800", db: "dira" };
 const BUSY = /^DIRA is busy right now/i;
 const TABLES = ["user", "entity", "event", "vision", "diaryEntry", "relationship", "lifeEvent", "inputQueue"];
 const DELETE_ORDER = ["relationship", "lifeEvent", "inputQueue", "diaryEntry", "event", "vision", "entity"];
+// Every question turn's server measurements, summarised once per run.
+const answerMetrics = [];
 // Other families as JSON: --set synthetic, or --set holdout (test/holdout/, run with --score-only and never tuned for).
 const SETS = { synthetic: new URL("./sets/synthetic.json", import.meta.url), holdout: new URL("../../test/holdout/holdout.json", import.meta.url), holdout2: new URL("../../test/holdout/holdout2.json", import.meta.url) };
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
@@ -103,6 +105,7 @@ async function post(path, body) {
     headers: {
       "content-type": "application/json",
       authorization: `Bearer ${token}`,
+      "x-dira-metrics": "1",
       ...(args.readonly ? { "x-dira-readonly": "1" } : {}),
     },
     body: JSON.stringify(body),
@@ -383,6 +386,7 @@ async function ask(userId, readonly, all = CASES) {
     for (const failure of failures) console.log(`  ✗ ${failure}`);
   }
   console.log(`\n${cases.length - failed}/${cases.length} passed`);
+  console.log(metricsSummary());
   return failed ? 1 : 0;
 }
 
@@ -403,8 +407,21 @@ async function converse(messages) {
       saved: response.result?.type === "saved" || (response.result?.type === "journal_saved" && !response.result?.confirmationRequired),
     };
     turns.push(turn);
+    if (response.metrics) answerMetrics.push(response.metrics);
   }
   return turns;
+}
+
+
+function metricsSummary() {
+  if (!answerMetrics.length) return "metrics: none returned (server without x-dira-metrics)";
+  const sorted = answerMetrics.map((item) => item.ms).sort((a, b) => a - b);
+  const median = sorted[Math.floor(sorted.length / 2)];
+  const calls = answerMetrics.map((item) => item.modelCalls);
+  const mean = calls.reduce((sum, value) => sum + value, 0) / calls.length;
+  const paths = {};
+  for (const item of answerMetrics) paths[item.path || "other"] = (paths[item.path || "other"] || 0) + 1;
+  return `metrics: answers ${answerMetrics.length} | median ${median} ms | model calls mean ${mean.toFixed(1)} (min ${Math.min(...calls)}, max ${Math.max(...calls)}) | paths ${JSON.stringify(paths)}`;
 }
 
 // The UI asks people to send again when DIRA is busy; do the same, and report it.

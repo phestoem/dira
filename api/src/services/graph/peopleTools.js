@@ -182,16 +182,21 @@ async function runTool(userId, snapshot, name, args) {
 }
 
 // Names and dates the reply may state: everything the tools returned, plus what the question itself names.
-function allowedFrom(results, question) {
+export function allowedFrom(results, question) {
   const names = new Set();
   const dates = new Set();
   const walk = (value) => {
     if (value == null) return;
+    if (value instanceof Date) {
+      if (!Number.isNaN(value.getTime())) dates.add(value.toISOString().slice(0, 10));
+      return;
+    }
     if (Array.isArray(value)) return value.forEach(walk);
     if (typeof value === "object") return Object.values(value).forEach(walk);
     const text = String(value);
-    for (const match of text.matchAll(/\b\d{4}-\d{2}-\d{2}\b/g)) dates.add(match[0]);
-    for (const match of text.matchAll(/\b(1[89]|20)\d{2}\b/g)) dates.add(match[0]);
+    const written = datesIn(text);
+    for (const iso of written.dates) dates.add(iso);
+    for (const year of written.years) dates.add(year);
     for (const match of text.matchAll(/[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+)*/gu)) names.add(match[0]);
   };
   walk(results);
@@ -249,7 +254,7 @@ export async function answerWithTools(userId, history) {
     if (!message.tool_calls?.length) {
       if (!results.length) return null;
       const checked = groundToolReply(message.content || "", allowedFrom(results, question));
-      return { reply: checked.reply || "That isn't recorded yet.", removed: checked.removed, toolsUsed: results.map((item) => item.name) };
+      return { reply: checked.reply || "That isn't recorded yet.", removed: checked.removed, toolsUsed: results.map((item) => item.name), rounds: round + 1 };
     }
     messages.push(message);
     for (const call of message.tool_calls) {
@@ -260,5 +265,5 @@ export async function answerWithTools(userId, history) {
       messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(output).slice(0, 12000) });
     }
   }
-  return { reply: "I couldn't finish looking that up. Ask again in a moment.", removed: [], toolsUsed: results.map((item) => item.name) };
+  return { reply: "I couldn't finish looking that up. Ask again in a moment.", removed: [], toolsUsed: results.map((item) => item.name), rounds: MAX_ROUNDS };
 }
