@@ -139,15 +139,36 @@ async function resetGate(userId) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { settings: true } });
   if (user?.settings?.graphAutoExtract !== false) failures.push("reset left graphAutoExtract on");
 
-  const familyBefore = await prisma.relationship.count({ where: { userId, category: "family", status: "confirmed" } });
-  const intro = "My sister Amani Enock Mwakyusa lives in Mbeya. My brother Baraka Enock Mwakyusa was born on 2 June 1985.";
+  // The reset removed every edge, so resending the full introduction must rebuild the whole family on its own.
+  const intro = SEED_MESSAGES[0];
   const introSteps = await seed(intro);
   await settle(userId, 8000);
-  const familyEdges = await prisma.relationship.findMany({ where: { userId, category: "family", status: "confirmed" } });
-  const names = new Map((await prisma.entity.findMany({ where: { userId }, select: { id: true, name: true } })).map((row) => [row.id, row.name]));
-  const linked = familyEdges.flatMap((edge) => [names.get(edge.fromId), names.get(edge.toId)]).join(" ");
-  if (familyEdges.length - familyBefore < 2) failures.push(`family introduction added ${familyEdges.length - familyBefore} confirmed edge(s), expected 2 (${introSteps.join(" → ")})`);
-  for (const name of ["Amani", "Baraka"]) if (!linked.includes(name)) failures.push(`no confirmed edge for ${name}`);
+  const familyEdges = await prisma.relationship.findMany({ where: { userId, category: "family", status: "confirmed", validTo: null } });
+  const people = await prisma.entity.findMany({ where: { userId, status: { not: "archived" } }, select: { id: true, name: true, isSelf: true } });
+  const names = new Map(people.map((row) => [row.id, row.name]));
+  const selfId = people.find((row) => row.isSelf)?.id;
+  const named = (id, pattern) => pattern.test(names.get(id) || "");
+  const between = (a, b) => familyEdges.filter((edge) => (named(edge.fromId, a) && named(edge.toId, b)) || (named(edge.fromId, b) && named(edge.toId, a)));
+  const parentOf = (edge, parent, child) =>
+    (edge.type === "parent_of" && parent(edge.fromId) && child(edge.toId)) || (edge.type === "child_of" && child(edge.fromId) && parent(edge.toId));
+  const isSelf = (id) => id === selfId;
+  const expected = [
+    ...[/^Enock Mwakyusa$/i, /^Froidah/i].map((pattern) => ["parent", pattern, (edge) => parentOf(edge, (id) => named(id, pattern), isSelf)]),
+    ...[/^Jeni/i, /^Leah/i, /^Neema/i, /^Zenah/i].map((pattern) => ["sister", pattern, (edge) => edge.type === "sibling_of"]),
+    [ "wife", /^Zelda/i, (edge) => edge.type === "spouse_of" ],
+    ...[/^Careen/i, /^Patrick/i, /^Presley/i, /^Powell/i, /^Prisha/i].map((pattern) => ["child", pattern, (edge) => parentOf(edge, isSelf, (id) => named(id, pattern))]),
+  ];
+  let restored = 0;
+  for (const [role, pattern, matches] of expected) {
+    const found = familyEdges.some((edge) => (isSelf(edge.fromId) || isSelf(edge.toId)) && (named(edge.fromId, pattern) || named(edge.toId, pattern)) && matches(edge));
+    if (found) restored += 1;
+    else failures.push(`no confirmed ${role} edge for ${pattern.source.replace(/[\^$]/g, "")}`);
+  }
+  if (familyEdges.length !== 12) failures.push(`family introduction left ${familyEdges.length} confirmed family edge(s), expected 12 (${introSteps.join(" → ")})`);
+  const zeldaEnock = between(/^Zelda/i, /^Enock Mwakyusa$/i).length;
+  const careenZelda = between(/^Careen/i, /^Zelda/i).length;
+  if (zeldaEnock) failures.push(`${zeldaEnock} Zelda–Enock edge(s), expected 0`);
+  if (careenZelda) failures.push(`${careenZelda} Careen–Zelda edge(s), expected 0`);
 
   const edgesBefore = await prisma.relationship.count({ where: { userId } });
   const entitiesBefore = await prisma.entity.count({ where: { userId } });
@@ -163,8 +184,8 @@ async function resetGate(userId) {
   if (entitiesAdded) failures.push(`document event added ${entitiesAdded} entit${entitiesAdded === 1 ? "y" : "ies"} while auto-extract is off`);
 
   console.log(`\n${failures.length ? "FAIL" : "PASS"}  reset-gate  [graph reset]  ${startedAt}`);
-  console.log(`  Q: /graph/reset  ⇢  ${intro}  ⇢  ${doc}`);
-  console.log(indent(`family: ${introSteps.join(" → ")}; ${familyEdges.length - familyBefore} confirmed family edge(s)\ndocument: ${docSteps.join(" → ")}; ${edgesAdded} edge(s), ${entitiesAdded} entities, graphExtractedAt ${event?.graphExtractedAt ? "set" : "null"}`));
+  console.log(`  Q: /graph/reset  ⇢  full introduction  ⇢  ${doc}`);
+  console.log(indent(`family: ${introSteps.join(" → ")}; ${familyEdges.length} confirmed family edge(s), ${restored}/12 expected, Zelda–Enock ${zeldaEnock}, Careen–Zelda ${careenZelda}\ndocument: ${docSteps.join(" → ")}; ${edgesAdded} edge(s), ${entitiesAdded} entities, graphExtractedAt ${event?.graphExtractedAt ? "set" : "null"}`));
   for (const failure of failures) console.log(`  ✗ ${failure}`);
   return failures.length ? 1 : 0;
 }
