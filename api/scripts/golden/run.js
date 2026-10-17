@@ -7,11 +7,15 @@
 //                                                    production's (passed in the environment), and the server must
 //                                                    advertise readonly support on /health; nothing is ever reverted there
 // Options: --only wife,parents   --base http://127.0.0.1:4801
+//   npm run golden -- --set holdout3 --extraction --trace <file> [--score-only]
+//                                                    seed only, then score the stored graph against
+//                                                    test/extraction/<set>.expect.json; <file> is the API's DIRA_EXTRACT_TRACE
 import "dotenv/config";
 import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { readFileSync } from "fs";
+import { existsSync, readFileSync } from "fs";
+import { precisionRecall, routeOf, scoreExtraction } from "./extraction.js";
 import { CASES, mentionsDate, MOTHER_SENTENCE, motherProblems, offeredLines, SEED_MESSAGES, SELF_NAME } from "./cases.js";
 
 const DEV = { port: "4801", db: "dira_dev" };
@@ -54,6 +58,8 @@ function parseArgs(argv) {
     else if (arg === "--allow-prod-readonly") out.allowProdReadonly = true;
     else if (arg === "--set") out.set = argv[++index];
     else if (arg === "--score-only") out.scoreOnly = true;
+    else if (arg === "--extraction") out.extraction = true;
+    else if (arg === "--trace") out.trace = argv[++index];
     else throw new Error(`unknown option ${arg}`);
   }
   return out;
@@ -82,6 +88,7 @@ function guard() {
   if (bridge.length) throw new Error(`refusing to run: Altimetrix bridge is configured (${bridge.join(", ")})`);
   if (args.user && !args.readonly) throw new Error("live mode needs --readonly");
   if (args.set && args.user) throw new Error("--set seeds its own fixture user; it has no live mode");
+  if (args.extraction && (!args.set || !args.trace)) throw new Error("--extraction needs --set and --trace (the API's DIRA_EXTRACT_TRACE file)");
   if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is not set");
 }
 
@@ -151,11 +158,14 @@ async function fixture() {
   signIn(id);
   try {
     if (!quiet) console.log("\n== seeding through /home ==");
+    const routes = [];
     for (const message of set.seeds) {
       const steps = await seed(message);
+      routes.push(routeOf(steps));
       if (!quiet) console.log(`- ${message.slice(0, 70)}${message.length > 70 ? "…" : ""}\n    ${steps.join(" → ")}`);
     }
     await settle(id);
+    if (args.extraction) return extractionReport(id, set, routes, quiet);
     const code = await ask(id, false, set.cases);
     if (args.set) return code;
     const resetCode = !args.only || args.only.has("reset-gate") ? await resetGate(id) : 0;
@@ -167,6 +177,30 @@ async function fixture() {
     await prisma.user.delete({ where: { id } });
     if (!quiet) console.log(`\nfixture user ${id} deleted`);
   }
+}
+
+async function extractionReport(userId, set, routes, quiet) {
+  const expect = JSON.parse(readFileSync(new URL(`../../test/extraction/${args.set}.expect.json`, import.meta.url), "utf8"));
+  const self = await prisma.entity.findFirst({ where: { userId, isSelf: true, status: { not: "archived" } } });
+  const [entities, edges] = await Promise.all([
+    prisma.entity.findMany({ where: { userId, status: { not: "archived" }, mergedIntoId: null } }),
+    prisma.relationship.findMany({ where: { userId, status: { in: ["confirmed", "suggested"] }, fromKind: "entity", toKind: "entity", OR: [{ label: null }, { label: { not: "conflict" } }] } }),
+  ]);
+  const snapshot = { self, entities, edges, byId: new Map(entities.map((entity) => [entity.id, entity])) };
+  const traces = existsSync(args.trace) ? readFileSync(args.trace, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((entry) => entry.userId === userId) : [];
+  const score = scoreExtraction({ expect, seeds: set.seeds, routes, snapshot, traces });
+  if (!quiet) {
+    console.log("\n== extraction ==");
+    for (const item of score.missed) console.log(`MISS  [${item.stage}]  seed ${item.fact.seed}  ${JSON.stringify(item.fact)}`);
+    for (const item of score.extra) console.log(`EXTRA  ${item}`);
+    if (score.extraPeople.length) console.log(`EXTRA people: ${score.extraPeople.join("; ")}`);
+    for (const [key, value] of Object.entries(score.byType).sort()) console.log(`  ${key.padEnd(18)} tp ${value.tp} fp ${value.fp} fn ${value.fn}`);
+  }
+  const totals = Object.values(score.byType).reduce((sum, value) => ({ tp: sum.tp + value.tp, fp: sum.fp + value.fp, fn: sum.fn + value.fn }), { tp: 0, fp: 0, fn: 0 });
+  const { precision, recall } = precisionRecall(totals);
+  console.log(`${totals.tp}/${score.facts} facts stored (recall ${recall?.toFixed(2)}, precision ${precision?.toFixed(2)})`);
+  console.log(`extraction: ${JSON.stringify({ set: args.set, facts: score.facts, totals, byType: score.byType, people: score.people, routing: score.routing, lost: score.lost, validationDrops: score.validationDrops, traced: traces.length })}`);
+  return 0;
 }
 
 // After /graph/reset a stated, confirmed family introduction still becomes edges,

@@ -1,0 +1,24 @@
+{
+  "set": "holdout3",
+  "facts": [
+    { "seed": 0, "person": "Kim Sang-ho", "relation": "parent" },
+    { "seed": 0, "person": "Lee Hye-jin", "relation": "parent" },
+    { "seed": 0, "person": "Lee Hye-jin", "died": "2019-11-03" },
+    { "seed": 1, "person": "Kim Ji-woo", "relation": "sibling" },
+    { "seed": 1, "person": "Kim Ji-woo", "born": "1982-04-21" },
+    { "seed": 1, "person": "Kim Tae-yang", "relation": "sibling" },
+    { "seed": 1, "person": "Kim Tae-yang", "born": "1990-07-30" },
+    { "seed": 2, "person": "Park Seo-yeon", "relation": "spouse" },
+    { "seed": 2, "person": "Park Seo-yeon", "married": "2014-10-11" },
+    { "seed": 2, "person": "Park Jong-su", "relation": "parent_in_law" },
+    { "seed": 2, "person": "Park Jong-su", "relation": "parent", "of": "Park Seo-yeon" },
+    { "seed": 3, "person": "Kim Ha-eun", "relation": "child" },
+    { "seed": 3, "person": "Kim Ha-eun", "born": "2016-03-02" },
+    { "seed": 4, "person": "Kim Do-yun", "relation": "child" },
+    { "seed": 4, "person": "Kim Do-yun", "born": "2019-03-09" },
+    { "seed": 5, "person": "Choi Yu-na", "relation": "sibling_in_law" },
+    { "seed": 5, "person": "Choi Yu-na", "relation": "spouse", "of": "Kim Tae-yang" },
+    { "seed": 6, "person": "Kim Ji-ho", "relation": "colleague" },
+    { "seed": 7, "person": "Lee Joon-ho", "relation": "cousin" }
+  ]
+}

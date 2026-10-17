@@ -1,8 +1,9 @@
+import { appendFileSync } from "node:fs";
 import { prisma } from "../../prisma.js";
 import { isReadonly } from "../../readonly.js";
 import { autoExtractOn } from "./autoExtract.js";
 import { genderOf, isGenericKind, refinesKind } from "./kinship.js";
-import { peopleEngine } from "./engine.js";
+import { peopleExtractor } from "./engine.js";
 import { PEOPLE_EXTRACT_PROMPT, peopleToGraph, validatePeople } from "./peopleFacts.js";
 import { PEOPLE_SCHEMA, PEOPLE_SCHEMA_PROMPT, schemaFactsToGraph, validateSchemaFacts } from "./peopleSchema.js";
 import { getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
@@ -12,6 +13,8 @@ import { categoryOf, isSensitive, isSymmetric, listRelationshipTypes, normalizeT
 const ROLE_ALIAS = new Set(["i", "me", "my", "mimi", "yangu", "the individual", "the user", "the owner", "the occupier", "the buyer"]);
 const GROQ_MODEL = "qwen/qwen3.8-27b";
 const OPENAI_MODEL = "gpt-4o-mini";
+// GRAPH_EXTRACT_MODEL swaps the OpenAI model for extraction only (it runs once per save); answering is unchanged.
+const extractModel = () => String(process.env.GRAPH_EXTRACT_MODEL || "").trim() || OPENAI_MODEL;
 const BACKOFF_MS = [2000, 4000, 8000, 16000, 32000];
 const MAX_EXTRACT_ATTEMPTS = 5;
 const SUPERSEDED_TYPES = new Set(["located_in", "lives_at", "owns"]);
@@ -66,7 +69,7 @@ export async function extractTriples(text, context = {}) {
   try {
     const known = await knownPeople(context.userId);
     const roster = known.list.length ? `Known people (name — role to the narrator): ${known.list.map((person) => `${person.name} — ${person.kind}`).join("; ")}` : "";
-    if (peopleEngine() === "tools") {
+    if (peopleExtractor() === "schema") {
       const [generalRaw, schemaRaw] = await Promise.all([
         completeJson(extractPrompt(), user),
         completeJsonSchema(PEOPLE_SCHEMA_PROMPT, [`Narrator: ${selfName}`, context.today ? `Today: ${context.today}` : "", roster, "Text:", body.slice(0, 3500)].filter(Boolean).join("\n"), PEOPLE_SCHEMA),
@@ -76,6 +79,7 @@ export async function extractTriples(text, context = {}) {
         .filter((triple) => categoryOf(normalizeType(triple?.predicate)?.type) !== "family" && !PEOPLE_PASS_TYPES.has(normalizeType(triple?.predicate)?.type));
       const checked = validateSchemaFacts(parseJson(schemaRaw), { text: body, selfName, selfAliases: context.selfAliases || [], known: known.list });
       for (const item of checked.dropped) console.debug(`[graph] people(tools): dropped ${item.item?.person || item.item?.name || "?"} (${item.reason})`);
+      traceExtraction({ userId: context.userId, text: body, extractor: "schema", raw: parseJson(schemaRaw), kept: { relations: checked.relations, dates: checked.dates }, dropped: checked.dropped });
       const graph = schemaFactsToGraph(checked, selfName);
       return { triples: [...triples, ...graph.triples], entityFacts: graph.entityFacts, people: checked.relations, dropped: checked.dropped };
     }
@@ -88,6 +92,7 @@ export async function extractTriples(text, context = {}) {
       .filter((triple) => categoryOf(normalizeType(triple?.predicate)?.type) !== "family" && !PEOPLE_PASS_TYPES.has(normalizeType(triple?.predicate)?.type));
     const checked = validatePeople(parseJson(peopleRaw)?.people, { text: body, selfName, selfAliases: context.selfAliases || [], knownGender: known.genderOf, known: known.list });
     for (const item of checked.dropped) console.debug(`[graph] people: dropped ${item.name || "?"} (${item.reason})`);
+    traceExtraction({ userId: context.userId, text: body, extractor: "rules", raw: parseJson(peopleRaw)?.people || null, kept: checked.people, dropped: checked.dropped });
     const graph = peopleToGraph(checked.people);
     const narratorFacts = graph.narrator && (graph.narrator.birthDate || graph.narrator.deathDate)
       ? [{ name: selfName, birthDate: graph.narrator.birthDate, deathDate: graph.narrator.deathDate, kind: null, birthOrder: null }]
@@ -97,6 +102,14 @@ export async function extractTriples(text, context = {}) {
     if (err.status !== 429) console.error("[graph] extract failed:", err.message);
     throw err;
   }
+}
+
+// DIRA_EXTRACT_TRACE=<file> appends what the people pass returned, what validation kept and why it dropped the rest,
+// for scoring extraction (scripts/golden/run.js --extraction). Off unless set.
+function traceExtraction(entry) {
+  const file = process.env.DIRA_EXTRACT_TRACE;
+  if (!file) return;
+  try { appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), model: extractModel(), ...entry })}\n`); } catch { /* trace only */ }
 }
 
 // The people the graph already knows, with their role to the narrator, and each one's gender from that role.
@@ -818,7 +831,7 @@ async function completeJsonSchema(system, user, schema) {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: OPENAI_MODEL,
+      model: extractModel(),
       temperature: 0,
       response_format: { type: "json_schema", json_schema: schema },
       messages: [{ role: "system", content: system }, { role: "user", content: user }],
@@ -849,7 +862,7 @@ async function completeWithOpenAI(system, user) {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
-      model: OPENAI_MODEL,
+      model: extractModel(),
       temperature: 0.2,
       response_format: { type: "json_object" },
       messages: [

@@ -3,7 +3,17 @@
 Last updated: 2026-10-17
 
 ## Current goal
-DIRA answers questions about the user's people (family, dates, relations)
+2026-10-17 (afternoon): measure extraction on its own. All engines score
+~3/13 on hold-out 3; extraction is the suspected bottleneck. Per seed:
+routing (intake / relationship_add / journal / question / dropped), what
+was extracted, what survived validation; scored against expected people,
+relations and dates (precision/recall per relation type, dropped at
+routing, dropped at validation). Hold-outs: totals only. Then compare a
+stronger extraction model (gpt-4o / gpt-4.1 vs gpt-4o-mini) on recall.
+Next scoring round adds a 4th combination: rules extraction + tools
+answering, judged on the hold-outs.
+
+Background goal: DIRA answers questions about the user's people (family, dates, relations)
 and property only from facts it actually stored, and it generalises: the
 engine is chosen by hold-out score, not by fixes for single golden cases.
 Phesto merges after review; nothing goes to main from here.
@@ -44,8 +54,23 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
-Nothing running. Dev API is up on 4801 with PEOPLE_ENGINE=rules
-(`api/scripts/devapi.sh rules`, log logs/api-rules.log).
+- Extraction measurement, started 2026-10-17 ~12:40 UTC in tmux session
+  `extraction`: `api/scripts/golden/extraction.sh 3` = extractors rules
+  and schema × models gpt-4o-mini, gpt-4o, gpt-4.1 × synthetic and
+  hold-outs 1–3 × 3 runs (72 fixture seedings, expect ~2.5 h). Progress:
+  logs/extraction/summary.txt, one line per run; finished when it ends
+  with "== ... done". Driver log: logs/extraction.log. Per-run files:
+  logs/extraction/<extractor>-<model>-<set>-<run>.txt (hold-outs: score
+  and totals JSON only). Traces logs/extraction/trace-*.jsonl contain
+  hold-out items: never read them; aggregate from the per-run files.
+- Harness: `npm run golden -- --set <set> --extraction --trace <file>`
+  scores the stored graph against api/test/extraction/<set>.expect.json
+  (expected facts written 2026-10-17 from seed sentences only; Phesto OK'd
+  reading hold-out 1–2 seeds for this). The API must run with
+  DIRA_EXTRACT_TRACE=<file>. Each miss gets a stage: routing,
+  no-extraction, not-extracted, validation, kept-not-stored.
+- New switches: PEOPLE_EXTRACTOR=rules|schema (independent of
+  PEOPLE_ENGINE), GRAPH_EXTRACT_MODEL (extraction only).
 
 ## Latest scores
 2026-10-17, step e, at `15dc8b1`, 3 runs per engine per set, mean (min).
@@ -95,6 +120,14 @@ hold-out 1 4.0 / 3.7, synthetic 10.0 / 8.0, family 12.0 / 12.0.
   tools engine's live runs answer over a rules-built graph.
 - Post-check edge dates: a 1 January with no stored precision is shown as
   its year (a bare year was stored that way); never more precise than said.
+- 2026-10-17 (Phesto): hybrid is parked: not deleted, no family-specific
+  fixes (that is tuning to Phesto again). Its value is speed; revisit once
+  extraction is fixed.
+- 2026-10-17 (Phesto): live 12/13 for tools is Phesto's family, which the
+  system has seen a lot; it doesn't count as evidence. Engines are judged
+  on hold-outs.
+- 2026-10-17 (Phesto): messy dira_dev child records ("older son",
+  "Prisha - Neema") stay as a realistic test; the resolver must cope.
 - Relationship chips count as explicit confirmation, so they are not gated
   by graphAutoExtract (Phesto confirmed).
 - The "User has four sisters" event (8a58cc4c) in dira_dev was archived at
@@ -156,15 +189,4 @@ Long jobs run in tmux with logs in logs/.
 4. Later: timezone and default currency become user settings.
 
 ## Open questions for Phesto
-- No engine generalises (best hold-out 3: 4/13). Next: measure
-  extraction on its own (what entities/edges each hold-out family should
-  produce vs. what is stored), so we know whether to work on extraction or
-  answering? That needs a stored-graph expectation per set, written
-  without looking at hold-out answers.
-- Tools scores 12/13 live on dira_dev (rules 9.3) but lowest on the
-  hold-outs. Worth a "rules extraction + tools answering" variant, or keep
-  narrowing to one engine?
-- Fix the hybrid's family-set gaps (marriage date, asset counts), or drop
-  hybrid since it doesn't beat rules on any hold-out?
-- dira_dev after the rebuild has messy child entities ("older son",
-  "Prisha - Neema"). Clean them up by hand, or leave as a realistic test?
+- None yet.
