@@ -8,7 +8,7 @@ import { extractModel } from "./settings.js";
 import { validateClaims } from "./validate.js";
 import { ENTITY_TYPES, PREDICATES } from "./vocabulary.js";
 
-export const EXTRACTOR_VERSION = "claims-v4";
+export const EXTRACTOR_VERSION = "claims-v5";
 
 // What each predicate means and its direction, for the prompt. Kept beside the vocabulary's domain table.
 const MEANING = {
@@ -67,6 +67,23 @@ const MEANING = {
 // Predicates the model may use in their natural direction, turned into the stored one: "Shop Z has_client Hotel X"
 // is stored as "Hotel X client_of Shop Z" (models reliably reverse client_of when asked for it directly).
 const EXTRACTION_ALIASES = { has_client: "client_of" };
+// A mention's place becomes its own located_in claim (once per thing and place), with the same evidence.
+export function withPlaces(claims) {
+  const out = [];
+  const seen = new Set();
+  for (const claim of claims) {
+    out.push(claim);
+    for (const entity of [claim.subject, claim.object, claim.context]) {
+      if (!entity || entity === "me" || entity.type === "person" || entity.type === "place" || !String(entity.place || "").trim()) continue;
+      const key = `${entity.name}|${entity.place}`.toLowerCase();
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({ subject: { name: entity.name, type: entity.type }, predicate: "located_in", object: { name: entity.place.trim(), type: "place" }, value: null, label: null, amount: null, currency: null, context: null, date: null, until: null, evidence: claim.evidence, corrects: false });
+    }
+  }
+  return out;
+}
+
 export function fromAlias(claim) {
   const stored = EXTRACTION_ALIASES[claim.predicate];
   return stored ? { ...claim, predicate: stored, subject: claim.object, object: claim.subject } : claim;
@@ -75,8 +92,13 @@ export function fromAlias(claim) {
 const mention = {
   type: ["object", "null"],
   additionalProperties: false,
-  required: ["name", "type"],
-  properties: { name: { type: "string" }, type: { type: "string", enum: [...ENTITY_TYPES, "self"] } },
+  required: ["name", "type", "place"],
+  properties: {
+    name: { type: "string" },
+    type: { type: "string", enum: [...ENTITY_TYPES, "self"] },
+    // Where a thing is, when the text says ("the farm in X" → "X"); code turns it into a located_in claim.
+    place: { type: ["string", "null"] },
+  },
 };
 const nullable = (type) => ({ type: [type, "null"] });
 
@@ -113,7 +135,7 @@ export const CLAIMS_SCHEMA = {
 export const CLAIMS_PROMPT = `You turn what a person tells their personal record keeper into claims: one claim per fact the text states.
 
 Claim fields:
-- subject, object, context: entities as { name, type }. The narrator is { "name": "me", "type": "self" }. Use the fullest name the text or the known records give (a known name when it is the same person or thing). A thing without a proper name gets a short name built from the text, e.g. "lake plot", "boat licence", "tuition fees", "eye test appointment".
+- subject, object, context: entities as { name, type, place }. The narrator is { "name": "me", "type": "self", "place": null }. place is where a thing (property, vehicle, organisation, project, asset, event) is when the text says so, also when the place is part of how it is called ("the farm in X", "our house near Y", "the Z outlet" → the town); null for people and when unknown. Use the fullest name the text or the known records give (a known name when it is the same person or thing). A thing without a proper name gets a short name built from the text, e.g. "lake plot", "boat licence", "tuition fees", "eye test appointment".
 - predicate: one of the predicates below, in the direction given.
 - value: for value predicates (dates, identifiers, statuses, plans, percentages); otherwise null.
 - label, amount (a number in major units, no separators), currency (ISO 4217 code), date, until: when stated, else null.
@@ -135,8 +157,8 @@ Rules:
 - Names: call a thing what the user calls it ("the lake plot", "the garage build"). Numbers and codes (plot numbers, registrations, title or policy numbers) never go into a name; they are identifier claims.
 - Project state: work going on now → status active; decided or planned but not started → status planned; finished → done. A target finish date ("hope to finish by June") is due_on.
 - A project is one entity for the whole undertaking (a build, a renovation, a launch). Trades, tasks, quotes, payments and milestones attach to that project (contractor_for, costs, paid with context, milestone); never make an entity per task.
-- Documents, policies, licences and certificates are their own entities (type document), e.g. "car insurance policy"; their issuer, number and expiry are claims about the document.
-- When the text says where a person, thing or project is, add located_in (things) or lives_in (people). An organisation's town is not an employer: works_at needs an organisation.
+- Documents, policies, licences and certificates are their own entities (type document), e.g. "car insurance policy"; their issuer, number and expiry are claims about the document. "The boat is insured with Z; the policy expires D" → "boat insurance policy" issued_by Z and expires_on D, and nothing about the boat itself.
+- Where a thing is goes in its mention's place (no separate located_in needed); where a person lives is a lives_in claim. An organisation's town is not an employer: works_at needs an organisation.
 - Plans and decisions: value is the whole intention or decision in a few words ("move the family to the countryside"), never one word. "We agreed/decided" → decided; "I plan/will/want to" → plans or intends.
 - Ended employment: "after N years at X" or "I left X" → works_at X with until.
 - A kin word ties people only as the text says: "Arni's wife Sola" is spouse_of between Sola and Arni, not a claim about the narrator. "My sister-in-law Sola" with no chain is relative_of Sola → me, label "sister-in-law".
@@ -149,7 +171,7 @@ Rules:
 - Something done or decided together ("Ana and I decided", "we bought") → one claim with subject me; name the others in a separate claim only when the text gives them their own part.
 - No facts → an empty list.
 
-Before answering, check the text once more: every named person has their role claim; every thing described with a place ("the flat in X", "our farm near Y") has located_in; every amount is in a claim; every date is in a claim; every ended state has until; every contractor or company working on something has contractor_for; every plan or decision is there.`;
+Before answering, check the text once more: every named person has their role claim; every thing described with a place ("the flat in X", "our farm near Y") has that place in its mention; every amount is in a claim; every date is in a claim; every ended state has until; every contractor or company working on something has contractor_for; every plan or decision is there.`;
 
 function knownLines(self, entities, claims) {
   const name = new Map(entities.map((entity) => [entity.id, entity]));
@@ -184,7 +206,7 @@ export async function extractClaims(text, { userId, asOf = null, source = "chat"
   ].join("\n\n");
   const model = extractModel();
   const { json, usage } = await jsonCall({ model, name: "claims", schema: CLAIMS_SCHEMA, system: CLAIMS_PROMPT, user, timeoutMs: 60000 });
-  const raw = (json.claims || []).map(fromAlias).map((claim) => ({ ...claim, subject: claim.subject?.type === "self" ? "me" : claim.subject, object: claim.object?.type === "self" ? "me" : claim.object, context: claim.context?.type === "self" ? "me" : claim.context }));
+  const raw = withPlaces((json.claims || []).map(fromAlias).map((claim) => ({ ...claim, subject: claim.subject?.type === "self" ? "me" : claim.subject, object: claim.object?.type === "self" ? "me" : claim.object, context: claim.context?.type === "self" ? "me" : claim.context })));
   const { kept, dropped } = validateClaims(raw, text, { known: entities.map((entity) => [entity.name, ...(entity.aliases || [])]).flat(), selfName: self.name, today });
   return { claims: kept, dropped, raw, usage, extractor: EXTRACTOR_VERSION, model };
 }

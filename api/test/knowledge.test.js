@@ -146,3 +146,16 @@ test("a year worked out from an age is not stated; a resolved relative date is",
   assert.deepEqual(dropped.map((item) => item.reason), ["year-not-in-text"]);
   assert.equal(kept.length, 1);
 });
+
+test("a thing's place becomes located_in, and today's date on an undated fact is dropped", async () => {
+  const { withPlaces } = await import("../src/services/knowledge/extractor.js");
+  const { validateClaims } = await import("../src/services/knowledge/validate.js");
+  const claim = { subject: "me", predicate: "owns", object: { name: "lake cabin", type: "property", place: "Bergen" }, evidence: "our lake cabin in Bergen" };
+  const out = withPlaces([claim, { ...claim, predicate: "rents" }]);
+  assert.deepEqual(out.map((item) => item.predicate), ["owns", "located_in", "rents"]);
+  assert.deepEqual([out[1].subject.name, out[1].object.name], ["lake cabin", "Bergen"]);
+  const stamped = { subject: { name: "Nils", type: "person" }, predicate: "died", value: "2026-06-15", evidence: "my late brother Nils" };
+  const { dropped } = validateClaims([stamped], "My late brother Nils loved the sea.", { today: "2026-06-15" });
+  assert.deepEqual(dropped.map((item) => item.reason), ["today-stamp"]);
+  assert.equal(validateClaims([{ ...stamped, evidence: "Nils died this morning" }], "Nils died this morning, on the 15th.", { today: "2026-06-15" }).kept.length, 1);
+});

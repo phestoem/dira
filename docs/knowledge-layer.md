@@ -211,6 +211,8 @@ Expected-claims file (`{ set, claims: [...] }`), one per stated fact:
   amounts within 0.5%; a corrected fact counts only if stored as
   superseded. Equivalences: plans / intends / decided are one family; an
   expected owns is met by a bought (same date if given) and an owns with
-  until by a sold on that date; a stored claim without context is not
-  wrong when the expected one has a context (a different context is).
+  until by a sold on that date, sharing that claim with the bought/sold
+  expectation; a plan's expected date may appear in its stored words; a
+  stored claim without context is not wrong when the expected one has a
+  context (a different context is).
 - Claim domains: people, work, money, projects, assets, time, plans.

@@ -97,3 +97,16 @@ test("ownership follows from a purchase or sale, and plans, intentions and decis
   const wrong = scoreClaims({ expect: { claims: [expect.claims[3]] }, entities, claims: [{ ...claims[3], contextId: "plot" }], selfId: "self" });
   assert.equal(wrong.total.tp, 0, "a different context is wrong");
 });
+
+test("an owns shares the purchase that states it, and a plan's date may sit in its words", () => {
+  const expect = { claims: [
+    { seed: 0, subject: "me", predicate: "bought", object: "Sintra plot", amount: 90000, currency: "EUR" },
+    { seed: 0, subject: "me", predicate: "owns", object: "Sintra plot" },
+    { seed: 1, subject: "me", predicate: "plans", value: "move into the Sintra house", date: "2027" },
+  ] };
+  const claims = [
+    { id: 1, subjectId: "self", predicate: "bought", objectId: "plot", amount: 90000, currency: "EUR" },
+    { id: 2, subjectId: "self", predicate: "plans", value: "move into the Sintra house in 2027" },
+  ];
+  assert.equal(scoreClaims({ expect, entities, claims, selfId: "self" }).total.tp, 3);
+});

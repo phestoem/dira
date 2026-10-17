@@ -119,7 +119,9 @@ function matches(fact, claim, ids) {
     if (!ok) return false;
   }
   if (fact.amount != null && !(sameAmount(fact.amount, claim.amount) && sameCurrency(fact.currency || "", claim.currency))) return false;
-  if (fact.date && !sameDate(fact.date, claim.date)) return false;
+  // A plan's target date may sit in its words ("move in January 2027") rather than in `date`.
+  const dateInValue = FAMILY[fact.predicate] && !claim.date && String(claim.value || "").includes(String(fact.date || "").slice(0, 4));
+  if (fact.date && !sameDate(fact.date, claim.date) && !dateInValue) return false;
   if (fact.until && !sameDate(fact.until, claim.until)) return false;
   // A missing context is a less complete claim, not a wrong one; a different context is wrong.
   if (fact.context && claim.contextId && !ids(fact.context).includes(claim.contextId)) return false;
@@ -140,7 +142,10 @@ export function scoreClaims({ expect, entities, claims, selfId }) {
     const fact = wantedOf(raw);
     const domain = (fact.predicate === "related_to" && DOMAINS.includes(raw.domain) ? raw.domain : domainOf(fact.predicate)) || "people";
     const index = stored.findIndex((claim, at) => !used.has(at) && matches(fact, claim, ids));
-    if (index >= 0) { used.add(index); byDomain[domain].tp += 1; } else { byDomain[domain].fn += 1; missed.push(raw); }
+    // An owns met by the purchase or sale that states it shares that claim instead of using it up.
+    const derived = index < 0 ? stored.findIndex((claim) => ownershipMatch(fact, claim, ids) && claim.status !== "rejected") : -1;
+    if (index >= 0) { used.add(index); byDomain[domain].tp += 1; } else if (derived >= 0) byDomain[domain].tp += 1;
+    else { byDomain[domain].fn += 1; missed.push(raw); }
   }
   const extra = [];
   stored.forEach((claim, at) => {
