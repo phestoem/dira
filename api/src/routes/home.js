@@ -14,6 +14,8 @@ import {
 } from "../services/contextEngine.js";
 import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
+import { ingest } from "../services/knowledge/ingest.js";
+import { claimsLayerOn } from "../services/knowledge/settings.js";
 import { extractAndLinkEntities } from "./entities.js";
 import { describeRelationshipLine, isRelationshipStatement } from "../services/graph/familyStatement.js";
 import { peopleEngine } from "../services/graph/engine.js";
@@ -99,6 +101,7 @@ async function takeInput(request, reply) {
     if (!message && !payload.file) {
       return reply.code(400).send({ error: "Say something, or attach a file." });
     }
+    if (claimsLayerOn() && message && !payload.file) return await takeIntoClaims(request.userId, message, payload);
     const routing = await routeIntent(message, request.userId, payload.file, payload.history, payload.lastAction);
     console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2), routing.followUp?.action || "none", isReadonly() ? "readonly" : "");
     if (message && !payload.file && routing.followUp?.action === "decline") {
@@ -118,6 +121,23 @@ async function takeInput(request, reply) {
   } catch (err) {
     return sendError(reply, err, "DIRA couldn't take that in just now");
   }
+}
+
+// KNOWLEDGE_LAYER=claims: one ingestion path. A statement is saved and extracted; a question is answered; a mixed
+// message is both. Answers still come from the advisor until phase 3 replaces it.
+async function takeIntoClaims(userId, message, payload) {
+  const taken = await ingest(userId, message, { source: "chat", history: payload.history || [] });
+  console.log("[home] claims", taken.kind, taken.stored ? "stored" : "not stored", taken.fallback ? "router fallback" : "", isReadonly() ? "readonly" : "");
+  const routing = { intent: taken.kind, confidence: taken.fallback ? 0.5 : 0.9, interpretation: taken.kind === "statement" ? "Saved" : "Answer", action: "proceed" };
+  if (taken.kind === "statement") {
+    if (!taken.stored) return readonlySkip(routing, "save this");
+    return doneResponse(routing, "saved", { message: "Saved.", eventId: taken.eventId }, null);
+  }
+  const reply = await chat(advisorMessages(payload.history, taken.question || message), userId);
+  const response = answerResponse(routing, reply.reply, false, { contextUsed: reply.contextUsed });
+  // A mixed message was also saved; say so, so callers can tell it from a plain question.
+  if (taken.stored) Object.assign(response.result, { saved: true, eventId: taken.eventId });
+  return response;
 }
 
 async function executeIntent(userId, routing, payload) {

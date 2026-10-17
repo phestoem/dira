@@ -5,8 +5,8 @@ Last updated: 2026-10-17
 ## Current goal
 2026-10-17 (Phesto): option (b), staged: rebuild DIRA's WHOLE knowledge
 layer (not just family) as one ingestion path → one claim store → one
-answer path. Design: docs/knowledge-layer.md. Now: phase 0 done except
-the check below; next phase 1.
+answer path. Design: docs/knowledge-layer.md. Phase 0 done; phase 1 code
+done (tests pass); its routing check waits for OpenAI credits.
 
 ## Rebuild plan (Phesto, 2026-10-17)
 
@@ -128,6 +128,34 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   golden fixture after renaming old prompt examples (logs/golden-phase0.log)
   is invalid and must be re-run once credits are added. The extraction
   measurement finished before this: none of its 72 runs is near zero.
+- Phase 1 (2026-10-17), behind `KNOWLEDGE_LAYER=claims` (off by default):
+  - Claim table (migration 20261017220000_claims, additive), applied to
+    dira_dev only.
+  - api/src/services/knowledge/: `ingest.js` (one path; chat routed,
+    other sources are statements; every statement saved as an Event
+    (eventType "note", fullText) and extracted in a per-user queue so
+    corrections land in order; `setExtractor` is where phase 2 plugs in),
+    `router.js` (question / statement / mixed; when unsure → statement;
+    model failure → punctuation fallback that never drops a statement),
+    `resolver.js` (one resolver for all entity types: exact name/alias,
+    then a unique same-type partial; several partials → new entity with
+    mergeCandidates; longer names win and keep the short one as alias),
+    `store.js` (shape checks, dates with precision, exact repeats skipped,
+    corrections supersede), `materialize.js` (Relationship rows with
+    source "claims" + person birth/death dates, so the UI keeps working),
+    `settings.js` (flag; KNOWLEDGE_ROUTER_MODEL default gpt-4o-mini,
+    KNOWLEDGE_EXTRACT_MODEL default gpt-4.1), `model.js` (JSON-schema call).
+  - /home/input: with the flag on, text goes through ingest(); statements
+    answer "Saved."; questions and mixed messages are answered by the old
+    advisor until phase 3 (mixed responses carry result.saved = true).
+  - The hourly old-graph catch-up is skipped when the flag is on.
+  - Runner: `npm run golden -- --set <set> --claims [--score-only]` waits
+    for every event to be extracted, then scores stored claims per domain
+    and prints the gate; routing drops are counted per seed.
+  - Tests: api/test/knowledge.test.js (fake extractor, temp user).
+  - Exit check still open (needs credits): run the API with
+    KNOWLEDGE_LAYER=claims and seed every set; dropped at routing must be
+    0 everywhere.
 - Phase 0 (2026-10-17):
   - docs/knowledge-layer.md: claim shape, core vocabulary (7 domains),
     derivations, test-set format. Vocabulary in code:
@@ -215,6 +243,21 @@ Where they fail (family/live only; may be inspected):
 Earlier: 2026-10-16/17 at `7d26524` (rules / tools): hold-out 2 6.0 / 2.7,
 hold-out 1 4.0 / 3.7, synthetic 10.0 / 8.0, family 12.0 / 12.0.
 
+## Cost estimate (2026-10-17, before phase 2)
+Assumptions, to be re-measured once the phase 2 prompt exists: extraction
+prompt ~3,500 tokens (instructions + vocabulary + schema) + the text;
+output ~400 tokens for a chat message; OpenAI list prices as last known
+(gpt-4.1 $2.00/M input, $0.50/M cached input, $8.00/M output; gpt-4o-mini
+$0.15/M in, $0.60/M out). Check the pricing page before relying on them.
+- Per save: about $0.010 (≈ $0.005 when the fixed prompt is cached);
+  router about $0.0001.
+- Re-ingesting Phesto's account as it is in dira_dev (50 events, 22k
+  characters, one 13k-character document): about 180k input + 25k output
+  tokens ≈ $0.55. An account 20× larger ≈ $11.
+- Harness: one claims run of the life set (34 seeds) ≈ $0.35; hold-out 4
+  (38 seeds) ≈ $0.40; three runs over all sets ≈ $5 plus answers.
+The model is a setting (KNOWLEDGE_EXTRACT_MODEL).
+
 ## Decisions made and why
 - Engine is picked by hold-out score; stop adding rules for single cases
   (Phesto, 2026-10-16). Hold-outs are score-only: never inspect individual
@@ -256,12 +299,12 @@ re-score (rules 3.3, tools 3.0, hybrid 2.7 /13). Details in git history
 of this file (`7240988`).
 
 ## Next steps
-1. Phase 1: Claim table + migration (dira_dev), one resolver for all
-   entity types, ingest() with question/statement/mixed router behind a
-   flag, Relationship materialised from claims; runner `--claims` mode
-   scoring stored claims with claims.js and reporting routing per seed.
-2. Cost estimate for schema + gpt-4.1 (per save, and re-ingesting
-   Phesto's account) before phase 2.
+1. When credits are back: re-run the family golden fixture (prompt
+   example renames) and the phase 1 routing check on all sets.
+2. Phase 2: the claims extractor (schema, gpt-4.1, whole vocabulary,
+   related_to escape hatch), validation invariants, corrections; score
+   on the life set and hold-outs 1–3 (old expectations need claims
+   versions), then the gate on hold-out 4.
 
 ## Open questions for Phesto
 - OpenAI credits ran out (429 "no credits remaining"). Model-dependent

@@ -16,10 +16,13 @@ import {
   prepareTriples,
 } from "./relationshipExtractor.js";
 import { categoryOf, isSensitive, normalizeType } from "./relationshipTypes.js";
+import { claimsLayerOn } from "../knowledge/settings.js";
 
 export { graphAutoExtractEnabled, setGraphAutoExtract };
 
 export async function catchUpGraphExtractions() {
+  // With the claim store on, ingest() extracts every saved event itself; the old graph must not re-read them.
+  if (claimsLayerOn()) return;
   const users = await prisma.user.findMany({ select: { id: true, settings: true } });
   for (const user of users) {
     if (!graphAutoExtractEnabled(user.settings)) continue;

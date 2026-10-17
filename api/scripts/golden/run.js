@@ -16,13 +16,14 @@ import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { precisionRecall, routeOf, scoreExtraction } from "./extraction.js";
+import { gate, scoreClaims } from "./claims.js";
 import { CASES, mentionsAmount, mentionsDate, MOTHER_SENTENCE, motherProblems, offeredLines, SEED_MESSAGES, SELF_NAME } from "./cases.js";
 
 const DEV = { port: "4801", db: "dira_dev" };
 const PROD = { port: "4800", db: "dira" };
 const BUSY = /^DIRA is busy right now/i;
-const TABLES = ["user", "entity", "event", "vision", "diaryEntry", "relationship", "lifeEvent", "inputQueue"];
-const DELETE_ORDER = ["relationship", "lifeEvent", "inputQueue", "diaryEntry", "event", "vision", "entity"];
+const TABLES = ["user", "entity", "event", "vision", "diaryEntry", "relationship", "lifeEvent", "inputQueue", "claim"];
+const DELETE_ORDER = ["claim", "relationship", "lifeEvent", "inputQueue", "diaryEntry", "event", "vision", "entity"];
 // Every question turn's server measurements, summarised once per run.
 const answerMetrics = [];
 // Other families as JSON: --set synthetic, or --set holdout (test/holdout/, run with --score-only and never tuned for).
@@ -59,6 +60,7 @@ function parseArgs(argv) {
     else if (arg === "--set") out.set = argv[++index];
     else if (arg === "--score-only") out.scoreOnly = true;
     else if (arg === "--extraction") out.extraction = true;
+    else if (arg === "--claims") out.claims = true;
     else if (arg === "--trace") out.trace = argv[++index];
     else if (arg === "--dump") out.dump = argv[++index];
     else throw new Error(`unknown option ${arg}`);
@@ -89,6 +91,7 @@ function guard() {
   if (bridge.length) throw new Error(`refusing to run: Altimetrix bridge is configured (${bridge.join(", ")})`);
   if (args.user && !args.readonly) throw new Error("live mode needs --readonly");
   if (args.set && args.user) throw new Error("--set seeds its own fixture user; it has no live mode");
+  if (args.claims && !args.set) throw new Error("--claims needs --set");
   if (args.extraction && (!args.set || !args.trace)) throw new Error("--extraction needs --set and --trace (the API's DIRA_EXTRACT_TRACE file)");
   if (!process.env.JWT_SECRET) throw new Error("JWT_SECRET is not set");
 }
@@ -168,6 +171,10 @@ async function fixture() {
       routes.push(routeOf(steps));
       if (!quiet) console.log(`- ${message.slice(0, 70)}${message.length > 70 ? "…" : ""}\n    ${steps.join(" → ")}`);
     }
+    if (args.claims) {
+      await extracted(id);
+      return claimsReport(id, set, routes, quiet);
+    }
     await settle(id);
     if (args.extraction) return extractionReport(id, set, routes, quiet);
     const code = await ask(id, false, set.cases);
@@ -209,6 +216,49 @@ async function extractionReport(userId, set, routes, quiet) {
   const { precision, recall } = precisionRecall(totals);
   console.log(`${totals.tp}/${score.facts} facts stored (recall ${recall?.toFixed(2)}, precision ${precision?.toFixed(2)})`);
   console.log(`extraction: ${JSON.stringify({ set: args.set, facts: score.facts, totals, byType: score.byType, people: score.people, routing: score.routing, lost: score.lost, validationDrops: score.validationDrops, traced: traces.length })}`);
+  return 0;
+}
+
+// Claim store: every saved event extracted (graphExtractedAt set), or 20 minutes.
+async function extracted(userId, maxMs = 20 * 60 * 1000) {
+  const started = Date.now();
+  while (Date.now() - started < maxMs) {
+    const pending = await prisma.event.count({ where: { userId, graphExtractedAt: null } });
+    if (!pending) return;
+    await sleep(3000);
+  }
+  console.log("  (extraction still running after 20 minutes; scoring what is stored)");
+}
+
+// --claims: score the stored claims per domain (docs/knowledge-layer.md). Hold-outs (--score-only) print totals
+// and the gate only; other sets list every miss and extra.
+async function claimsReport(userId, set, routes, quiet) {
+  const expect = JSON.parse(readFileSync(new URL(`../../test/extraction/${args.set}.expect.json`, import.meta.url), "utf8"));
+  const self = await prisma.entity.findFirst({ where: { userId, isSelf: true, status: { not: "archived" } } });
+  const [entities, claims] = await Promise.all([
+    prisma.entity.findMany({ where: { userId, status: { not: "archived" }, mergedIntoId: null } }),
+    prisma.claim.findMany({ where: { userId }, orderBy: { createdAt: "asc" } }),
+  ]);
+  const score = scoreClaims({ expect, entities, claims, selfId: self?.id });
+  const routing = {};
+  routes.forEach((route) => { routing[route] = (routing[route] || 0) + 1; });
+  const dropped = routes.filter((route) => route === "question" || route === "dropped").length;
+  if (args.dump) {
+    mkdirSync(args.dump, { recursive: true });
+    writeFileSync(`${args.dump}/${args.set}-claims-${userId}.json`, JSON.stringify({ set: args.set, routes, self, entities, claims }));
+  }
+  if (!quiet) {
+    const name = new Map(entities.map((entity) => [entity.id, entity.name]));
+    console.log("\n== claims ==");
+    routes.forEach((route, index) => { if (route === "question" || route === "dropped") console.log(`DROPPED AT ROUTING  seed ${index}`); });
+    for (const fact of score.missed) console.log(`MISS  seed ${fact.seed}  ${JSON.stringify(fact)}`);
+    for (const claim of score.extra) console.log(`EXTRA  ${name.get(claim.subjectId) || claim.subjectId} ${claim.predicate} ${claim.objectId ? name.get(claim.objectId) : JSON.stringify(claim.value)}${claim.amount != null ? ` ${claim.amount} ${claim.currency || ""}` : ""}${claim.date ? ` @${claim.date}` : ""}`);
+  }
+  const pct = (value) => (value == null ? "–" : `${Math.round(value * 100)}%`);
+  console.log(`${score.total.tp}/${score.claims} claims stored (recall ${pct(score.total.recall)}, precision ${pct(score.total.precision)}); dropped at routing ${dropped}`);
+  console.log(`domains: ${Object.entries(score.byDomain).filter(([, value]) => value.tp + value.fn + value.fp).map(([domain, value]) => `${domain} ${pct(value.recall)} (${value.tp}/${value.tp + value.fn}, fp ${value.fp})`).join(" | ")}`);
+  const verdict = gate(score, dropped);
+  console.log(`claims: ${JSON.stringify({ set: args.set, claims: score.claims, total: score.total, byDomain: score.byDomain, routing, dropped, gate: verdict })}`);
   return 0;
 }
 
@@ -357,7 +407,8 @@ async function seed(message, cards = []) {
     }
     break;
   }
-  if (!["saved", "journal_saved"].includes(response.result?.type)) steps.push("NOT SAVED");
+  // A mixed message (claim store) is answered and saved: result.saved says so.
+  if (!["saved", "journal_saved"].includes(response.result?.type) && response.result?.saved !== true) steps.push("NOT SAVED");
   return steps;
 }
 
