@@ -8,7 +8,7 @@ import { extractModel } from "./settings.js";
 import { validateClaims } from "./validate.js";
 import { ENTITY_TYPES, PREDICATES } from "./vocabulary.js";
 
-export const EXTRACTOR_VERSION = "claims-v9";
+export const EXTRACTOR_VERSION = "claims-v10";
 
 // What each predicate means and its direction, for the prompt. Kept beside the vocabulary's domain table.
 const MEANING = {
@@ -85,6 +85,15 @@ export function withPlaces(claims) {
     }
   }
   return out;
+}
+
+// "Bought the lake plot" comes back as { subject: lake plot, predicate: bought, object: null } now and then: a
+// transaction or holding with a thing as subject and no object is the narrator's.
+const NARRATOR_HOLDS = new Set(["bought", "sold", "owns", "rents"]);
+export function repairShape(claim) {
+  const thing = claim.subject && claim.subject !== "me" && claim.subject.type !== "person";
+  if (NARRATOR_HOLDS.has(claim.predicate) && thing && !claim.object) return { ...claim, subject: "me", object: claim.subject };
+  return claim;
 }
 
 export function fromAlias(claim) {
@@ -222,7 +231,7 @@ export async function extractClaims(text, { userId, asOf = null, source = "chat"
   ].join("\n\n");
   const model = extractModel();
   const { json, usage } = await jsonCall({ model, name: "claims", schema: CLAIMS_SCHEMA, system: CLAIMS_PROMPT, user, timeoutMs: 60000 });
-  const raw = withPlaces((json.claims || []).map(fromAlias).map((claim) => ({ ...claim, subject: claim.subject?.type === "self" ? "me" : claim.subject, object: claim.object?.type === "self" ? "me" : claim.object, context: claim.context?.type === "self" ? "me" : claim.context })));
+  const raw = withPlaces((json.claims || []).map(fromAlias).map(repairShape).map((claim) => ({ ...claim, subject: claim.subject?.type === "self" ? "me" : claim.subject, object: claim.object?.type === "self" ? "me" : claim.object, context: claim.context?.type === "self" ? "me" : claim.context })));
   const { kept, dropped } = validateClaims(raw, text, { known: entities.map((entity) => [entity.name, ...(entity.aliases || [])]).flat(), selfName: self.name, today });
   return { claims: kept, dropped, raw, usage, extractor: EXTRACTOR_VERSION, model };
 }

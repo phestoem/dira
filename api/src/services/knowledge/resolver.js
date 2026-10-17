@@ -37,10 +37,26 @@ export function fit(mention, entity) {
   return partial ? "partial" : null;
 }
 
+// "<place> <thing>" for a thing of the same type, with the same last word, located in that place: "Oak Street flat"
+// is the "Harbour View flat" located in Oak Street.
+export function placedFit(mention, entity, places) {
+  const want = words(mention.name);
+  const have = words(entity.name);
+  if (want.length < 2 || !have.length || entity.entityType === "person" || (typeOf(mention.type) && mention.type !== entity.entityType)) return false;
+  if (want.at(-1) !== have.at(-1)) return false;
+  const rest = want.slice(0, -1).join(" ");
+  return places.some((place) => words(place.name).join(" ") === rest || [place.name, ...(place.aliases || [])].some((name) => words(name).join(" ") === rest));
+}
+
 // A resolver bound to one user and one write: it loads the user's entities once and keeps new ones in view.
 export async function createResolver(userId, client = prisma) {
   const self = await getOrCreateSelf(userId);
   const entities = await client.entity.findMany({ where: { userId, status: { not: "archived" }, mergedIntoId: null, isSelf: false } });
+  // Where each thing is, for "<place> <thing>" mentions ("the Oak Street flat" for a flat stored under its building).
+  const placeOf = new Map();
+  const located = await client.claim.findMany({ where: { userId, predicate: "located_in", status: { in: ["stated", "confirmed"] } }, select: { subjectId: true, objectId: true } });
+  const byId = new Map(entities.map((entity) => [entity.id, entity]));
+  for (const claim of located) if (byId.has(claim.objectId)) placeOf.set(claim.subjectId, [...(placeOf.get(claim.subjectId) || []), byId.get(claim.objectId)]);
   const selfWords = new Set(names(self).map((list) => list.join(" ")));
 
   async function create(mention, mergeCandidates = []) {
@@ -83,6 +99,10 @@ export async function createResolver(userId, client = prisma) {
     if (exact.length) return (exact.find((entity) => entity.entityType === said.type) || exact[0]).id;
     const partial = entities.filter((entity) => fit(said, entity) === "partial");
     if (partial.length === 1) return (await learn(partial[0], said)).id;
+    if (!partial.length) {
+      const placed = entities.filter((entity) => placedFit(said, entity, placeOf.get(entity.id) || []));
+      if (placed.length === 1) return (await learn(placed[0], said)).id;
+    }
     return (await create(said, partial.map((entity) => entity.id))).id;
   }
 

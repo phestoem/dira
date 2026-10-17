@@ -198,3 +198,15 @@ test("a correction replaces the one payment it is about and keeps its date", asy
     await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
   }
 });
+
+test("a thing bought with no buyer is the narrator's; '<place> flat' finds the flat located there", async () => {
+  const { repairShape } = await import("../src/services/knowledge/extractor.js");
+  const { placedFit } = await import("../src/services/knowledge/resolver.js");
+  const fixed = repairShape({ subject: { name: "lake plot", type: "property" }, predicate: "bought", object: null, amount: 10 });
+  assert.equal(fixed.subject, "me");
+  assert.equal(fixed.object.name, "lake plot");
+  const flat = { entityType: "property", name: "Harbour View flat", aliases: [] };
+  assert.equal(placedFit({ name: "Oak Street flat", type: "property" }, flat, [{ name: "Oak Street" }]), true);
+  assert.equal(placedFit({ name: "Oak Street house", type: "property" }, flat, [{ name: "Oak Street" }]), false);
+  assert.equal(placedFit({ name: "Elm Road flat", type: "property" }, flat, [{ name: "Oak Street" }]), false);
+});
