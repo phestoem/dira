@@ -400,6 +400,17 @@ of this file (`7240988`).
   personal words come from their expected entity names (German nouns are
   capitalised, so the capital-letter rule flagged ordinary words); a hit
   says which unsealed set it comes from, hold-out 5 words stay masked.
+- After the gate: tuning on the inspectable sets (life, hold-out 4, dev2,
+  dev3); hold-out 5 untouched. Recall per version (one run unless noted):
+  | version | life | hold-out 4 | dev2 (India) | dev3 (Germany) | main changes |
+  |---|---|---|---|---|---|
+  | v6 | 85 | 88 / 85 | 55 (blind) | 72 (blind) | hold-out 4 diagnosis fixes |
+  | v7 | 88 | 84 | 55 | 76 | lakh/crore + Indian grouping in the amount check (27 dev2 claims had been dropped), single-valued supersession, English names, nested places |
+  | v9 | 90 | 86 | 68 | 76 | corrections replace one claim and inherit fields; building project named like the building; payees; seasons = year; parents for every child |
+  | v10 | 94 | 86 | 70 / 73 | 82 / 77 | narrator as default holder ("bought the plot"), "<place> flat" resolves to the flat located there |
+  Fresh-author sets still sit at 72–80%. Next: try newer models (the key
+  has gpt-5.4-mini, gpt-5.4, gpt-5.5; model is a setting) before more
+  prompt rules. Running: tmux `phase2`, logs/phase2/m-<model>/.
 - DECIDED 2026-10-17 (Phesto): option 1. Hold-out 4 is now a diagnostic
   set (may be read); hold-out 5 + 2 dev sets by fresh subagents after the
   diagnosis and any design-doc clarification.
