@@ -25,6 +25,8 @@ import { bridgeConfig } from "./services/altimetrixBridge.js";
 import { graphAutoExtractEnabled } from "./services/graph/autoExtract.js";
 import { runScheduledDigests } from "./services/digestService.js";
 import { catchUpGraphExtractions } from "./services/graph/rebuild.js";
+import { catchUpExtractions } from "./services/knowledge/ingest.js";
+import { claimsLayerOn } from "./services/knowledge/settings.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
 
@@ -76,6 +78,7 @@ if (process.env.DIRA_DISABLE_CRON === "true") {
     catchUpGraphExtractions().catch((err) => {
       console.error("[graph-rebuild] catch-up failed:", err.message);
     });
+    if (claimsLayerOn()) catchUpExtractions().catch((err) => console.error("[knowledge] catch-up failed:", err.message));
   }, { timezone: "Europe/Helsinki" });
 }
 console.log(bridgeConfig() ? "[bridge] configured" : "[bridge] skipping: not configured");
@@ -102,6 +105,8 @@ app.setErrorHandler((error, request, reply) => {
 try {
   await app.listen({ port, host: "0.0.0.0" });
   app.log.info(`DIRA API listening on http://0.0.0.0:${port}`);
+  // Statements saved while the model was unavailable get their claims now.
+  if (claimsLayerOn()) catchUpExtractions().catch((err) => console.error("[knowledge] catch-up failed:", err.message));
 } catch (err) {
   app.log.error(err);
   process.exit(1);

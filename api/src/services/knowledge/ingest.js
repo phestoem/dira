@@ -61,3 +61,16 @@ export async function extractEvent(userId, event, { source, asOf } = {}) {
   await prisma.event.update({ where: { id: event.id }, data: { graphExtractedAt: new Date() } });
   return stored;
 }
+
+// Saved statements whose extraction failed (rate limit, timeout, model error) are still in events with
+// graphExtractedAt null; this queues them again, oldest first. Runs at start and hourly while the claim store is on.
+export async function catchUpExtractions({ userId = null, limit = 50 } = {}) {
+  const pending = await prisma.event.findMany({
+    where: { eventType: "note", graphExtractedAt: null, ...(userId ? { userId } : {}) },
+    orderBy: { createdAt: "asc" },
+    take: limit,
+  });
+  for (const event of pending) enqueue(event.userId, () => extractEvent(event.userId, event, { source: event.source || "chat" }));
+  await Promise.all([...new Set(pending.map((event) => event.userId))].map((id) => settled(id)));
+  return pending.length;
+}

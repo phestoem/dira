@@ -434,10 +434,10 @@ of this file (`7240988`).
   invalid (some events never extracted: 73%, plans 23%); remaining runs
   stopped, leftover fixture user removed. Re-run when credits are back:
   `phase2.sh v11 2 dev2 dev3` then `phase2.sh v11b 1 life holdout4`.
-- Gap found: a failed extraction call (429, timeout) leaves the event
-  saved but never extracted. The claim store needs a retry / catch-up
-  for events with graphExtractedAt null (old catch-up is off under the
-  flag). To do before phase 4.
+- Gap found and closed: a failed extraction call (429, timeout) left the
+  event saved but never extracted. `catchUpExtractions()` (ingest.js)
+  re-queues claim-store events with graphExtractedAt null; runs at API
+  start and hourly when KNOWLEDGE_LAYER=claims. Test in knowledge.test.js.
 - DECIDED 2026-10-17 (Phesto): option 1. Hold-out 4 is now a diagnostic
   set (may be read); hold-out 5 + 2 dev sets by fresh subagents after the
   diagnosis and any design-doc clarification.

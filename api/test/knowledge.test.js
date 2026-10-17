@@ -227,3 +227,26 @@ test("a claim that only gives an end closes the open claim", async () => {
     await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
   }
 });
+
+test("a statement whose extraction failed is extracted by the catch-up", async () => {
+  const { catchUpExtractions } = await import("../src/services/knowledge/ingest.js");
+  const stamp = Date.now();
+  const user = await prisma.user.create({ data: { email: `retry-${stamp}@example.com`, handle: `retry${stamp}`, name: "Ada Lindqvist" } });
+  let fail = true;
+  setExtractor(async () => {
+    if (fail) throw new Error("OpenAI claims status 429");
+    return { claims: [{ subject: { name: "Nils Berg", type: "person" }, predicate: "friend_of", object: "me", evidence: "my friend Nils Berg" }], extractor: "test", model: "none" };
+  });
+  try {
+    const taken = await ingest(user.id, "My friend Nils Berg moved to Oslo.", { source: "journal" });
+    await settled(user.id);
+    assert.equal((await prisma.event.findUnique({ where: { id: taken.eventId } })).graphExtractedAt, null, "the failed event stays pending");
+    fail = false;
+    assert.ok(await catchUpExtractions({ userId: user.id }) >= 1);
+    assert.ok((await prisma.event.findUnique({ where: { id: taken.eventId } })).graphExtractedAt);
+    assert.equal(await prisma.claim.count({ where: { userId: user.id } }), 1);
+  } finally {
+    setExtractor(null);
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+  }
+});
