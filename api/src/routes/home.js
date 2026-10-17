@@ -683,7 +683,7 @@ async function runRelationshipChange(userId, routing, payload) {
 
 async function runGraphQuery(userId, routing, payload) {
   const text = payload.message;
-  if (peopleEngine() === "tools" || isPeopleQuestion(text)) {
+  if (peopleEngine() !== "rules" || isPeopleQuestion(text)) {
     const reply = await chat(advisorMessages(payload.history, text), userId);
     return answerResponse(routing, reply.reply, false);
   }

@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { schemaFactsToGraph, validateSchemaFacts } from "../src/services/graph/peopleSchema.js";
-import { groundToolReply } from "../src/services/graph/peopleTools.js";
+import { runHybridTool } from "../src/services/graph/peopleHybrid.js";
+import { allowedFrom, groundToolReply } from "../src/services/graph/peopleTools.js";
 import { datesIn } from "../src/services/graph/dates.js";
 
 // PEOPLE_ENGINE=tools: invariants only, judged against the source text. Invented people throughout.
@@ -83,4 +84,86 @@ test("tool answers may state only names and dates the tools returned, in any lan
   assert.equal(invented.reply, "Your father is Héctor Andrade.");
   assert.deepEqual(invented.removed.sort(), ["1952", "Ramiro Andrade"]);
   assert.deepEqual(datesIn("born 3rd of Feb 1993, wed 2006-08-05, alizaliwa tarehe 3 Februari 1993").dates.sort(), ["1993-02-03", "2006-08-05"]);
+});
+
+test("the post-check compares meaning: role words, labels and aliases are not inventions", () => {
+  const results = [{ parent: [{ name: "Héctor Andrade", relation: "parent", role: "father", died: "2011-10-09" }], former_spouse: [{ name: "Óscar Ruiz", relation: "former_spouse", role: "husband", ended: "2005" }] }];
+  const snapshot = { entities: [{ name: "Héctor Andrade", aliases: ["Tito"] }] };
+  const allowed = allowedFrom(results, "show my family tree", snapshot);
+  const tree = groundToolReply("Here's your family tree:\n\n- **Parents:**\n  - Héctor Andrade (Father, died: 2011-10-09)\n- **Former Spouse:**\n  - Óscar Ruiz (Husband, ended: 2005)\n\nTito is what you called him.", allowed);
+  assert.deepEqual(tree.removed, []);
+  assert.match(tree.reply, /- \*\*Parents:\*\*\n {2}- Héctor Andrade/);
+  const precise = groundToolReply("You divorced Óscar Ruiz in 2005.\n- You divorced on 1 January 2005.\n- Ramiro Andrade is your uncle.", allowed);
+  assert.equal(precise.reply, "You divorced Óscar Ruiz in 2005.");
+  assert.deepEqual(precise.removed.sort(), ["2005-01-01", "Ramiro Andrade"]);
+  assert.deepEqual(groundToolReply("He died on 09/10/2011, in October 2011.", allowed).removed, []);
+  assert.deepEqual(groundToolReply("He died in March 2011.", allowed).removed, ["2011-03"]);
+});
+
+test("dates are read in any common format; a bare year stays a year", () => {
+  assert.deepEqual(datesIn("2016년 3월 2일").dates, ["2016-03-02"]);
+  assert.deepEqual(datesIn("21 lipca 1990 and 3.2.1993").dates.sort(), ["1990-07-21", "1993-02-03"]);
+  assert.deepEqual(datesIn("on 03/04/2019").either, [["2019-04-03", "2019-03-04"]]);
+  assert.deepEqual(datesIn("in March 2019").months, ["2019-03"]);
+  const year = datesIn("divorced in 2016");
+  assert.deepEqual([year.dates, year.months, year.years], [[], [], ["2016"]]);
+});
+
+function snapshotOf(people, edges) {
+  const self = { id: "self", name: SELF, isSelf: true, entityType: "person", aliases: [] };
+  const entities = [self, ...people.map((person) => ({ entityType: "person", aliases: [], ...person }))];
+  return { self, entities, edges: edges.map((edge) => ({ status: "confirmed", attributes: {}, ...edge })), byId: new Map(entities.map((entity) => [entity.id, entity])) };
+}
+
+test("hybrid tools answer list, count, date, tree and who-is questions in code", async () => {
+  const snapshot = snapshotOf(
+    [
+      { id: "h", name: "Hugo Andrade" }, { id: "r", name: "Rosa Andrade" }, { id: "p", name: "Pablo Ruiz" }, { id: "o", name: "Óscar Ruiz" },
+      { id: "a", name: "Alba", birthDate: new Date("2010-05-04") }, { id: "b", name: "Bruno", birthDate: new Date("2014-09-30") }, { id: "n", name: "Nico Ferrer" },
+    ],
+    [
+      { fromId: "self", toId: "h", type: "sibling_of", category: "family", attributes: { kind: "half-brother" } },
+      { fromId: "self", toId: "r", type: "sibling_of", category: "family", attributes: { kind: "sister" } },
+      { fromId: "self", toId: "p", type: "spouse_of", category: "family", attributes: { kind: "husband" }, validFrom: new Date("2009-02-14") },
+      { fromId: "self", toId: "o", type: "spouse_of", category: "family", attributes: { kind: "husband", ended: true, endPrecision: "year" }, validFrom: new Date("2001-06-02"), validTo: new Date("2005-01-01") },
+      { fromId: "self", toId: "a", type: "parent_of", category: "family", attributes: { kind: "daughter" } },
+      { fromId: "self", toId: "b", type: "parent_of", category: "family", attributes: { kind: "son" } },
+      { fromId: "self", toId: "n", type: "knows", category: "social", attributes: { kind: "neighbour" } },
+    ],
+  );
+  const run = (name, args) => runHybridTool("user", snapshot, name, args);
+  assert.equal((await run("list_people", { relation: "sibling", pick: "all" })).reply, "Your siblings: Hugo Andrade (half-brother) and Rosa Andrade (sister).");
+  assert.equal((await run("count_people", { relation: "child" })).reply, "You have 2 recorded children: Alba (daughter) and Bruno (son).");
+  assert.equal((await run("list_people", { relation: "child", pick: "youngest" })).reply, "Bruno (son) is the youngest, born 30 September 2014.");
+  assert.equal((await run("person_dates", { person: "narrator", relation: "none", pick: "all", event: "marriage" })).reply, "You married Pablo Ruiz on 14 February 2009. You married Óscar Ruiz on 2 June 2001.");
+  assert.equal((await run("person_dates", { person: "Óscar", relation: "none", pick: "all", event: "divorce" })).reply, "Your marriage to Óscar Ruiz ended in 2005.");
+  assert.equal((await run("who_is", { name: "Nico Ferrer" })).reply, "Nico Ferrer is your neighbour.");
+  const tree = (await run("family_tree", {})).reply;
+  assert.match(tree, /- Children: Alba \(daughter\), Bruno \(son\)/);
+  assert.match(tree, /- Former spouse: Óscar Ruiz \(husband\)/);
+  assert.doesNotMatch(tree, /Nico/);
+});
+
+test("hybrid derives in-laws from the graph and reads a role word passed as a name", async () => {
+  const snapshot = snapshotOf(
+    [{ id: "r", name: "Rosa Andrade", birthDate: new Date("1988-03-12") }, { id: "t", name: "Tomás Vidal" }, { id: "p", name: "Pablo Ruiz" }, { id: "e", name: "Elena Ruiz" }, { id: "g", name: "Gloria Pinto", birthDate: new Date("1931-07-01") }],
+    [
+      { fromId: "self", toId: "r", type: "sibling_of", category: "family", attributes: { kind: "half-sister" } },
+      { fromId: "r", toId: "t", type: "spouse_of", category: "family" },
+      { fromId: "self", toId: "p", type: "spouse_of", category: "family", attributes: { kind: "husband" } },
+      { fromId: "e", toId: "p", type: "parent_of", category: "family" },
+      { fromId: "g", toId: "self", type: "grandparent_of", category: "family", attributes: { kind: "grandmother" } },
+    ],
+  );
+  const run = (name, args) => runHybridTool("user", snapshot, name, args);
+  assert.equal((await run("list_people", { relation: "sibling_in_law", pick: "all" })).reply, "Your siblings-in-law: Tomás Vidal (sibling-in-law).");
+  assert.equal((await run("list_people", { relation: "parent_in_law", pick: "all" })).reply, "Your parents-in-law: Elena Ruiz (parent-in-law).");
+  assert.equal((await run("person_dates", { person: "half-sister", relation: "none", pick: "all", event: "birth" })).reply, "Rosa Andrade was born on 12 March 1988.");
+  assert.equal((await run("person_dates", { person: "grandparent", relation: "none", pick: "all", event: "birth" })).reply, "Gloria Pinto was born on 1 July 1931.");
+  assert.equal((await run("who_is", { name: "uncle" })).reply, "No uncle is recorded yet.");
+});
+
+test("an edge date from a bare year is told as a year", async () => {
+  const snapshot = snapshotOf([{ id: "p", name: "Pablo Ruiz" }], [{ fromId: "self", toId: "p", type: "spouse_of", category: "family", validFrom: new Date("2009-01-01") }]);
+  assert.equal((await runHybridTool("user", snapshot, "person_dates", { person: "narrator", relation: "none", pick: "all", event: "marriage" })).reply, "You married Pablo Ruiz in 2009.");
 });

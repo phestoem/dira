@@ -4,6 +4,7 @@ import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 import { isNoiseReply } from "./intentRouter.js";
 import { peopleEngine } from "./graph/engine.js";
+import { answerWithHybrid } from "./graph/peopleHybrid.js";
 import { allowedFrom, answerWithTools, groundToolReply } from "./graph/peopleTools.js";
 import { notePath } from "../metrics.js";
 import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, usesRecordedAnswer } from "./graph/peopleGrounding.js";
@@ -118,19 +119,21 @@ export async function chat(messages, userId) {
   const userTurns = history.filter((message) => message.role === "user");
   const latest = userTurns.at(-1)?.content || "";
   const priorAnswer = [...history].reverse().find((message) => message.role === "assistant" && !isNoiseReply(message.content))?.content || "";
-  // Tools engine: the model reads the conversation and picks tools itself; no question wording is parsed here.
-  if (peopleEngine() === "tools") {
-    const answered = await answerWithTools(userId, history).catch((err) => {
-      console.error("[advisor] tools answer failed:", err.message);
+  // Tools and hybrid engines: the model reads the conversation and picks tools itself; no question wording is parsed here.
+  const engine = peopleEngine();
+  if (engine !== "rules") {
+    const answer = engine === "hybrid" ? answerWithHybrid : answerWithTools;
+    const answered = await answer(userId, history).catch((err) => {
+      console.error(`[advisor] ${engine} answer failed:`, err.message);
       return null;
     });
     if (answered) {
-      notePath("tools", { rounds: answered.rounds, tools: answered.toolsUsed });
+      notePath(engine === "hybrid" ? `hybrid-${answered.path}` : "tools", { rounds: answered.rounds, tools: answered.toolsUsed });
       return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: 0, tools: answered.toolsUsed } };
     }
   }
   const question = contextualQuestion(latest, userTurns.at(-2)?.content || "", priorAnswer);
-  if (peopleEngine() !== "tools" && isPeopleQuestion(question)) {
+  if (engine === "rules" && isPeopleQuestion(question)) {
     const answered = await answerPeople(userId, question);
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
   }
@@ -141,7 +144,7 @@ export async function chat(messages, userId) {
   context.holdingLines = HOLDINGS_QUESTION.test(latest) ? await holdingLines(userId) : [];
   const system = buildSystemPrompt(context);
   let reply = await completeChat(history, system);
-  if (peopleEngine() === "tools") {
+  if (engine !== "rules") {
     // The agent needed no tool, so the old advisor answered; its names and dates are still checked, against
     // everything it was shown.
     const checked = groundToolReply(reply, allowedFrom([context, latest], latest));

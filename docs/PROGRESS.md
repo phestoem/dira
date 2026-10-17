@@ -44,9 +44,12 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
-Nothing running. The dev API is up on 4801 (started by hand with
-`node src/index.js` from api/, rules engine). Check with
-`curl -s http://127.0.0.1:4801/health`.
+- Step a, post-check audit data: tmux session `audit`, 3 synthetic runs
+  with the tools engine. Dev API restarted by `api/scripts/devapi.sh tools
+  DIRA_POSTCHECK_AUDIT=...` (log logs/api-tools.log). Removed claims with
+  context go to logs/postcheck-audit.jsonl; run output to
+  logs/audit-tools-synthetic-{1,2,3}.txt. Finished when logs/audit.done
+  exists. Restart the API without the audit var before any hold-out run.
 
 ## Latest scores
 Engine comparison, 2026-10-16/17 at `7d26524`, fixture mode, 3 runs per
@@ -87,17 +90,38 @@ Long jobs run in tmux with logs in logs/.
 - [x] d. (2026-10-17, Korean family, api/test/holdout/holdout3.json, 13
   questions; `--set holdout3`) Write hold-out 3 first (a different culture again, before any
   engine changes), score-only.
-- [ ] a. Post-check audit (synthetic only, never the hold-outs): sample 30
+- [x] a. Post-check audit (synthetic only, never the hold-outs): sample 30
   removed claims, classify each as a true invention or a wrongly removed
   fact, report the ratio.
-- [ ] b. Post-check compares meaning, not text: dates normalised (any
+  Result (2026-10-17, tools engine at `d55e031`, 3 synthetic runs = 45
+  answers): 3 post-checks removed anything, 57 claims, all from "show my
+  family tree". Random sample of 30 (seed 20261017): 0 true inventions, 30
+  wrongly removed (0:30). Every one was a Markdown heading or role label
+  whose meaning was in the tool output ("Parents", "Stepfather",
+  "Half-sister", "Former Spouse"); each removal wiped the whole tree,
+  because the check split on .!? only, so a whole list was one sentence.
+  Audit data: logs/postcheck-audit.jsonl (DIRA_POSTCHECK_AUDIT).
+- [x] b. Post-check compares meaning, not text: dates normalised (any
   format → ISO; year-only stays year-only), people compared by resolved
   entity id or alias, not exact string.
-- [ ] c. Hybrid engine (`PEOPLE_ENGINE=hybrid`): the model only picks a tool
+  Done: datesIn reads ISO, d/m/y (either order kept ambiguous), d.m.y,
+  Korean/Japanese, month names in 18 languages from Intl, "March 2019" as
+  a month; a claim must match at the stored precision. Names resolve
+  through snapshot aliases; role words, month words and the results' own
+  labels are vocabulary; checked per line so lists survive. Replaying the
+  3 audited trees: 57 removals → 0. Edge dates stored from a bare year
+  (1 January, no precision) are shown as the year.
+- [x] c. Hybrid engine (`PEOPLE_ENGINE=hybrid`): the model only picks a tool
   and its arguments. List, count, date and family-tree tools return the
   final answer formatted by code from stored facts; the model doesn't
   rewrite it. Open questions ("how is X connected to Y", "tell me about my
   family") get a model-written answer from tool results, post-checked.
+  Done: api/src/services/graph/peopleHybrid.js. Tools: list_people,
+  count_people, person_dates, family_tree, who_is, owned_assets (code
+  formatted) and open_question (→ tools agent + post-check). who_is with no
+  direct link, and owned_assets with no ownership edges, also go open.
+  Uses the rules extractor. In-laws derived from the graph; a role word
+  passed as a name reads stored roles. Replies are English (code wording).
 - [ ] e. Re-score rules, tools (fixed post-check) and hybrid on family
   fixture, synthetic, hold-outs 1–3, plus live readonly on dira_dev after
   the rebuild. 3 runs each. Pick by hold-out 3.

@@ -1,3 +1,4 @@
+import { appendFileSync } from "node:fs";
 import OpenAI from "openai";
 import { prisma } from "../../prisma.js";
 import { normalizeName } from "./entityResolver.js";
@@ -33,7 +34,7 @@ Reply briefly, in the language of the question.`;
 }
 
 // Everything the tools read, loaded once per question.
-async function loadSnapshot(userId) {
+export async function loadSnapshot(userId) {
   const self = await prisma.entity.findFirst({ where: { userId, isSelf: true, status: { not: "archived" } } });
   const [entities, edges] = await Promise.all([
     prisma.entity.findMany({ where: { userId, status: { not: "archived" }, mergedIntoId: null }, take: 1000 }),
@@ -43,7 +44,15 @@ async function loadSnapshot(userId) {
   return { self, entities, edges, byId };
 }
 
-const day = (value) => (value instanceof Date && !Number.isNaN(value.getTime()) ? value.toISOString().slice(0, 10) : value ? String(value).slice(0, 10) : null);
+// Edge dates carry no precision unless stated (endPrecision "year"). A bare year was stored as 1 January, so a
+// 1 January with no stated precision is shown as its year: never more precise than what was said.
+export function edgeDay(value, precision = null) {
+  const iso = day(value);
+  if (!iso) return null;
+  return precision === "year" || (!precision && iso.endsWith("-01-01")) ? iso.slice(0, 4) : iso;
+}
+
+export const day = (value) => (value instanceof Date && !Number.isNaN(value.getTime()) ? value.toISOString().slice(0, 10) : value ? String(value).slice(0, 10) : null);
 
 // The narrator's role word for a person, from the edge that links them.
 function relationToNarrator(edge, selfId, other) {
@@ -63,7 +72,7 @@ function personSummary(snapshot, entity) {
   return { name: entity.name, born: day(entity.birthDate), died: day(entity.deathDate) };
 }
 
-function links(snapshot) {
+export function links(snapshot) {
   const selfId = snapshot.self?.id;
   const out = [];
   for (const edge of snapshot.edges) {
@@ -73,12 +82,12 @@ function links(snapshot) {
     if (!other || other.isSelf) continue;
     const { relation, role, ended } = relationToNarrator(edge, selfId, other);
     if (ended && edge.type !== "spouse_of") continue;
-    out.push({ ...personSummary(snapshot, other), relation, role, unconfirmed: edge.status === "suggested", ...(edge.type === "spouse_of" ? { married: day(edge.validFrom), ended: ended ? (edge.attributes?.endPrecision === "year" ? day(edge.validTo)?.slice(0, 4) || "yes" : day(edge.validTo) || "yes") : null } : {}), id: other.id });
+    out.push({ ...personSummary(snapshot, other), relation, role, unconfirmed: edge.status === "suggested", ...(edge.type === "spouse_of" ? { married: edgeDay(edge.validFrom), ended: ended ? edgeDay(edge.validTo, edge.attributes?.endPrecision) || "yes" : null } : {}), id: other.id });
   }
   return out;
 }
 
-function matchesKind(link, kind) {
+export function matchesKind(link, kind) {
   if (kind === "all") return true;
   const group = roleGroup(kind);
   const word = kinOf(link.role);
@@ -95,7 +104,7 @@ function matchesKind(link, kind) {
   return (words[kind] || []).includes(word?.base) || (group === "relative" && kind === "other_relative" && link.relation === "relative");
 }
 
-function findByName(snapshot, name) {
+export function findByName(snapshot, name) {
   const key = normalizeName(name);
   const people = snapshot.entities.filter((entity) => entity.entityType === "person");
   const exact = people.filter((entity) => normalizeName(entity.name) === key || (entity.aliases || []).some((alias) => normalizeName(alias) === key));
@@ -115,20 +124,20 @@ function describeEdge(snapshot, edge, personId) {
   return {
     fact: `${from} ${edge.type.replaceAll("_", " ")} ${to}`,
     ...(edge.attributes?.kind ? { role: edge.attributes.kind } : {}),
-    ...(edge.validFrom ? { from: day(edge.validFrom) } : {}),
-    ...(edge.validTo || edge.attributes?.ended ? { ended: day(edge.validTo) || "yes" } : {}),
+    ...(edge.validFrom ? { from: edgeDay(edge.validFrom) } : {}),
+    ...(edge.validTo || edge.attributes?.ended ? { ended: edgeDay(edge.validTo, edge.attributes?.endPrecision) || "yes" } : {}),
     ...(edge.status === "suggested" ? { unconfirmed: true } : {}),
     about: edge.fromId === personId ? "subject" : "object",
   };
 }
 
-function personRecord(snapshot, entity) {
+export function personRecord(snapshot, entity) {
   const link = links(snapshot).find((item) => item.id === entity.id);
   const facts = snapshot.edges.filter((edge) => edge.fromId === entity.id || edge.toId === entity.id).map((edge) => describeEdge(snapshot, edge, entity.id)).filter(Boolean).slice(0, 25);
   return { ...personSummary(snapshot, entity), relation_to_narrator: link ? link.role : null, unconfirmed: link?.unconfirmed || false, facts };
 }
 
-async function assetsAsOf(userId, snapshot, asOf) {
+export async function assetsAsOf(userId, snapshot, asOf) {
   const at = /^\d{4}-\d{2}-\d{2}$/.test(String(asOf)) ? new Date(`${asOf}T23:59:59Z`) : new Date();
   const owned = [];
   const evidence = new Set();
@@ -140,7 +149,7 @@ async function assetsAsOf(userId, snapshot, asOf) {
     const asset = edge.type === "owned_by" ? from : to;
     const started = edge.validFrom ? new Date(edge.validFrom) <= at : true;
     const current = started && (!edge.validTo || new Date(edge.validTo) > at);
-    owned.push({ asset: asset.name, asset_type: asset.entityType, owner: owner.isSelf ? "narrator" : owner.name, relation: edge.type, from: day(edge.validFrom), until: day(edge.validTo), held_on_date: current, unconfirmed: edge.status === "suggested" });
+    owned.push({ asset: asset.name, asset_type: asset.entityType, owner: owner.isSelf ? "narrator" : owner.name, relation: edge.type, from: edgeDay(edge.validFrom), until: edgeDay(edge.validTo, edge.attributes?.endPrecision), held_on_date: current, unconfirmed: edge.status === "suggested" });
     if (edge.evidenceEventId) evidence.add(edge.evidenceEventId);
   }
   // The records behind those edges, and any record with a stated amount: the model reads what the person wrote.
@@ -181,10 +190,18 @@ async function runTool(userId, snapshot, name, args) {
   return { error: `unknown tool ${name}` };
 }
 
-// Names and dates the reply may state: everything the tools returned, plus what the question itself names.
-export function allowedFrom(results, question) {
+const NAME_RUN = /[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+)*/gu;
+
+// What the reply may state, by meaning: the people the tools returned (with every alias the snapshot knows for
+// them), the dates they returned at the precision they were stored (a bare year stays a bare year), and the
+// words the results use as labels ("relation", "former_spouse"), which are vocabulary, not names.
+export function allowedFrom(results, question, snapshot = null) {
   const names = new Set();
   const dates = new Set();
+  const months = new Set();
+  const years = new Set();
+  const vocabulary = new Set();
+  const words = (text) => normalizeName(String(text).replaceAll("_", " ")).split(" ").filter(Boolean);
   const walk = (value) => {
     if (value == null) return;
     if (value instanceof Date) {
@@ -192,49 +209,99 @@ export function allowedFrom(results, question) {
       return;
     }
     if (Array.isArray(value)) return value.forEach(walk);
-    if (typeof value === "object") return Object.values(value).forEach(walk);
+    if (typeof value === "object") {
+      for (const [key, item] of Object.entries(value)) {
+        words(key).forEach((word) => vocabulary.add(word));
+        walk(item);
+      }
+      return;
+    }
     const text = String(value);
     const written = datesIn(text);
-    for (const iso of written.dates) dates.add(iso);
-    for (const year of written.years) dates.add(year);
-    for (const match of text.matchAll(/[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+)*/gu)) names.add(match[0]);
+    written.dates.forEach((iso) => dates.add(iso));
+    written.months.forEach((month) => months.add(month));
+    written.years.forEach((year) => years.add(year));
+    for (const match of text.matchAll(NAME_RUN)) names.add(match[0]);
+    // A short lowercase label ("half-sister", "acquaintance") is vocabulary.
+    if (text.length <= 40 && text === text.toLowerCase()) words(text).forEach((word) => vocabulary.add(word));
   };
   walk(results);
-  for (const match of String(question).matchAll(/[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+)*/gu)) names.add(match[0]);
-  return { allowedNames: [...names], allowedDates: dates };
+  for (const match of String(question).matchAll(NAME_RUN)) names.add(match[0]);
+  // Aliases: anyone in the snapshot whose name the tools returned may be called by any of their recorded names.
+  if (snapshot?.entities) {
+    const returned = new Set([...names].map((name) => normalizeName(name)));
+    for (const entity of snapshot.entities) {
+      if (returned.has(normalizeName(entity.name))) (entity.aliases || []).forEach((alias) => names.add(alias));
+    }
+  }
+  return { allowedNames: [...names], allowedDates: dates, allowedMonths: months, allowedYears: years, vocabulary };
 }
 
-// The post-check, in any language: a sentence naming someone the tools never returned is dropped, and a date or
-// year the tools never returned is replaced. A lone capitalised word opening a sentence is grammar, not a claim.
-export function groundToolReply(reply, { allowedNames, allowedDates }) {
-  const known = ` ${allowedNames.map((name) => normalizeName(name)).join(" ")} `;
-  const allowedYears = new Set([...allowedDates].map((value) => String(value).slice(0, 4)));
+// A dated claim is supported only at the precision the tools gave it: a full date needs that date, a month needs a
+// date in that month, a year needs any date in that year. "03/04/2019" is supported when either reading is.
+function datesSupported(found, allowed) {
+  const dates = allowed.allowedDates;
+  const months = new Set([...(allowed.allowedMonths || []), ...[...dates].map((iso) => iso.slice(0, 7))]);
+  const years = new Set([...(allowed.allowedYears || []), ...[...months].map((month) => month.slice(0, 4))]);
+  const missing = [];
+  for (const iso of found.dates) if (!dates.has(iso)) missing.push(iso);
+  for (const pair of found.either || []) if (!pair.some((iso) => dates.has(iso))) missing.push(pair[0]);
+  for (const month of found.months || []) if (!months.has(month)) missing.push(month);
+  for (const year of found.years) if (!years.has(year)) missing.push(year);
+  return missing;
+}
+
+// Names a sentence states that the tools never returned. Capitalised words that are role words, month words or
+// the results' own labels are vocabulary; a lone capitalised word opening a line, sentence or bracket is grammar.
+function unsupportedNames(sentence, known, vocabulary) {
+  const claims = [];
+  const plain = sentence.replace(/[*_`#>|]/g, " ");
+  for (const match of plain.matchAll(NAME_RUN)) {
+    const words = match[0].split(/\s+/).filter((word) => {
+      const key = normalizeName(word);
+      return !MONTH_WORDS.has(word.toLowerCase().replace(/\.$/, "")) && !kinOf(word) && !key.split(" ").every((part) => vocabulary.has(part) || kinOf(part));
+    });
+    if (!words.length) continue;
+    const before = plain.slice(0, match.index);
+    const opening = before.trim() === "" || /[:(—–-]\s*$/.test(before) || /^\s*(?:\d+[.)]|[-•])\s*$/.test(before);
+    if (words.length === 1 && opening) continue;
+    if (!words.every((word) => normalizeName(word).split(" ").every((part) => known.has(part)))) claims.push(words.join(" "));
+  }
+  return claims;
+}
+
+// The post-check, in any language, by meaning: a sentence naming someone the tools never returned is dropped, and
+// so is one stating a date the tools never returned (or a more precise one than they stored). Lines are checked
+// one at a time, so one bad list item never takes the whole list with it.
+export function groundToolReply(reply, allowed) {
+  const known = new Set(allowed.allowedNames.flatMap((name) => normalizeName(name).split(" ")).filter(Boolean));
+  const vocabulary = allowed.vocabulary || new Set();
   const removed = [];
-  const kept = [];
-  for (const sentence of String(reply || "").split(/(?<=[.!?])\s+/).filter((part) => part.trim())) {
-    const claims = [];
-    for (const match of sentence.matchAll(/[\p{Lu}][\p{L}'’-]+(?:\s+[\p{Lu}][\p{L}'’-]+)*/gu)) {
-      const words = match[0].split(/\s+/).filter((word) => !MONTH_WORDS.has(word.toLowerCase().replace(/\.$/, "")));
-      if (!words.length) continue;
-      const opening = sentence.slice(0, match.index).trim() === "" || /[:—-]\s*$/.test(sentence.slice(0, match.index));
-      if (words.length === 1 && opening) continue;
-      if (!words.every((word) => known.includes(` ${normalizeName(word)} `))) claims.push(words.join(" "));
+  const lines = [];
+  for (const line of String(reply || "").split("\n")) {
+    const kept = [];
+    const sentences = line.split(/(?<=[.!?])\s+/).filter((part) => part.trim());
+    for (const sentence of sentences) {
+      const names = unsupportedNames(sentence, known, vocabulary);
+      const dates = names.length ? [] : datesSupported(datesIn(sentence), allowed);
+      if (names.length || dates.length) {
+        removed.push(...names, ...dates);
+        continue;
+      }
+      kept.push(sentence);
     }
-    if (claims.length) {
-      removed.push(...claims);
-      continue;
-    }
-    let next = sentence;
-    const found = datesIn(sentence);
-    for (const iso of found.dates) if (![...allowedDates].includes(iso)) removed.push(iso);
-    if (found.dates.some((iso) => ![...allowedDates].includes(iso)) || found.years.some((year) => !allowedYears.has(year))) {
-      removed.push(...found.years.filter((year) => !allowedYears.has(year)));
-      next = "";
-    }
-    if (next) kept.push(next);
+    if (kept.length || !line.trim()) lines.push(kept.join(" "));
   }
   for (const claim of removed) console.log(`[advisor] removed unsupported claim: "${claim}"`);
-  return { reply: kept.join(" ").replace(/\s+/g, " ").trim(), removed };
+  return { reply: lines.join("\n").replace(/\n{3,}/g, "\n\n").trim(), removed };
+}
+
+// DIRA_POSTCHECK_AUDIT=<file> appends every post-check that removed something, with what the tools returned, for
+// auditing on the synthetic set. Never set it for hold-out runs.
+export function auditPostCheck(entry) {
+  const file = process.env.DIRA_POSTCHECK_AUDIT;
+  if (!file || !entry.removed?.length) return;
+  try { appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`); } catch { /* audit only */ }
 }
 
 // Returns null when the model needs no tool for this question; the general advisor answers it then.
@@ -253,7 +320,8 @@ export async function answerWithTools(userId, history) {
     if (!message) return null;
     if (!message.tool_calls?.length) {
       if (!results.length) return null;
-      const checked = groundToolReply(message.content || "", allowedFrom(results, question));
+      const checked = groundToolReply(message.content || "", allowedFrom(results, question, snapshot));
+      auditPostCheck({ question, original: message.content || "", kept: checked.reply, removed: checked.removed, results });
       return { reply: checked.reply || "That isn't recorded yet.", removed: checked.removed, toolsUsed: results.map((item) => item.name), rounds: round + 1 };
     }
     messages.push(message);
