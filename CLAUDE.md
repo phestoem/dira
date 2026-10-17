@@ -6,6 +6,8 @@
 - Never print or copy secrets from .env.
 - Commit to branch fix/people-answers. Don't push to
   main; I merge after review.
+- Before every commit, check that the current branch is
+  the working branch, never main.
 - Before saying something is fixed, prove it with
   npm run golden (fixture mode) and a live readonly
   run against dira_dev.

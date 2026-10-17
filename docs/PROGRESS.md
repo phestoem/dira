@@ -23,8 +23,8 @@ Pushed to origin/fix/people-answers and merged to main (fast-forward):
 - `570df39` reset-gate resends the full introduction and asserts 12 family
   edges, 0 Zelda–Enock, 0 Careen–Zelda.
 
-Local only, not pushed (made on local `main` by an earlier session, then
-fast-forwarded onto this branch on 2026-10-17):
+Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
+`main` by mistake, moved here; local main reset to origin/main):
 - `beb392c` relationship cards show exactly what was saved; "my mother"/"my
   wife" need a relative of matching gender; pronouns are never nodes.
 - `6359ed4` people facts come from structured extraction at save time
@@ -82,24 +82,31 @@ needs a re-extraction of dira_dev. Not re-run since `7d26524`.
 - The "User has four sisters" event (8a58cc4c) in dira_dev was archived at
   Phesto's request.
 
+## Hybrid plan (Phesto, 2026-10-17)
+Long jobs run in tmux with logs in logs/.
+- [ ] d. Write hold-out 3 first (a different culture again, before any
+  engine changes), score-only.
+- [ ] a. Post-check audit (synthetic only, never the hold-outs): sample 30
+  removed claims, classify each as a true invention or a wrongly removed
+  fact, report the ratio.
+- [ ] b. Post-check compares meaning, not text: dates normalised (any
+  format → ISO; year-only stays year-only), people compared by resolved
+  entity id or alias, not exact string.
+- [ ] c. Hybrid engine (`PEOPLE_ENGINE=hybrid`): the model only picks a tool
+  and its arguments. List, count, date and family-tree tools return the
+  final answer formatted by code from stored facts; the model doesn't
+  rewrite it. Open questions ("how is X connected to Y", "tell me about my
+  family") get a model-written answer from tool results, post-checked.
+- [ ] e. Re-score rules, tools (fixed post-check) and hybrid on family
+  fixture, synthetic, hold-outs 1–3, plus live readonly on dira_dev after
+  the rebuild. 3 runs each. Pick by hold-out 3.
+
 ## Next steps
-1. Rebuild the dira_dev graph with the current (rules) extractor; a backup
-   of the first forced rebuild exists from 2026-10-16. Then re-run live
-   readonly for the family set.
-2. Look at why both engines fail synthetic `sister-in-law` and `owned-now`,
-   and tools' list/count misses (`siblings`, `firstborn-born`,
-   `family-tree`, `children-count`). Synthetic may be inspected; hold-outs
-   may not.
-3. The tools post-check removed 107 claims across runs, likely stripping
-   correct facts too; measure on synthetic only.
-4. Hybrid plan: see open questions.
-5. Later: timezone and default currency become user settings.
+1. Rebuild the dira_dev graph (approved 2026-10-17); a backup of the first
+   forced rebuild exists from 2026-10-16.
+2. Hybrid plan above, in the order d, a, b, c, e.
+3. Look at why both engines fail synthetic `sister-in-law` and `owned-now`.
+4. Later: timezone and default currency become user settings.
 
 ## Open questions for Phesto
-- The hybrid plan isn't recorded in any session notes or files here. Please
-  restate it (which parts come from rules and which from tools, and how it
-  is scored) so it can be written into this file.
-- `beb392c`..`7d26524` sit on local `main` as well as this branch. OK to
-  reset local main to origin/main? (Not done: it needs your go-ahead.)
-- Push `beb392c`..`7d26524` to origin/fix/people-answers for review?
-- Permission to rebuild the dira_dev graph (next step 1).
+- None yet.
