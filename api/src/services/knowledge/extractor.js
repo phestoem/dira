@@ -8,7 +8,7 @@ import { extractModel } from "./settings.js";
 import { validateClaims } from "./validate.js";
 import { ENTITY_TYPES, PREDICATES } from "./vocabulary.js";
 
-export const EXTRACTOR_VERSION = "claims-v10";
+export const EXTRACTOR_VERSION = "claims-v11";
 
 // What each predicate means and its direction, for the prompt. Kept beside the vocabulary's domain table.
 const MEANING = {
@@ -193,7 +193,7 @@ Rules:
 - Ignore questions in the text; extract only what it tells.
 - Text in any language: claims are in English, names and quotes as written.
 - If a fact fits no predicate, use related_to with a label in the user's words. Never drop a stated fact.
-- Something done or decided together ("Ana and I decided", "we bought") → one claim with subject me; name the others in a separate claim only when the text gives them their own part.
+- Decided or planned together ("Ana and I decided") → one claim with subject me. Owned, bought, inherited or rented together ("we bought it, half each", "my brother and I inherited") → one claim per owner.
 - No facts → an empty list.
 
 Before answering, check the text once more: every named person has their role claim; every thing described with a place ("the flat in X", "our farm near Y") has that place in its mention; every amount is in a claim; every date is in a claim; every ended state has until; every contractor or company working on something has contractor_for; every plan or decision is there with its money and its planner as subject; every child has parent_of from each named parent; the narrator's parents have parent_of.`;

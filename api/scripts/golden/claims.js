@@ -17,7 +17,9 @@ function nameFit(expected, entity) {
     if (have.join(" ") === want) return { fit: index === 0 ? 3 : 2, extra: 0 };
     const a = want.split(" ");
     const [short, long] = a.length <= have.length ? [a, have] : [have, a];
-    if (short.length && short.every((word) => long.includes(word))) {
+    // A word also matches a compound that ends with it ("land" / "farmland").
+    const inside = (word, list) => list.some((other) => other === word || (word.length >= 4 && other.length > word.length && other.endsWith(word)) || (other.length >= 4 && word.length > other.length && word.endsWith(other)));
+    if (short.length && short.every((word) => inside(word, long))) {
       const fit = short === a ? 1.5 : 1;
       const extra = long.length - short.length;
       if (fit > best.fit || (fit === best.fit && extra < best.extra)) best = { fit, extra };

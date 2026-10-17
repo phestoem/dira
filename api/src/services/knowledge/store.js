@@ -86,6 +86,17 @@ export async function writeClaims(userId, items, meta = {}) {
     };
     if (row.subjectId && row.subjectId === row.objectId) { skipped.push({ item, reason: "self-loop" }); continue; }
     if (seen.has(key(row))) { skipped.push({ item, reason: "duplicate" }); continue; }
+    // A claim that only says when something ended ("repaid the loan in December", "left the bank in 2022") closes the
+    // open claim it is about instead of standing beside it.
+    const onlyEnds = row.until && row.amount == null && row.value == null && !row.date;
+    const open = onlyEnds && existing.find((old) => old.subjectId === row.subjectId && old.predicate === row.predicate && old.objectId === row.objectId && !old.until && old.status !== "superseded");
+    if (open) {
+      const closed = await prisma.claim.update({ where: { id: open.id }, data: { until: row.until, untilPrecision: row.untilPrecision } });
+      existing.splice(existing.indexOf(open), 1, closed);
+      seen.add(key(closed));
+      written.push(closed);
+      continue;
+    }
     if (item.corrects || SINGLE_VALUED.has(row.predicate)) {
       // Candidates: same subject and predicate (and same object, when the object is an entity).
       const candidates = existing.filter((old) => old.subjectId === row.subjectId && old.predicate === row.predicate && old.status !== "superseded" && (PREDICATES[row.predicate].object !== "entity" || old.objectId === row.objectId) && (item.corrects || old.value !== row.value));

@@ -324,6 +324,9 @@ tokens per source ≈ $0.007 per save with gpt-4.1; the account re-ingest
 estimate drops to about $0.40.
 
 ## Decisions made and why
+- 2026-10-17 (Phesto): extraction default model gpt-5.5 (was gpt-4.1):
+  fresh-author dev sets 85 / 88% vs ~75%. One more tuning round on the
+  dev sets' weakest domains, then the hold-out 5 gate (3 runs, mean).
 - Engine is picked by hold-out score; stop adding rules for single cases
   (Phesto, 2026-10-16). Hold-outs are score-only: never inspect individual
   hold-out results or failures.
@@ -372,9 +375,6 @@ of this file (`7240988`).
    versions), then the gate on hold-out 4.
 
 ## Open questions for Phesto
-- Extraction model: gpt-5.4 / gpt-5.5 lift fresh-author sets from ~75%
-  to ~85–90% (gpt-4.1 was the plan). Switch the default? Then gate on
-  hold-out 5 (3 runs, mean) now, or after one more round on assets?
 - Hold-out 4 diagnosis (2026-10-17, one inspectable run, logs/phase2/diag4/):
   58 misses. Scorer bug: an expected owns used up the sold claim in the
   direct pass (2 sales lost). Two-writer conventions: contractor_for vs

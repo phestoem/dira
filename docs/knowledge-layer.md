@@ -253,6 +253,7 @@ Expected-claims file (`{ set, claims: [...] }`), one per stated fact:
   stored label; a plan's expected date may appear in its stored words;
   context is not scored; a debt's until is the date the debtor paid the
   lender that amount (derived); for date-valued predicates a `date` equal to the
-  value is the value. Names may also match when ≥ 70% of three or more
+  value is the value; a name word matches a compound ending in it
+  ("land" / "farmland"). Names may also match when ≥ 70% of three or more
   expected words are in the entity name.
 - Claim domains: people, work, money, projects, assets, time, plans.

@@ -10,5 +10,5 @@ export function routerModel() {
 }
 
 export function extractModel() {
-  return String(process.env.KNOWLEDGE_EXTRACT_MODEL || "").trim() || "gpt-4.1";
+  return String(process.env.KNOWLEDGE_EXTRACT_MODEL || "").trim() || "gpt-5.5";
 }

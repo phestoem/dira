@@ -210,3 +210,20 @@ test("a thing bought with no buyer is the narrator's; '<place> flat' finds the f
   assert.equal(placedFit({ name: "Oak Street house", type: "property" }, flat, [{ name: "Oak Street" }]), false);
   assert.equal(placedFit({ name: "Elm Road flat", type: "property" }, flat, [{ name: "Oak Street" }]), false);
 });
+
+test("a claim that only gives an end closes the open claim", async () => {
+  const stamp = Date.now();
+  const user = await prisma.user.create({ data: { email: `end-${stamp}@example.com`, handle: `end${stamp}`, name: "Ada Lindqvist" } });
+  try {
+    const { writeClaims } = await import("../src/services/knowledge/store.js");
+    const loan = (extra) => ({ subject: "me", predicate: "owes", object: { name: "Fjord Bank", type: "organisation" }, evidence: "loan", ...extra });
+    await writeClaims(user.id, [loan({ amount: 30000, currency: "EUR", date: "2021-05" })]);
+    await writeClaims(user.id, [loan({ until: "2025-12" })]);
+    const rows = await prisma.claim.findMany({ where: { userId: user.id } });
+    assert.equal(rows.length, 1);
+    assert.equal(rows[0].untilPrecision, "month");
+    assert.equal(Number(rows[0].amount), 30000);
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+  }
+});
