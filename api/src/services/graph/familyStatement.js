@@ -29,7 +29,7 @@ const NOT_A_NAME = new Set([
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", ...Object.keys(MONTHS),
 ]);
 
-// A connection to save needs someone named and what they are to you: "My sister Inês", "Tomás supervises the farm".
+// A connection to save needs someone named and what they are to you: "My sister Sigrún", "Gunnar supervises the farm".
 // Feelings, counts and "my family" on their own never qualify.
 export function namesPersonWithRole(text) {
   const value = String(text || "");

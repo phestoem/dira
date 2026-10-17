@@ -44,6 +44,7 @@ model User {
   visions       Vision[]
   diaryEntries  DiaryEntry[]
   relationships Relationship[]
+  claims        Claim[]
   lifeEvents    LifeEvent[]
   inputQueue    InputQueue[]
   refreshTokens RefreshToken[]
@@ -250,6 +251,48 @@ model Relationship {
   @@index([userId, status])
   @@index([userId, category])
   @@map("relationships")
+}
+
+/// One stated fact (docs/knowledge-layer.md): subject, predicate from the core vocabulary, an entity or a value,
+/// money, dates at the precision they were said, status and where it came from. Corrections add a claim and mark
+/// the old one superseded; nothing is deleted.
+model Claim {
+  id             String    @id @default(uuid())
+  userId         String
+  subjectId      String
+  predicate      String
+  objectId       String?
+  value          String?
+  label          String?
+  amount         Decimal?  @db.Decimal(20, 2)
+  currency       String?
+  contextId      String?
+  date           DateTime?
+  // day | month | year
+  datePrecision  String?
+  until          DateTime?
+  untilPrecision String?
+  // stated | confirmed | rejected | superseded
+  status         String    @default("stated")
+  supersedesId   String?
+  evidence       String?
+  eventId        String?
+  // chat | email | journal | file | queue | chip | relationship
+  source         String?
+  sourceRef      String?
+  extractor      String?
+  model          String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, subjectId])
+  @@index([userId, objectId])
+  @@index([userId, predicate])
+  @@index([userId, status])
+  @@index([eventId])
+  @@map("claims")
 }
 
 /// A significant moment sent across the bridge to Altimetrix.

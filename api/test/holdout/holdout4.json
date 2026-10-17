@@ -1,0 +1,644 @@
+{
+  "name": "holdout4",
+  "selfName": "Luciana Ferreira Campos",
+  "asOf": "2026-10-10",
+  "seeds": [
+    "Hi! I'm Luciana Ferreira Campos, born 14/03/1984. I grew up in Juiz de Fora and moved to Belo Horizonte in 2008 — been here ever since.",
+    "My mum is Marta Ferreira, she still lives in Juiz de Fora. My dad, Antônio Campos, passed away on 8 November 2019.",
+    "I was married to Ricardo Almeida from 2008 until we divorced in 2017. We have two kids together: Beatriz (everyone calls her Bia), born 5 July 2010, and Davi, born 19/12/2013.",
+    "Fernando Siqueira and I got married on 22/04/2021 at Paróquia São José. He works as an anaesthetist at Hospital Santa Clara.",
+    "Big news: my brother Gustavo and his wife Patrícia had a baby girl, Helena, on 3 Feb 2026 — and they asked me to be her godmother!",
+    "Larissa is my half-sister, from Dad's second marriage. She lives in Campinas and is getting married on 14/11/2026. I plan to give her R$ 5.000 towards the wedding.",
+    "Meu primo Rafael Ferreira acabou de se mudar para Lisboa com a esposa, a Inês. Quando é mesmo o aniversário dele?",
+    "Fernando's mother, Dona Lúcia Siqueira, was born on 2 March 1956. She's the one who finally taught me to make pão de queijo properly.",
+    "Seu Joaquim Moreira, our neighbour on the 3rd floor, waters the plants whenever we travel. And Dona Rosa Pereira, who was my ama de leite (wet nurse) when I was a baby, still phones me every birthday.",
+    {
+      "source": "journal",
+      "text": "12/08/2025. Signed the deed today. Gustavo and I sold Dad's apartment on Rua Halfeld in Juiz de Fora — the one we inherited half each in 2020 — to Cristina Lopes for R$ 340.000. We decided to split it straight down the middle, so my half, R$ 170.000, went into the house fund. Strange feeling, closing that door."
+    },
+    "Career-wise: I was at Banco Horizonte for twelve years, starting in 2009 as a trainee analyst, and left in 2021 as credit manager.",
+    "Since May 2022 I've been financial controller at Grupo Ipê Logística. My boss is Marcos Tavares, the CFO, and I work closely with Aline Barbosa in treasury. Pay is R$ 18.500 a month. Our biggest client is Laticínios Boa Vista — their contract renewal is due 15/11/2026 and I'm leading the negotiation.",
+    "In September 2023 Juliana Rocha and I founded Campos & Rocha Consultoria — finance for small businesses, mostly on weekends. I hold 60% and she holds 40%, and I'm the sócia-administradora (managing partner). Juliana's been my best friend since UFMG, where we both did Accounting, 2002 to 2006.",
+    "The consultoria's first client was Padaria Pão de Minas, they pay us R$ 4.800 a month. Wesley Pinto does our bookkeeping as a contractor; paid him R$ 1.200 in August 2026. We plan to take on two more clients next year.",
+    "I sing in the choir at Paróquia São José. I'm also in the caixinha at work with nine colleagues — everyone puts in R$ 1.000 a month, and my turn to take the pot (R$ 10.000) came in March 2026.",
+    "WE BOUGHT THE LOT! Lagoa Santa, 10/02/2024, R$ 285.000, from Sr. Paulo Mendes. It's lot 14, block C in Condomínio Recanto das Garças, matrícula nº 48.213 at the registry. Fernando and I own it together.",
+    "Small correction about the Lagoa Santa lot: after Paulo's discount we actually paid R$ 278.000, not 285.",
+    {
+      "source": "email",
+      "text": "From: Camila Duarte (architect)\nTo: Luciana, Fernando\nSubject: Casa Lagoa Santa - final plan and budget\n\nHi Luciana and Fernando,\n\nAttached is the final plan for the Lagoa Santa house (3 bedrooms, 210 m²). As agreed, my fee as architect is R$ 18.000 in two instalments; I received the first R$ 9.000 on 20/03/2024, thank you. Edson Lima's quote for the full build came in at R$ 420.000, which sits inside your R$ 450.000 budget.\n\nBest,\nCamila Duarte"
+    },
+    "Construction on the Lagoa Santa house officially started on 15 August 2024! Edson Lima is our mestre de obras. Paid him the first R$ 35.000 that day.",
+    "Paid Camila the second half of her fee, R$ 9.000, on 05/09/2024. Foundation was finished by the end of September 2024.",
+    "Mum sent R$ 20.000 towards the house, she insisted. Fernando put in R$ 150.000 from his savings. I paid Edson R$ 40.000 on 10 Dec 2024, and the laje (concrete slab) was poured in March 2025.",
+    "Edson quit on us in May 2025 — says he got a bigger job in Sete Lagoas. Work on the house is paused. Ugh. We decided not to take him to court, it's not worth it.",
+    "Found a new builder: Sandro Ribeiro of Ribeiro Construções. His quote to finish the house is R$ 310.000. Work restarted 16/06/2025 and I paid him R$ 60.000 on 30 June.",
+    {
+      "source": "file",
+      "text": "RECIBO\n\nRecebi de Luciana Ferreira Campos a quantia de R$ 55.000,00 (cinquenta e cinco mil reais), referente à 2ª etapa da obra da Casa Lagoa Santa (estrutura do telhado).\n\nBelo Horizonte, 03/11/2025.\n\nSandro Ribeiro\nRibeiro Construções"
+    },
+    "The roof on the Lagoa Santa house was finished in February 2026. Jorge Nunes is doing the electrics for R$ 22.000; paid him R$ 11.000 upfront on 12/03/2026. Fernando and I decided to put in solar panels instead of the pool.",
+    "Paid Sandro another R$ 70.000 on 5 August 2026. He says the house will be ready by 30/11/2026, and we plan to move to Lagoa Santa in January 2027. Fernando and I decided Mum will come and live with us there.",
+    "Car stuff: we bought the Fiat Toro (plate RTA-4B27) in October 2022 for R$ 128.500. It's insured with Seguradora Atlântica, policy 77-0045123, next renewal 15/03/2027. And we sold the old Honda Fit, plate HFX-2190, to Seu Joaquim in June 2026 for R$ 42.000. Thinking of swapping the Toro for an electric car in 2027.",
+    "My passport expires on 12 January 2027. My driver's licence (CNH) already expired on 3 September 2026 — I have the renewal appointment at Detran on 22/10/2026 at 9am.",
+    "In April 2026 Gustavo paid back the full R$ 15.000 I lent him in February 2025 when his car broke down. I, on the other hand, still owe Juliana R$ 3.000 for my part of the consultoria's launch costs.",
+    "Bia's festa de 15 anos was on 05/07/2025 at Salão Primavera and it was perfect. Budget was R$ 25.000. I paid Buffet Sabor & Arte R$ 12.000 and DJ Léo R$ 2.500, and Ricardo chipped in R$ 10.000.",
+    "Back from Salvador! The four of us were there from 2 to 9 January 2026.",
+    "Booked flights to Lisbon to visit Rafael and Inês, 10 to 24 December 2026. Do I need to renew my passport before going?",
+    {
+      "source": "journal",
+      "text": "Sunday night thoughts. Someday I want to open a small pousada in Tiradentes, maybe once the kids are grown. I'd love for Bia to do an exchange year in Portugal too. More concretely: I plan to start an MBA at Fundação Dom Cabral in March 2027, and to pay Juliana back the R$ 3.000 before Christmas."
+    },
+    "Juliana and I decided to hire a junior analyst for the consultoria from January 2027. And Fernando and I decided Davi stays at Colégio Santo Agostinho for high school.",
+    "Davi has the orthodontist, Dr. Paula Menezes, on 28/10/2026. The IPTU on the Lagoa Santa lot was due 30/09/2026 — paid R$ 1.840 to the Prefeitura de Lagoa Santa on 25/09/2026.",
+    "Fun fact: Fábio Lima, Edson's cousin, donated a kidney to Gustavo back in 2018 — that's how we found Edson in the first place. Also, Vó Zilda, Mum's mother, died on 21/06/2015; I still miss her.",
+    "Until the house is ready we're renting a flat in Santa Tereza from Renata Moreira, Seu Joaquim's daughter — since March 2021, R$ 3.200 a month.",
+    "Correction: I left Banco Horizonte in March 2022, not 2021. I stayed on until the merger closed."
+  ],
+  "questions": [
+    {
+      "id": "p1",
+      "domain": "people",
+      "turns": [
+        "Who are my children?"
+      ],
+      "expect": {
+        "has": [
+          "Beatriz",
+          "Davi"
+        ],
+        "count": 2
+      }
+    },
+    {
+      "id": "p2",
+      "domain": "people",
+      "turns": [
+        "Who is Gustavo married to?",
+        "And when was their baby born?"
+      ],
+      "expect": {
+        "has": [
+          "Helena"
+        ],
+        "dates": [
+          "2026-02-03"
+        ]
+      }
+    },
+    {
+      "id": "p3",
+      "domain": "people",
+      "turns": [
+        "Who is my half-sister and where does she live?"
+      ],
+      "expect": {
+        "has": [
+          "Larissa",
+          "Campinas"
+        ]
+      }
+    },
+    {
+      "id": "p4",
+      "domain": "people",
+      "turns": [
+        "Who is Fernando's mother?"
+      ],
+      "expect": {
+        "has": [
+          "Lúcia"
+        ]
+      }
+    },
+    {
+      "id": "p5",
+      "domain": "people",
+      "turns": [
+        "Who was my wet nurse?"
+      ],
+      "expect": {
+        "has": [
+          "Rosa Pereira"
+        ]
+      }
+    },
+    {
+      "id": "w1",
+      "domain": "work",
+      "turns": [
+        "Where do I work now and what's my job title?"
+      ],
+      "expect": {
+        "has": [
+          "Grupo Ipê",
+          "financial controller"
+        ],
+        "lacks": [
+          "Banco Horizonte"
+        ]
+      }
+    },
+    {
+      "id": "w2",
+      "domain": "work",
+      "turns": [
+        "When did I leave Banco Horizonte?"
+      ],
+      "expect": {
+        "has": [
+          "2022"
+        ],
+        "lacks": [
+          "2021"
+        ]
+      }
+    },
+    {
+      "id": "w3",
+      "domain": "work",
+      "turns": [
+        "Who is my boss?"
+      ],
+      "expect": {
+        "has": [
+          "Marcos Tavares"
+        ]
+      }
+    },
+    {
+      "id": "w4",
+      "domain": "work",
+      "turns": [
+        "Who is my business partner in the consultoria and how much of it do I own?"
+      ],
+      "expect": {
+        "has": [
+          "Juliana Rocha",
+          "60%"
+        ]
+      }
+    },
+    {
+      "id": "w5",
+      "domain": "work",
+      "turns": [
+        "Who does the consultoria's bookkeeping?"
+      ],
+      "expect": {
+        "has": [
+          "Wesley Pinto"
+        ]
+      }
+    },
+    {
+      "id": "m1",
+      "domain": "money",
+      "turns": [
+        "Quanto eu já paguei ao Sandro Ribeiro no total?"
+      ],
+      "expect": {
+        "amounts": [
+          {
+            "value": 185000,
+            "currency": "BRL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m2",
+      "domain": "money",
+      "turns": [
+        "How much did we pay for the Lagoa Santa lot?"
+      ],
+      "expect": {
+        "amounts": [
+          {
+            "value": 278000,
+            "currency": "BRL"
+          }
+        ],
+        "lacks": [
+          "285"
+        ]
+      }
+    },
+    {
+      "id": "m3",
+      "domain": "money",
+      "turns": [
+        "Do I owe anyone money?"
+      ],
+      "expect": {
+        "has": [
+          "Juliana"
+        ],
+        "amounts": [
+          {
+            "value": 3000,
+            "currency": "BRL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m4",
+      "domain": "money",
+      "turns": [
+        "How much did I spend on the buffet and the DJ for Bia's 15th?"
+      ],
+      "expect": {
+        "amounts": [
+          {
+            "value": 14500,
+            "currency": "BRL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "m5",
+      "domain": "money",
+      "turns": [
+        "What's my monthly salary?"
+      ],
+      "expect": {
+        "amounts": [
+          {
+            "value": 18500,
+            "currency": "BRL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pr1",
+      "domain": "projects",
+      "turns": [
+        "Who has worked on the Lagoa Santa house?"
+      ],
+      "expect": {
+        "has": [
+          "Camila Duarte",
+          "Edson Lima",
+          "Sandro Ribeiro",
+          "Jorge Nunes"
+        ]
+      }
+    },
+    {
+      "id": "pr2",
+      "domain": "projects",
+      "turns": [
+        "Who is building the house now and when should it be ready?"
+      ],
+      "expect": {
+        "has": [
+          "Sandro Ribeiro"
+        ],
+        "dates": [
+          "2026-11-30"
+        ]
+      }
+    },
+    {
+      "id": "pr3",
+      "domain": "projects",
+      "turns": [
+        "Why did work on the house stop in 2025?"
+      ],
+      "expect": {
+        "has": [
+          "Edson",
+          "Sete Lagoas"
+        ]
+      }
+    },
+    {
+      "id": "pr4",
+      "domain": "projects",
+      "turns": [
+        "How much have I paid contractors for the Lagoa Santa house so far?"
+      ],
+      "expect": {
+        "amounts": [
+          {
+            "value": 289000,
+            "currency": "BRL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pr5",
+      "domain": "projects",
+      "turns": [
+        "What was the budget for Bia's festa de 15 anos and who were the suppliers?"
+      ],
+      "expect": {
+        "has": [
+          "Buffet Sabor & Arte",
+          "DJ Léo"
+        ],
+        "amounts": [
+          {
+            "value": 25000,
+            "currency": "BRL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "a1",
+      "domain": "assets",
+      "turns": [
+        "What cars do I own now?"
+      ],
+      "expect": {
+        "has": [
+          "Fiat Toro"
+        ],
+        "lacks": [
+          "Honda Fit"
+        ]
+      }
+    },
+    {
+      "id": "a2",
+      "domain": "assets",
+      "turns": [
+        "What's the Toro's plate and the insurance policy number?"
+      ],
+      "expect": {
+        "has": [
+          "RTA-4B27",
+          "77-0045123"
+        ]
+      }
+    },
+    {
+      "id": "a3",
+      "domain": "assets",
+      "turns": [
+        "What's the matrícula number of the Lagoa Santa lot?"
+      ],
+      "expect": {
+        "has": [
+          "48.213"
+        ]
+      }
+    },
+    {
+      "id": "a4",
+      "domain": "assets",
+      "turns": [
+        "Which properties do I own or rent now?"
+      ],
+      "expect": {
+        "has": [
+          "Lagoa Santa",
+          "Santa Tereza"
+        ],
+        "lacks": [
+          "Rua Halfeld"
+        ]
+      }
+    },
+    {
+      "id": "a5",
+      "domain": "assets",
+      "turns": [
+        "Who bought the Honda Fit and for how much?"
+      ],
+      "expect": {
+        "has": [
+          "Joaquim"
+        ],
+        "amounts": [
+          {
+            "value": 42000,
+            "currency": "BRL"
+          }
+        ]
+      }
+    },
+    {
+      "id": "t1",
+      "domain": "time",
+      "turns": [
+        "When did my father die?"
+      ],
+      "expect": {
+        "dates": [
+          "2019-11-08"
+        ]
+      }
+    },
+    {
+      "id": "t2",
+      "domain": "time",
+      "turns": [
+        "What's coming up between now and the end of November?"
+      ],
+      "expect": {
+        "has": [
+          "Detran",
+          "orthodontist",
+          "Larissa",
+          "Laticínios Boa Vista"
+        ],
+        "dates": [
+          "2026-10-22",
+          "2026-10-28",
+          "2026-11-14",
+          "2026-11-15",
+          "2026-11-30"
+        ]
+      }
+    },
+    {
+      "id": "t3",
+      "domain": "time",
+      "turns": [
+        "Which of my documents have expired or are about to expire?"
+      ],
+      "expect": {
+        "has": [
+          "CNH",
+          "passport"
+        ],
+        "dates": [
+          "2026-09-03",
+          "2027-01-12"
+        ]
+      }
+    },
+    {
+      "id": "t4",
+      "domain": "time",
+      "turns": [
+        "When was I in Salvador?"
+      ],
+      "expect": {
+        "dates": [
+          "2026-01-02",
+          "2026-01-09"
+        ]
+      }
+    },
+    {
+      "id": "t5",
+      "domain": "time",
+      "turns": [
+        "Quando nasceu o Davi?"
+      ],
+      "expect": {
+        "dates": [
+          "2013-12-19"
+        ]
+      }
+    },
+    {
+      "id": "pl1",
+      "domain": "plans",
+      "turns": [
+        "When do we plan to move to Lagoa Santa?"
+      ],
+      "expect": {
+        "has": [
+          "January",
+          "2027"
+        ]
+      }
+    },
+    {
+      "id": "pl2",
+      "domain": "plans",
+      "turns": [
+        "What did Fernando and I decide about the pool?"
+      ],
+      "expect": {
+        "has": [
+          "solar"
+        ]
+      }
+    },
+    {
+      "id": "pl3",
+      "domain": "plans",
+      "turns": [
+        "What are my long-term dreams?"
+      ],
+      "expect": {
+        "has": [
+          "pousada",
+          "Tiradentes"
+        ]
+      }
+    },
+    {
+      "id": "pl4",
+      "domain": "plans",
+      "turns": [
+        "What study plans do I have?"
+      ],
+      "expect": {
+        "has": [
+          "MBA",
+          "Fundação Dom Cabral",
+          "2027"
+        ]
+      }
+    },
+    {
+      "id": "pl5",
+      "domain": "plans",
+      "turns": [
+        "What have we decided about Mum?"
+      ],
+      "expect": {
+        "has": [
+          "Lagoa Santa"
+        ]
+      }
+    },
+    {
+      "id": "o1",
+      "domain": "open",
+      "turns": [
+        "Summarise the Lagoa Santa house project so far."
+      ],
+      "expect": {
+        "has": [
+          "Camila Duarte",
+          "Edson",
+          "Sandro",
+          "Jorge Nunes",
+          "roof",
+          "solar"
+        ],
+        "dates": [
+          "2026-11-30"
+        ]
+      }
+    },
+    {
+      "id": "o2",
+      "domain": "open",
+      "turns": [
+        "Give me an overview of my family."
+      ],
+      "expect": {
+        "has": [
+          "Marta",
+          "Antônio",
+          "Fernando",
+          "Beatriz",
+          "Davi",
+          "Gustavo",
+          "Larissa",
+          "Ricardo"
+        ]
+      }
+    },
+    {
+      "id": "o3",
+      "domain": "open",
+      "turns": [
+        "Tell me about my career so far."
+      ],
+      "expect": {
+        "has": [
+          "Banco Horizonte",
+          "Grupo Ipê",
+          "Campos & Rocha",
+          "UFMG"
+        ]
+      }
+    },
+    {
+      "id": "o4",
+      "domain": "open",
+      "turns": [
+        "What happened with Dad's apartment?"
+      ],
+      "expect": {
+        "has": [
+          "Rua Halfeld",
+          "Gustavo",
+          "Cristina Lopes"
+        ],
+        "amounts": [
+          {
+            "value": 340000,
+            "currency": "BRL"
+          },
+          {
+            "value": 170000,
+            "currency": "BRL"
+          }
+        ]
+      }
+    }
+  ]
+}

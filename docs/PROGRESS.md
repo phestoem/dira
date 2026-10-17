@@ -5,7 +5,8 @@ Last updated: 2026-10-17
 ## Current goal
 2026-10-17 (Phesto): option (b), staged: rebuild DIRA's WHOLE knowledge
 layer (not just family) as one ingestion path → one claim store → one
-answer path. Design: docs/knowledge-layer.md. Now: phase 0 (tests first).
+answer path. Design: docs/knowledge-layer.md. Now: phase 0 done except
+the check below; next phase 1.
 
 ## Rebuild plan (Phesto, 2026-10-17)
 
@@ -122,7 +123,42 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
-- Nothing running. Extraction measurement finished 2026-10-17 19:29 UTC
+- BLOCKED 2026-10-17 ~22:00 UTC: the OpenAI key returns 429 "You have no
+  credits remaining" (logs/api-rules.log), so no model call works. The
+  golden fixture after renaming old prompt examples (logs/golden-phase0.log)
+  is invalid and must be re-run once credits are added. The extraction
+  measurement finished before this: none of its 72 runs is near zero.
+- Phase 0 (2026-10-17):
+  - docs/knowledge-layer.md: claim shape, core vocabulary (7 domains),
+    derivations, test-set format. Vocabulary in code:
+    api/src/services/knowledge/vocabulary.js (domain of every predicate).
+  - Synthetic LIFE set api/scripts/golden/sets/life.json (Kenyan narrator,
+    34 seeds incl. email/journal/file and 2 Swahili, asOf 2026-06-15, 58
+    questions in 8 domains) + api/test/extraction/life.expect.json (108
+    claims). It replaces synthetic.json for the new layer; synthetic.json
+    stays for the old engines until phase 4.
+  - Non-family golden cases live in the life set: cases.js stays Phesto's
+    real family because live mode checks it against dira_dev.
+  - Hold-out 4 (written by a separate subagent with only the design doc):
+    api/test/holdout/holdout4.json + api/test/extraction/holdout4.expect.json.
+    Sealed: never read. Shape check, counts only:
+    `node api/scripts/golden/check-set.mjs <set> <expect>` → 38 seeds, 158
+    claims (people 26, work 29, assets 25, money 30, projects 12, time 21,
+    plans 15), 39 questions (4–5 per domain), 0 problems. Its generator
+    script was deleted unread.
+  - Claims scorer api/scripts/golden/claims.js (`scoreClaims`, `gate`):
+    per-domain recall/precision; inverses (received_from = paid),
+    symmetric predicates, dates at stated precision, amounts ±0.5%,
+    corrections must be marked superseded. Tests: api/test/claims-score.test.js.
+  - Runner: seeds may be { text, source }; questions carry a domain and
+    print "domains: …" per run; `amounts` expectation (mentionsAmount in
+    cases.js); sets `life` and `holdout4` registered. asOf is read but the
+    API does not use it yet (phase 3).
+  - Contamination test covers life + holdout4 and prints "<hold-out
+    text>" instead of any hold-out word. Old prompt examples used
+    Portuguese/Peruvian invented names that clashed with hold-out 4; they
+    are now Icelandic invented names (no other change to the prompts).
+- Earlier: extraction measurement finished 2026-10-17 19:29 UTC. Extraction measurement finished 2026-10-17 19:29 UTC
   (tmux `extraction`, 72 seedings). Output: logs/extraction/ (per-run
   files; summary.txt; never read trace-*.jsonl or hold-out dumps).
   Summary: `node api/scripts/golden/extraction-summary.mjs`.
@@ -220,10 +256,18 @@ re-score (rules 3.3, tools 3.0, hybrid 2.7 /13). Details in git history
 of this file (`7240988`).
 
 ## Next steps
-1. Phase 0: docs/knowledge-layer.md (claim shape + core vocabulary, so the
-   test writers share it); hold-out 4 subagent; synthetic life set and
-   expectations; non-family golden cases; per-domain claims scorer.
-2. Phase 1 (see plan).
+1. Phase 1: Claim table + migration (dira_dev), one resolver for all
+   entity types, ingest() with question/statement/mixed router behind a
+   flag, Relationship materialised from claims; runner `--claims` mode
+   scoring stored claims with claims.js and reporting routing per seed.
+2. Cost estimate for schema + gpt-4.1 (per save, and re-ingesting
+   Phesto's account) before phase 2.
 
 ## Open questions for Phesto
-- None open. (a) vs (b) decided 2026-10-17: (b), whole-life scope.
+- OpenAI credits ran out (429 "no credits remaining"). Model-dependent
+  work (golden runs, extraction, cost check) waits until they're added.
+- Live non-family check: the golden live run can only test facts that
+  are true in your account. If you give 5–10 true facts/questions about
+  your projects, money and documents (e.g. the Kisarawe renovation),
+  they become live cases; until then non-family is tested only on the
+  synthetic life set and hold-outs.

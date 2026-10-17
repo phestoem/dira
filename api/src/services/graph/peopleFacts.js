@@ -9,25 +9,25 @@ export const PEOPLE_EXTRACT_PROMPT = `List every person the text mentions and on
 Return JSON only:
 { "people": [{ "name": "", "relation": null, "relationOf": "narrator", "gender": "unknown", "birthDate": null, "deathDate": null, "marriageDate": null, "ended": false, "endDate": null, "livesIn": null, "notChildOf": [], "evidence": "" }] }
 Fields:
-- name: the person's name exactly as written, every word of it. A family name written once after a list of given names ("my brothers Diego, Mateo and Lucas Quispe") belongs to each of them. Never a pronoun, a kinship word, an amount, a date, or the narrator. When the text names a known person only by role ("my wife", "my late dad"), use their name from the known people.
+- name: the person's name exactly as written, every word of it. A family name written once after a list of given names ("my brothers Kári, Leifur and Lucas Arason") belongs to each of them. Never a pronoun, a kinship word, an amount, a date, or the narrator. When the text names a known person only by role ("my wife", "my late dad"), use their name from the known people.
 - relation: the role word for what this person is to relationOf, as the text says it: father, mother, son, daughter, child, brother, sister, half-brother, half-sister, husband, wife, partner, grandmother, grandfather, grandson, granddaughter, uncle, aunt, cousin, nephew, niece, stepfather, stepmother, stepson, stepdaughter, brother-in-law, sister-in-law, mother-in-law, father-in-law, friend, neighbour, colleague, godfather, godmother. "firstborn", "eldest", "youngest" mean child. null when the text does not state it. A shared family name is not a relation.
-- relationOf: "narrator" when the text says my/our/I have/we have/mimi/yangu/wangu (or, in a saved note addressed to the narrator, your/you); otherwise the name of the other person ("Ana's son" → "Ana").
+- relationOf: "narrator" when the text says my/our/I have/we have/mimi/yangu/wangu (or, in a saved note addressed to the narrator, your/you); otherwise the name of the other person ("Ásta's son" → "Ásta").
 - gender: female or male only when a kinship word or the text says so; never from the name. Otherwise unknown.
 - birthDate, deathDate, marriageDate: YYYY-MM-DD only when the full date is stated for this person; otherwise null. marriageDate is when this person married relationOf.
 - ended / endDate: a marriage or partnership that ended (divorced, separated, "my ex-wife"): ended true, endDate as YYYY-MM-DD or YYYY when stated.
-- livesIn: the town, city, region or country where this person lives now ("Cusco", not "our house in Cusco"); otherwise null.
+- livesIn: the town, city, region or country where this person lives now ("Ísafjörður", not "our house in Ísafjörður"); otherwise null.
 - notChildOf: names the text says this person is not the child of.
 - evidence: the shortest exact quote that states these facts.
 Resolve she, he and they to the person they refer to. The narrator ("I", "me", "my") is never listed; facts about the narrator go on an entry with name "narrator".
 Work in English or Swahili. At most 30 people.
-Example text: "My father Rafael Quispe died on 2 March 1999; my mother Elena lives in Cusco with my stepfather Bruno Silva. Diego Quispe is my brother. Ana is Diego's wife, and their son Tomás was born on 8 July 2015. My ex-husband Iker and I divorced in 2011."
+Example text: "My father Einar Arason died on 2 March 1999; my mother Hekla lives in Ísafjörður with my stepfather Bjarki Olafsson. Kári Arason is my brother. Ásta is Kári's wife, and their son Gunnar was born on 8 July 2015. My ex-husband Iker and I divorced in 2011."
 Example output: { "people": [
- { "name": "Rafael Quispe", "relation": "father", "relationOf": "narrator", "gender": "male", "deathDate": "1999-03-02", "evidence": "My father Rafael Quispe died on 2 March 1999" },
- { "name": "Elena", "relation": "mother", "relationOf": "narrator", "gender": "female", "livesIn": "Cusco", "evidence": "my mother Elena lives in Cusco" },
- { "name": "Bruno Silva", "relation": "stepfather", "relationOf": "narrator", "gender": "male", "livesIn": "Cusco", "evidence": "with my stepfather Bruno Silva" },
- { "name": "Diego Quispe", "relation": "brother", "relationOf": "narrator", "gender": "male", "evidence": "Diego Quispe is my brother" },
- { "name": "Ana", "relation": "wife", "relationOf": "Diego Quispe", "gender": "female", "evidence": "Ana is Diego's wife" },
- { "name": "Tomás", "relation": "son", "relationOf": "Diego Quispe", "gender": "male", "birthDate": "2015-07-08", "evidence": "their son Tomás was born on 8 July 2015" },
+ { "name": "Einar Arason", "relation": "father", "relationOf": "narrator", "gender": "male", "deathDate": "1999-03-02", "evidence": "My father Einar Arason died on 2 March 1999" },
+ { "name": "Hekla", "relation": "mother", "relationOf": "narrator", "gender": "female", "livesIn": "Ísafjörður", "evidence": "my mother Hekla lives in Ísafjörður" },
+ { "name": "Bjarki Olafsson", "relation": "stepfather", "relationOf": "narrator", "gender": "male", "livesIn": "Ísafjörður", "evidence": "with my stepfather Bjarki Olafsson" },
+ { "name": "Kári Arason", "relation": "brother", "relationOf": "narrator", "gender": "male", "evidence": "Kári Arason is my brother" },
+ { "name": "Ásta", "relation": "wife", "relationOf": "Kári Arason", "gender": "female", "evidence": "Ásta is Kári's wife" },
+ { "name": "Gunnar", "relation": "son", "relationOf": "Kári Arason", "gender": "male", "birthDate": "2015-07-08", "evidence": "their son Gunnar was born on 8 July 2015" },
  { "name": "Iker", "relation": "husband", "relationOf": "narrator", "gender": "male", "ended": true, "endDate": "2011", "evidence": "My ex-husband Iker and I divorced in 2011" } ] }`;
 
 // First-person words, and the ways a saved note or a document refers to the narrator.

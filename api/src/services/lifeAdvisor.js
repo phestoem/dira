@@ -43,7 +43,7 @@ Your responses:
    lists for options or action items)
 - Be conversational but substantive
 - Reference specific data points naturally
-  ('your Coimbra land purchase in July',
+  ('your Akureyri land purchase in July',
    'the 12,450 EUR roof repair')
 - Connect dots across different areas when relevant`;
 
@@ -369,7 +369,7 @@ function buildSystemPrompt(context) {
 You have access to ALL of the user's events.
 Use semantic understanding to find relevant ones —
 do not rely on exact keyword matching.
-'Cusco project' should find events about Cusco
+'Ísafjörður project' should find events about Ísafjörður
 even if the word 'project' doesn't appear.
 'car' should find vehicle registration events.
 'land' should find property purchase events.

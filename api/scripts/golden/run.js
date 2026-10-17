@@ -16,7 +16,7 @@ import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { precisionRecall, routeOf, scoreExtraction } from "./extraction.js";
-import { CASES, mentionsDate, MOTHER_SENTENCE, motherProblems, offeredLines, SEED_MESSAGES, SELF_NAME } from "./cases.js";
+import { CASES, mentionsAmount, mentionsDate, MOTHER_SENTENCE, motherProblems, offeredLines, SEED_MESSAGES, SELF_NAME } from "./cases.js";
 
 const DEV = { port: "4801", db: "dira_dev" };
 const PROD = { port: "4800", db: "dira" };
@@ -26,7 +26,7 @@ const DELETE_ORDER = ["relationship", "lifeEvent", "inputQueue", "diaryEntry", "
 // Every question turn's server measurements, summarised once per run.
 const answerMetrics = [];
 // Other families as JSON: --set synthetic, or --set holdout (test/holdout/, run with --score-only and never tuned for).
-const SETS = { synthetic: new URL("./sets/synthetic.json", import.meta.url), holdout: new URL("../../test/holdout/holdout.json", import.meta.url), holdout2: new URL("../../test/holdout/holdout2.json", import.meta.url), holdout3: new URL("../../test/holdout/holdout3.json", import.meta.url) };
+const SETS = { synthetic: new URL("./sets/synthetic.json", import.meta.url), holdout: new URL("../../test/holdout/holdout.json", import.meta.url), holdout2: new URL("../../test/holdout/holdout2.json", import.meta.url), holdout3: new URL("../../test/holdout/holdout3.json", import.meta.url), life: new URL("./sets/life.json", import.meta.url), holdout4: new URL("../../test/holdout/holdout4.json", import.meta.url) };
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
 const args = parseArgs(process.argv.slice(2));
@@ -126,8 +126,10 @@ async function post(path, body) {
 
 function loadSet(name) {
   const set = JSON.parse(readFileSync(SETS[name] || name, "utf8"));
-  const cases = set.questions.map((question) => ({ id: question.id, turns: question.turns, check: ({ answer }) => expectProblems(answer, question.expect || {}) }));
-  return { selfName: set.selfName, seeds: set.seeds, cases };
+  const cases = set.questions.map((question) => ({ id: question.id, domain: question.domain, turns: question.turns, check: ({ answer }) => expectProblems(answer, question.expect || {}) }));
+  // A seed is chat text, or { text, source } for an email, journal entry or file.
+  const seeds = set.seeds.map((seed) => (typeof seed === "string" ? seed : seed.text));
+  return { selfName: set.selfName, seeds, sources: set.seeds.map((seed) => seed.source || "chat"), asOf: set.asOf, cases };
 }
 
 
@@ -143,6 +145,7 @@ function expectProblems(answer, expect) {
   for (const text of expect.has || []) if (!mentions(answer, text)) failures.push(`missing "${text}"`);
   for (const text of expect.lacks || []) if (mentions(answer, text)) failures.push(`must not mention "${text}"`);
   for (const iso of expect.dates || []) if (!mentionsDate(answer, iso)) failures.push(`missing date ${iso}`);
+  for (const { value, currency } of expect.amounts || []) if (!mentionsAmount(answer, value)) failures.push(`missing amount ${value} ${currency || ""}`.trim());
   if (expect.count != null && !mentions(answer, String(expect.count)) && !mentions(answer, NUMBER_WORDS[expect.count] || "")) failures.push(`does not say ${expect.count}`);
   return failures;
 }
@@ -392,6 +395,7 @@ async function live(userId) {
 async function ask(userId, readonly, all = CASES) {
   const cases = all.filter((item) => !args.only || args.only.has(item.id));
   let failed = 0;
+  const domains = {};
   const quiet = Boolean(args.scoreOnly);
   if (!quiet) console.log(`\n== ${cases.length} golden cases ==`);
   for (const item of cases) {
@@ -419,6 +423,11 @@ async function ask(userId, readonly, all = CASES) {
       if (!production) failures.push(...(await revert(rowsBefore, writes)).map((line) => line.trim()));
     }
     if (failures.length) failed += 1;
+    if (item.domain) {
+      const tally = (domains[item.domain] ||= { passed: 0, asked: 0 });
+      tally.asked += 1;
+      if (!failures.length) tally.passed += 1;
+    }
     if (quiet) continue;
     console.log(`\n${failures.length ? "FAIL" : "PASS"}  ${item.id}  [${turn?.response.routing?.intent || "?"}/${turn?.response.result?.type || "?"}]  ${startedAt}`);
     console.log(`  Q: ${item.turns.join("  ⇢  ")}`);
@@ -426,6 +435,8 @@ async function ask(userId, readonly, all = CASES) {
     for (const failure of failures) console.log(`  ✗ ${failure}`);
   }
   console.log(`\n${cases.length - failed}/${cases.length} passed`);
+  // Per domain, never only one total (whole-life sets).
+  if (Object.keys(domains).length) console.log(`domains: ${Object.entries(domains).map(([domain, { passed, asked }]) => `${domain} ${passed}/${asked}`).join(" | ")}`);
   console.log(metricsSummary());
   return failed ? 1 : 0;
 }

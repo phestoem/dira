@@ -33,6 +33,20 @@ export function mentionsDate(text, iso) {
   return patterns.some((pattern) => new RegExp(pattern, "i").test(text));
 }
 
+const SCALE = { k: 1e3, thousand: 1e3, elfu: 1e3, m: 1e6, mn: 1e6, million: 1e6, milioni: 1e6, bn: 1e9, billion: 1e9 };
+
+// Accepts "970,000", "970 000", "970000", "1.75 million", "KES 1.75m", "450k" and "1.750.000" for the same amount.
+export function mentionsAmount(text, value) {
+  const pattern = /(\d{1,3}(?:[,\s.\u00a0'’]\d{3})+|\d+)(?:[.,](\d+))?\s*(thousand|million|milioni|billion|elfu|mn|bn|k|m)?(?![\p{L}\d])/giu;
+  for (const match of String(text || "").matchAll(pattern)) {
+    const whole = Number(match[1].replace(/[^\d]/g, ""));
+    const number = match[2] ? Number(`${whole}.${match[2]}`) : whole;
+    const amount = number * (SCALE[(match[3] || "").toLowerCase()] || 1);
+    if (Math.abs(amount - value) <= Math.max(1, value * 0.005)) return true;
+  }
+  return false;
+}
+
 const has = (...names) => (answer) => names.filter((name) => !new RegExp(`\\b${name}\\b`, "i").test(answer)).map((name) => `missing "${name}"`);
 const lacks = (...names) => (answer) => names.filter((name) => new RegExp(`\\b${name}\\b`, "i").test(answer)).map((name) => `must not mention "${name}"`);
 const ANSWER_INTENTS = new Set(["question", "graph_query"]);

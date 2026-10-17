@@ -44,9 +44,9 @@ Rules:
 
 Bad: { "subject": { "name": "Roof Repair", "type": "project" }, "predicate": "hasTotalContractValue", "object": { "name": "12,450 EUR", "type": "asset" } }
 Bad: { "subject": { "name": "Lot 14B", "type": "property" }, "predicate": "dated", "object": { "name": "12 May 2024", "type": "other" } }
-Good: { "subject": { "name": "Tomás Ferreira", "type": "person" }, "predicate": "supervises", "object": { "name": "Coimbra House", "type": "property" } }
+Good: { "subject": { "name": "Gunnar Magnusson", "type": "person" }, "predicate": "supervises", "object": { "name": "Akureyri House", "type": "property" } }
 Good: { "subject": { "name": "me", "type": "self" }, "predicate": "owns", "object": { "name": "Lot 14B", "type": "property" } }
-Good: { "subject": { "name": "me", "type": "self" }, "predicate": "sent_money_to", "object": { "name": "Rafael", "type": "person" }, "attributes": { "amount": 300, "currency": "EUR" } }`;
+Good: { "subject": { "name": "me", "type": "self" }, "predicate": "sent_money_to", "object": { "name": "Einar", "type": "person" }, "attributes": { "amount": 300, "currency": "EUR" } }`;
 }
 
 // Two structured passes over the same text: general triples (work, places, assets, money) and people (who they are
@@ -571,7 +571,7 @@ async function upsertEdge(userId, input) {
     return { edge, created: true };
   }
   const ended = Boolean(input.validTo) && !existing.validTo;
-  // "She lives in Cusco" said again makes an ended residence current again; closeSuperseded then ends the other one.
+  // "She lives in Ísafjörður" said again makes an ended residence current again; closeSuperseded then ends the other one.
   const reopened = input.restated && !input.validTo && existing.validTo && SUPERSEDED_TYPES.has(input.type);
   const attributes = mergeAttributes(existing.attributes, input.attributes, input);
   const edge = await prisma.relationship.update({

@@ -22,7 +22,7 @@ export function isPeopleQuestion(text) {
   const value = String(text || "").trim();
   if (!value) return false;
   if (/\b(my|our)\s+(sisters|brothers|children|sons|daughters|wife|husband|father|mother)\s+(are|is)\b/i.test(value)) return false;
-  // "My brothers' birthdays: Diego was born on 4 May 1990, …" tells; it doesn't ask.
+  // "My brothers' birthdays: Kári was born on 4 May 1990, …" tells; it doesn't ask.
   if (!value.includes("?") && !/^(?:please\s+)?(?:who|what|when|where|which|how|list|show|name|tell|give|remind|do|does|did|is|are)\b/i.test(value) && /\b(born|married|died|passed away)\b/i.test(value)) return false;
   if (/\b(family tree|who is|who's|who are|who was|how old|birthdays?|birth dates?|relatives)\b/i.test(value)) return true;
   // Any role word or birth-order word after my/our in a question: "when was my stepbrother born?", "who is our eldest?"
@@ -211,7 +211,7 @@ function asks(value) {
   return value.includes("?") || /^(?:please\s+)?(?:who|what|when|where|which|how|list|show|name|tell|give|remind|do|does|did|is|are|was)\b/i.test(value);
 }
 
-// The known person a question is about by name ("who is Ana Lopes?"): the full name, or a first name only one person has.
+// The known person a question is about by name ("who is Ásta Jónsdóttir?"): the full name, or a first name only one person has.
 export function namedPerson(question, context) {
   const q = ` ${normalizeName(question)} `;
   const everyone = [...(context?.people || []), ...(context?.pending || []), ...(context?.extended || []), ...(context?.former || [])].filter((person) => person.kind !== "self");
@@ -571,7 +571,7 @@ function formerSpouseAnswer(context) {
   return lines.join("\n");
 }
 
-// "Who is Ana Lopes?": their role to you, if any, and what else is recorded about them.
+// "Who is Ásta Jónsdóttir?": their role to you, if any, and what else is recorded about them.
 function personAnswer(person, context) {
   const role = person.role === "former-spouse" ? `your former ${person.kind}` : person.role && person.kind && person.kind !== "self" ? `your ${person.kind}` : "";
   const born = birthOf(person);

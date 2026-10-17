@@ -136,7 +136,6 @@ domain column is the scoring bucket.
 | works_on | project | person or organisation; label: role |
 | part_of | project / property | |
 | milestone | value | label: what happened; date |
-| due_on | value (date) | deadline for a project, payment, task, document |
 
 ### time
 | Predicate | Object | Notes |
@@ -147,6 +146,7 @@ domain column is the scoring bucket.
 | visited | place | date / until (travel) |
 | lives_in | place | date / until (moves) |
 | scheduled | value (date) | a planned event or appointment |
+| due_on | value (date) | deadline for a project, payment, task, document |
 
 ### plans
 | Predicate | Object | Notes |

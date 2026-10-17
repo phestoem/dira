@@ -36,10 +36,10 @@ Intent types:
 - correction: they are correcting something DIRA
   said or did in this conversation
 - relationship_add: they state a connection to remember
-  ("Tomás supervises the house", "Inês is my sister",
-   "Rafael anasimamia nyumba")
+  ("Gunnar supervises the house", "Sigrún is my sister",
+   "Einar anasimamia nyumba")
 - relationship_change: a connection ended or changed
-  ("Tomás no longer supervises", "we sold the car",
+  ("Gunnar no longer supervises", "we sold the car",
    "dada yangu amehama")
 - graph_query: they ask who is connected, how they are
   connected, for a family tree, or who they sent
@@ -95,32 +95,32 @@ If unsure, none.
 alternatives has at most 2 other readings.
 
 Examples:
-'Here is the receipt for the Coimbra land purchase' + file
+'Here is the receipt for the Akureyri land purchase' + file
 → intent: intake_file, confidence: 0.95
 
-'How much have I spent in Portugal this year?'
+'How much have I spent in Iceland this year?'
 → intent: question, confidence: 0.92
 
-'Tomás Ferreira supervises all my Coimbra projects'
+'Gunnar Magnusson supervises all my Akureyri projects'
 → intent: relationship_add, confidence: 0.9
 
-'Inês ni dada yangu'
+'Sigrún ni dada yangu'
 → intent: relationship_add, confidence: 0.9
 
-'My father Rafael Quispe died in 1999 and my mother lives in Cusco. My brothers are Diego and Mateo.'
+'My father Einar Arason died in 1999 and my mother lives in Ísafjörður. My brothers are Kári and Leifur.'
 → intent: relationship_add, confidence: 0.93
    Dates and places in a family introduction are facts about those people, not a new event.
 
-'Tomás no longer supervises the Coimbra house'
+'Gunnar no longer supervises the Akureyri house'
 → intent: relationship_change, confidence: 0.88
 
-'Who is connected to the Coimbra house?'
+'Who is connected to the Akureyri house?'
 → intent: graph_query, confidence: 0.9
 
-'How am I connected to Rafael?'
+'How am I connected to Einar?'
 → intent: graph_query, confidence: 0.9
 
-'Nani ameunganishwa na Coimbra?'
+'Nani ameunganishwa na Akureyri?'
 → intent: graph_query, confidence: 0.86
 
 'Fix the dates on my events'
@@ -133,7 +133,7 @@ Examples:
 'I felt really proud of my children today'
 → intent: journal, confidence: 0.90
 
-'The Coimbra roof repair was 4,200 EUR not 3,900'
+'The Akureyri roof repair was 4,200 EUR not 3,900'
 → intent: correction, confidence: 0.85
 
 conversationHistory shows DIRA just described
@@ -767,7 +767,7 @@ function stripThink(text) {
 const FACT_CATEGORIES = new Set(["person", "date", "place", "event", "financial", "relationship"]);
 const FACT_PROMPT = `Extract any specific biographical or life facts from this message. Return JSON:
 { "facts": [{ "fact": string, "category": "person" | "date" | "place" | "event" | "financial" | "relationship", "suggestedTitle": string, "confidence": 0-1 }] }
-A relationship fact uses suggestedTitle like "Link: Inês — sister of you".
+A relationship fact uses suggestedTitle like "Link: Sigrún — sister of you".
 Only return facts that are specific and saveable.
 Names, dates, and places are facts.
 Opinions and questions are not facts.

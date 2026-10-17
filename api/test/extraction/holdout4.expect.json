@@ -1,0 +1,1331 @@
+{
+  "set": "holdout4",
+  "claims": [
+    {
+      "seed": 0,
+      "domain": "time",
+      "subject": "me",
+      "predicate": "born",
+      "value": "1984-03-14"
+    },
+    {
+      "seed": 0,
+      "domain": "time",
+      "subject": "me",
+      "predicate": "lives_in",
+      "object": "Juiz de Fora",
+      "until": "2008"
+    },
+    {
+      "seed": 0,
+      "domain": "time",
+      "subject": "me",
+      "predicate": "lives_in",
+      "object": "Belo Horizonte",
+      "date": "2008"
+    },
+    {
+      "seed": 1,
+      "domain": "people",
+      "subject": "Marta Ferreira",
+      "predicate": "parent_of",
+      "object": "me"
+    },
+    {
+      "seed": 1,
+      "domain": "time",
+      "subject": "Marta Ferreira",
+      "predicate": "lives_in",
+      "object": "Juiz de Fora"
+    },
+    {
+      "seed": 1,
+      "domain": "people",
+      "subject": "Antônio Campos",
+      "predicate": "parent_of",
+      "object": "me"
+    },
+    {
+      "seed": 1,
+      "domain": "time",
+      "subject": "Antônio Campos",
+      "predicate": "died",
+      "value": "2019-11-08"
+    },
+    {
+      "seed": 2,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "spouse_of",
+      "object": "Ricardo Almeida",
+      "date": "2008",
+      "until": "2017"
+    },
+    {
+      "seed": 2,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "parent_of",
+      "object": "Beatriz"
+    },
+    {
+      "seed": 2,
+      "domain": "people",
+      "subject": "Ricardo Almeida",
+      "predicate": "parent_of",
+      "object": "Beatriz"
+    },
+    {
+      "seed": 2,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "parent_of",
+      "object": "Davi"
+    },
+    {
+      "seed": 2,
+      "domain": "people",
+      "subject": "Ricardo Almeida",
+      "predicate": "parent_of",
+      "object": "Davi"
+    },
+    {
+      "seed": 2,
+      "domain": "time",
+      "subject": "Beatriz",
+      "predicate": "born",
+      "value": "2010-07-05"
+    },
+    {
+      "seed": 2,
+      "domain": "time",
+      "subject": "Davi",
+      "predicate": "born",
+      "value": "2013-12-19"
+    },
+    {
+      "seed": 3,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "spouse_of",
+      "object": "Fernando Siqueira",
+      "date": "2021-04-22"
+    },
+    {
+      "seed": 3,
+      "domain": "work",
+      "subject": "Fernando Siqueira",
+      "predicate": "works_at",
+      "object": "Hospital Santa Clara",
+      "label": "anaesthetist"
+    },
+    {
+      "seed": 4,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "sibling_of",
+      "object": "Gustavo"
+    },
+    {
+      "seed": 4,
+      "domain": "people",
+      "subject": "Gustavo",
+      "predicate": "spouse_of",
+      "object": "Patrícia"
+    },
+    {
+      "seed": 4,
+      "domain": "people",
+      "subject": "Gustavo",
+      "predicate": "parent_of",
+      "object": "Helena"
+    },
+    {
+      "seed": 4,
+      "domain": "people",
+      "subject": "Patrícia",
+      "predicate": "parent_of",
+      "object": "Helena"
+    },
+    {
+      "seed": 4,
+      "domain": "time",
+      "subject": "Helena",
+      "predicate": "born",
+      "value": "2026-02-03"
+    },
+    {
+      "seed": 4,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "relative_of",
+      "object": "Helena",
+      "label": "godmother"
+    },
+    {
+      "seed": 5,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "sibling_of",
+      "object": "Larissa",
+      "label": "half"
+    },
+    {
+      "seed": 5,
+      "domain": "people",
+      "subject": "Antônio Campos",
+      "predicate": "parent_of",
+      "object": "Larissa"
+    },
+    {
+      "seed": 5,
+      "domain": "time",
+      "subject": "Larissa",
+      "predicate": "lives_in",
+      "object": "Campinas"
+    },
+    {
+      "seed": 5,
+      "domain": "time",
+      "subject": "Larissa's wedding",
+      "predicate": "scheduled",
+      "value": "2026-11-14"
+    },
+    {
+      "seed": 5,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "plans",
+      "value": "give Larissa R$ 5.000 towards the wedding",
+      "amount": 5000,
+      "currency": "BRL"
+    },
+    {
+      "seed": 6,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "relative_of",
+      "object": "Rafael Ferreira",
+      "label": "primo (cousin)"
+    },
+    {
+      "seed": 6,
+      "domain": "time",
+      "subject": "Rafael Ferreira",
+      "predicate": "lives_in",
+      "object": "Lisboa"
+    },
+    {
+      "seed": 6,
+      "domain": "people",
+      "subject": "Rafael Ferreira",
+      "predicate": "spouse_of",
+      "object": "Inês"
+    },
+    {
+      "seed": 7,
+      "domain": "people",
+      "subject": "Lúcia Siqueira",
+      "predicate": "parent_of",
+      "object": "Fernando Siqueira"
+    },
+    {
+      "seed": 7,
+      "domain": "time",
+      "subject": "Lúcia Siqueira",
+      "predicate": "born",
+      "value": "1956-03-02"
+    },
+    {
+      "seed": 8,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "neighbour_of",
+      "object": "Joaquim Moreira"
+    },
+    {
+      "seed": 8,
+      "domain": "people",
+      "subject": "Rosa Pereira",
+      "predicate": "related_to",
+      "object": "me",
+      "label": "ama de leite (wet nurse)"
+    },
+    {
+      "seed": 9,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "owns",
+      "object": "Dad's apartment on Rua Halfeld",
+      "label": "inherited (co-owned, half each)",
+      "date": "2020",
+      "until": "2025-08-12"
+    },
+    {
+      "seed": 9,
+      "domain": "assets",
+      "subject": "Gustavo",
+      "predicate": "owns",
+      "object": "Dad's apartment on Rua Halfeld",
+      "label": "inherited (co-owned, half each)",
+      "date": "2020",
+      "until": "2025-08-12"
+    },
+    {
+      "seed": 9,
+      "domain": "assets",
+      "subject": "Dad's apartment on Rua Halfeld",
+      "predicate": "located_in",
+      "object": "Juiz de Fora"
+    },
+    {
+      "seed": 9,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "sold",
+      "object": "Dad's apartment on Rua Halfeld",
+      "amount": 340000,
+      "date": "2025-08-12",
+      "context": "Cristina Lopes",
+      "currency": "BRL"
+    },
+    {
+      "seed": 9,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "received_from",
+      "object": "Cristina Lopes",
+      "amount": 170000,
+      "date": "2025-08-12",
+      "context": "Dad's apartment on Rua Halfeld",
+      "currency": "BRL"
+    },
+    {
+      "seed": 9,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "decided",
+      "value": "split the sale proceeds equally with Gustavo",
+      "date": "2025-08-12",
+      "context": "Dad's apartment on Rua Halfeld"
+    },
+    {
+      "seed": 10,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "works_at",
+      "object": "Banco Horizonte",
+      "label": "credit manager (started as trainee analyst)",
+      "date": "2009",
+      "until": "2021",
+      "status": "superseded"
+    },
+    {
+      "seed": 11,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "works_at",
+      "object": "Grupo Ipê Logística",
+      "label": "financial controller",
+      "date": "2022-05"
+    },
+    {
+      "seed": 11,
+      "domain": "work",
+      "subject": "Marcos Tavares",
+      "predicate": "manages",
+      "object": "me"
+    },
+    {
+      "seed": 11,
+      "domain": "work",
+      "subject": "Marcos Tavares",
+      "predicate": "works_at",
+      "object": "Grupo Ipê Logística",
+      "label": "CFO"
+    },
+    {
+      "seed": 11,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "colleague_of",
+      "object": "Aline Barbosa"
+    },
+    {
+      "seed": 11,
+      "domain": "work",
+      "subject": "Aline Barbosa",
+      "predicate": "works_at",
+      "object": "Grupo Ipê Logística",
+      "label": "treasury"
+    },
+    {
+      "seed": 11,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "earns",
+      "object": "Grupo Ipê Logística",
+      "amount": 18500,
+      "label": "per month",
+      "currency": "BRL"
+    },
+    {
+      "seed": 11,
+      "domain": "work",
+      "subject": "Laticínios Boa Vista",
+      "predicate": "client_of",
+      "object": "Grupo Ipê Logística"
+    },
+    {
+      "seed": 11,
+      "domain": "projects",
+      "subject": "Laticínios Boa Vista contract renewal",
+      "predicate": "due_on",
+      "value": "2026-11-15"
+    },
+    {
+      "seed": 12,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "founded",
+      "object": "Campos & Rocha Consultoria",
+      "date": "2023-09"
+    },
+    {
+      "seed": 12,
+      "domain": "work",
+      "subject": "Juliana Rocha",
+      "predicate": "founded",
+      "object": "Campos & Rocha Consultoria",
+      "date": "2023-09"
+    },
+    {
+      "seed": 12,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "business_partner_of",
+      "object": "Juliana Rocha"
+    },
+    {
+      "seed": 12,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "owns_share_of",
+      "object": "Campos & Rocha Consultoria",
+      "value": "60"
+    },
+    {
+      "seed": 12,
+      "domain": "work",
+      "subject": "Juliana Rocha",
+      "predicate": "owns_share_of",
+      "object": "Campos & Rocha Consultoria",
+      "value": "40"
+    },
+    {
+      "seed": 12,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "director_of",
+      "object": "Campos & Rocha Consultoria",
+      "label": "sócia-administradora (managing partner)"
+    },
+    {
+      "seed": 12,
+      "domain": "people",
+      "subject": "me",
+      "predicate": "friend_of",
+      "object": "Juliana Rocha"
+    },
+    {
+      "seed": 12,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "studied_at",
+      "object": "UFMG",
+      "label": "Accounting",
+      "date": "2002",
+      "until": "2006"
+    },
+    {
+      "seed": 12,
+      "domain": "work",
+      "subject": "Juliana Rocha",
+      "predicate": "studied_at",
+      "object": "UFMG",
+      "label": "Accounting",
+      "date": "2002",
+      "until": "2006"
+    },
+    {
+      "seed": 13,
+      "domain": "work",
+      "subject": "Padaria Pão de Minas",
+      "predicate": "client_of",
+      "object": "Campos & Rocha Consultoria"
+    },
+    {
+      "seed": 13,
+      "domain": "money",
+      "subject": "Campos & Rocha Consultoria",
+      "predicate": "earns",
+      "object": "Padaria Pão de Minas",
+      "amount": 4800,
+      "label": "per month",
+      "currency": "BRL"
+    },
+    {
+      "seed": 13,
+      "domain": "work",
+      "subject": "Wesley Pinto",
+      "predicate": "contractor_for",
+      "object": "Campos & Rocha Consultoria",
+      "label": "bookkeeping"
+    },
+    {
+      "seed": 13,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Wesley Pinto",
+      "amount": 1200,
+      "date": "2026-08",
+      "context": "Campos & Rocha Consultoria",
+      "currency": "BRL"
+    },
+    {
+      "seed": 13,
+      "domain": "plans",
+      "subject": "Campos & Rocha Consultoria",
+      "predicate": "plans",
+      "value": "take on two more clients",
+      "date": "2027"
+    },
+    {
+      "seed": 14,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "member_of",
+      "object": "Paróquia São José",
+      "label": "choir"
+    },
+    {
+      "seed": 14,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "member_of",
+      "object": "caixinha at work"
+    },
+    {
+      "seed": 14,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "contributed_to",
+      "object": "caixinha at work",
+      "amount": 1000,
+      "label": "per month",
+      "currency": "BRL"
+    },
+    {
+      "seed": 14,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "received_from",
+      "object": "caixinha at work",
+      "amount": 10000,
+      "date": "2026-03",
+      "currency": "BRL"
+    },
+    {
+      "seed": 15,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "bought",
+      "object": "Lagoa Santa lot",
+      "amount": 285000,
+      "date": "2024-02-10",
+      "context": "Paulo Mendes",
+      "status": "superseded",
+      "currency": "BRL"
+    },
+    {
+      "seed": 15,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "owns",
+      "object": "Lagoa Santa lot",
+      "label": "co-owned",
+      "date": "2024-02-10"
+    },
+    {
+      "seed": 15,
+      "domain": "assets",
+      "subject": "Fernando Siqueira",
+      "predicate": "owns",
+      "object": "Lagoa Santa lot",
+      "label": "co-owned",
+      "date": "2024-02-10"
+    },
+    {
+      "seed": 15,
+      "domain": "assets",
+      "subject": "Lagoa Santa lot",
+      "predicate": "identifier",
+      "value": "lot 14, block C",
+      "label": "plot number"
+    },
+    {
+      "seed": 15,
+      "domain": "assets",
+      "subject": "Lagoa Santa lot",
+      "predicate": "identifier",
+      "value": "48.213",
+      "label": "matrícula (title number)"
+    },
+    {
+      "seed": 15,
+      "domain": "assets",
+      "subject": "Lagoa Santa lot",
+      "predicate": "located_in",
+      "object": "Lagoa Santa"
+    },
+    {
+      "seed": 15,
+      "domain": "assets",
+      "subject": "Lagoa Santa lot",
+      "predicate": "located_in",
+      "object": "Condomínio Recanto das Garças"
+    },
+    {
+      "seed": 16,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "bought",
+      "object": "Lagoa Santa lot",
+      "amount": 278000,
+      "date": "2024-02-10",
+      "context": "Paulo Mendes",
+      "currency": "BRL"
+    },
+    {
+      "seed": 17,
+      "domain": "work",
+      "subject": "Camila Duarte",
+      "predicate": "contractor_for",
+      "object": "Lagoa Santa house",
+      "label": "architect"
+    },
+    {
+      "seed": 17,
+      "domain": "projects",
+      "subject": "Camila Duarte",
+      "predicate": "works_on",
+      "object": "Lagoa Santa house",
+      "label": "architect"
+    },
+    {
+      "seed": 17,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Camila Duarte",
+      "amount": 9000,
+      "date": "2024-03-20",
+      "context": "Lagoa Santa house",
+      "currency": "BRL"
+    },
+    {
+      "seed": 17,
+      "domain": "money",
+      "subject": "Lagoa Santa house",
+      "predicate": "costs",
+      "value": "architect fee (Camila Duarte)",
+      "amount": 18000,
+      "label": "architect fee",
+      "currency": "BRL"
+    },
+    {
+      "seed": 17,
+      "domain": "money",
+      "subject": "Lagoa Santa house",
+      "predicate": "costs",
+      "value": "quote (Edson Lima, full build)",
+      "amount": 420000,
+      "label": "quote",
+      "currency": "BRL"
+    },
+    {
+      "seed": 17,
+      "domain": "money",
+      "subject": "Lagoa Santa house",
+      "predicate": "costs",
+      "value": "budget",
+      "amount": 450000,
+      "label": "budget",
+      "currency": "BRL"
+    },
+    {
+      "seed": 18,
+      "domain": "projects",
+      "subject": "Lagoa Santa house",
+      "predicate": "status",
+      "value": "active",
+      "date": "2024-08-15"
+    },
+    {
+      "seed": 18,
+      "domain": "work",
+      "subject": "Edson Lima",
+      "predicate": "contractor_for",
+      "object": "Lagoa Santa house",
+      "label": "mestre de obras"
+    },
+    {
+      "seed": 18,
+      "domain": "projects",
+      "subject": "Edson Lima",
+      "predicate": "works_on",
+      "object": "Lagoa Santa house",
+      "label": "mestre de obras"
+    },
+    {
+      "seed": 18,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Edson Lima",
+      "amount": 35000,
+      "date": "2024-08-15",
+      "context": "Lagoa Santa house",
+      "currency": "BRL"
+    },
+    {
+      "seed": 19,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Camila Duarte",
+      "amount": 9000,
+      "date": "2024-09-05",
+      "context": "Lagoa Santa house",
+      "currency": "BRL"
+    },
+    {
+      "seed": 19,
+      "domain": "projects",
+      "subject": "Lagoa Santa house",
+      "predicate": "milestone",
+      "value": "foundation finished",
+      "label": "foundation finished",
+      "date": "2024-09"
+    },
+    {
+      "seed": 20,
+      "domain": "money",
+      "subject": "Marta Ferreira",
+      "predicate": "contributed_to",
+      "object": "Lagoa Santa house",
+      "amount": 20000,
+      "currency": "BRL"
+    },
+    {
+      "seed": 20,
+      "domain": "money",
+      "subject": "Fernando Siqueira",
+      "predicate": "contributed_to",
+      "object": "Lagoa Santa house",
+      "amount": 150000,
+      "currency": "BRL"
+    },
+    {
+      "seed": 20,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Edson Lima",
+      "amount": 40000,
+      "date": "2024-12-10",
+      "context": "Lagoa Santa house",
+      "currency": "BRL"
+    },
+    {
+      "seed": 20,
+      "domain": "projects",
+      "subject": "Lagoa Santa house",
+      "predicate": "milestone",
+      "value": "laje (concrete slab) poured",
+      "label": "slab poured",
+      "date": "2025-03"
+    },
+    {
+      "seed": 21,
+      "domain": "projects",
+      "subject": "Edson Lima",
+      "predicate": "works_on",
+      "object": "Lagoa Santa house",
+      "label": "mestre de obras (quit)",
+      "until": "2025-05"
+    },
+    {
+      "seed": 21,
+      "domain": "projects",
+      "subject": "Lagoa Santa house",
+      "predicate": "status",
+      "value": "paused",
+      "date": "2025-05"
+    },
+    {
+      "seed": 21,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "decided",
+      "value": "not to take Edson Lima to court",
+      "context": "Lagoa Santa house"
+    },
+    {
+      "seed": 22,
+      "domain": "work",
+      "subject": "Sandro Ribeiro",
+      "predicate": "contractor_for",
+      "object": "Lagoa Santa house",
+      "label": "builder"
+    },
+    {
+      "seed": 22,
+      "domain": "projects",
+      "subject": "Sandro Ribeiro",
+      "predicate": "works_on",
+      "object": "Lagoa Santa house",
+      "label": "builder"
+    },
+    {
+      "seed": 22,
+      "domain": "work",
+      "subject": "Sandro Ribeiro",
+      "predicate": "works_at",
+      "object": "Ribeiro Construções"
+    },
+    {
+      "seed": 22,
+      "domain": "money",
+      "subject": "Lagoa Santa house",
+      "predicate": "costs",
+      "value": "quote (Sandro Ribeiro, to finish)",
+      "amount": 310000,
+      "label": "quote",
+      "currency": "BRL"
+    },
+    {
+      "seed": 22,
+      "domain": "projects",
+      "subject": "Lagoa Santa house",
+      "predicate": "status",
+      "value": "active",
+      "date": "2025-06-16"
+    },
+    {
+      "seed": 22,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Sandro Ribeiro",
+      "amount": 60000,
+      "date": "2025-06-30",
+      "context": "Lagoa Santa house",
+      "currency": "BRL"
+    },
+    {
+      "seed": 23,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Sandro Ribeiro",
+      "amount": 55000,
+      "date": "2025-11-03",
+      "context": "Lagoa Santa house",
+      "label": "2ª etapa (estrutura do telhado)",
+      "currency": "BRL"
+    },
+    {
+      "seed": 24,
+      "domain": "projects",
+      "subject": "Lagoa Santa house",
+      "predicate": "milestone",
+      "value": "roof finished",
+      "label": "roof finished",
+      "date": "2026-02"
+    },
+    {
+      "seed": 24,
+      "domain": "work",
+      "subject": "Jorge Nunes",
+      "predicate": "contractor_for",
+      "object": "Lagoa Santa house",
+      "label": "electrician"
+    },
+    {
+      "seed": 24,
+      "domain": "projects",
+      "subject": "Jorge Nunes",
+      "predicate": "works_on",
+      "object": "Lagoa Santa house",
+      "label": "electrics"
+    },
+    {
+      "seed": 24,
+      "domain": "money",
+      "subject": "Lagoa Santa house",
+      "predicate": "costs",
+      "value": "electrics (Jorge Nunes)",
+      "amount": 22000,
+      "label": "quote",
+      "currency": "BRL"
+    },
+    {
+      "seed": 24,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Jorge Nunes",
+      "amount": 11000,
+      "date": "2026-03-12",
+      "context": "Lagoa Santa house",
+      "currency": "BRL"
+    },
+    {
+      "seed": 24,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "decided",
+      "value": "put in solar panels instead of the pool",
+      "context": "Lagoa Santa house"
+    },
+    {
+      "seed": 25,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Sandro Ribeiro",
+      "amount": 70000,
+      "date": "2026-08-05",
+      "context": "Lagoa Santa house",
+      "currency": "BRL"
+    },
+    {
+      "seed": 25,
+      "domain": "projects",
+      "subject": "Lagoa Santa house",
+      "predicate": "due_on",
+      "value": "2026-11-30"
+    },
+    {
+      "seed": 25,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "plans",
+      "value": "move to Lagoa Santa",
+      "date": "2027-01"
+    },
+    {
+      "seed": 25,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "decided",
+      "value": "Mum will come and live with us in Lagoa Santa",
+      "context": "Lagoa Santa house"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "bought",
+      "object": "Fiat Toro",
+      "amount": 128500,
+      "date": "2022-10",
+      "currency": "BRL"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "owns",
+      "object": "Fiat Toro",
+      "label": "bought",
+      "date": "2022-10"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "Fiat Toro",
+      "predicate": "identifier",
+      "value": "RTA-4B27",
+      "label": "registration"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "Fiat Toro insurance policy",
+      "predicate": "issued_by",
+      "object": "Seguradora Atlântica"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "Fiat Toro insurance policy",
+      "predicate": "identifier",
+      "value": "77-0045123",
+      "label": "policy number"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "Fiat Toro insurance policy",
+      "predicate": "renews_on",
+      "value": "2027-03-15"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "owns",
+      "object": "Honda Fit",
+      "until": "2026-06"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "sold",
+      "object": "Honda Fit",
+      "amount": 42000,
+      "date": "2026-06",
+      "context": "Joaquim Moreira",
+      "currency": "BRL"
+    },
+    {
+      "seed": 26,
+      "domain": "assets",
+      "subject": "Honda Fit",
+      "predicate": "identifier",
+      "value": "HFX-2190",
+      "label": "registration"
+    },
+    {
+      "seed": 26,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "intends",
+      "value": "swap the Fiat Toro for an electric car",
+      "date": "2027"
+    },
+    {
+      "seed": 27,
+      "domain": "assets",
+      "subject": "passport",
+      "predicate": "expires_on",
+      "value": "2027-01-12"
+    },
+    {
+      "seed": 27,
+      "domain": "assets",
+      "subject": "driver's licence (CNH)",
+      "predicate": "expires_on",
+      "value": "2026-09-03"
+    },
+    {
+      "seed": 27,
+      "domain": "time",
+      "subject": "CNH renewal appointment at Detran",
+      "predicate": "scheduled",
+      "value": "2026-10-22"
+    },
+    {
+      "seed": 28,
+      "domain": "money",
+      "subject": "Gustavo",
+      "predicate": "owes",
+      "object": "me",
+      "amount": 15000,
+      "date": "2025-02",
+      "until": "2026-04",
+      "currency": "BRL"
+    },
+    {
+      "seed": 28,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "received_from",
+      "object": "Gustavo",
+      "amount": 15000,
+      "date": "2026-04",
+      "currency": "BRL"
+    },
+    {
+      "seed": 28,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "owes",
+      "object": "Juliana Rocha",
+      "amount": 3000,
+      "context": "Campos & Rocha Consultoria",
+      "currency": "BRL"
+    },
+    {
+      "seed": 29,
+      "domain": "time",
+      "subject": "Bia's festa de 15 anos",
+      "predicate": "happened",
+      "value": "2025-07-05",
+      "context": "Salão Primavera"
+    },
+    {
+      "seed": 29,
+      "domain": "projects",
+      "subject": "Bia's festa de 15 anos",
+      "predicate": "status",
+      "value": "done",
+      "date": "2025-07-05"
+    },
+    {
+      "seed": 29,
+      "domain": "money",
+      "subject": "Bia's festa de 15 anos",
+      "predicate": "costs",
+      "value": "budget",
+      "amount": 25000,
+      "label": "budget",
+      "currency": "BRL"
+    },
+    {
+      "seed": 29,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Buffet Sabor & Arte",
+      "amount": 12000,
+      "context": "Bia's festa de 15 anos",
+      "currency": "BRL"
+    },
+    {
+      "seed": 29,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "DJ Léo",
+      "amount": 2500,
+      "context": "Bia's festa de 15 anos",
+      "currency": "BRL"
+    },
+    {
+      "seed": 29,
+      "domain": "work",
+      "subject": "Buffet Sabor & Arte",
+      "predicate": "contractor_for",
+      "object": "Bia's festa de 15 anos",
+      "label": "buffet"
+    },
+    {
+      "seed": 29,
+      "domain": "work",
+      "subject": "DJ Léo",
+      "predicate": "contractor_for",
+      "object": "Bia's festa de 15 anos",
+      "label": "DJ"
+    },
+    {
+      "seed": 29,
+      "domain": "money",
+      "subject": "Ricardo Almeida",
+      "predicate": "contributed_to",
+      "object": "Bia's festa de 15 anos",
+      "amount": 10000,
+      "currency": "BRL"
+    },
+    {
+      "seed": 30,
+      "domain": "time",
+      "subject": "me",
+      "predicate": "visited",
+      "object": "Salvador",
+      "date": "2026-01-02",
+      "until": "2026-01-09"
+    },
+    {
+      "seed": 31,
+      "domain": "time",
+      "subject": "Lisbon trip",
+      "predicate": "scheduled",
+      "value": "2026-12-10",
+      "until": "2026-12-24"
+    },
+    {
+      "seed": 31,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "plans",
+      "value": "visit Rafael and Inês in Lisbon",
+      "date": "2026-12-10"
+    },
+    {
+      "seed": 32,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "intends",
+      "value": "open a small pousada in Tiradentes"
+    },
+    {
+      "seed": 32,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "intends",
+      "value": "Bia does an exchange year in Portugal"
+    },
+    {
+      "seed": 32,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "plans",
+      "value": "start an MBA at Fundação Dom Cabral",
+      "date": "2027-03"
+    },
+    {
+      "seed": 32,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "plans",
+      "value": "pay Juliana back the R$ 3.000 before Christmas",
+      "amount": 3000,
+      "currency": "BRL"
+    },
+    {
+      "seed": 33,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "decided",
+      "value": "hire a junior analyst for the consultoria from January 2027",
+      "context": "Campos & Rocha Consultoria"
+    },
+    {
+      "seed": 33,
+      "domain": "plans",
+      "subject": "me",
+      "predicate": "decided",
+      "value": "Davi stays at Colégio Santo Agostinho for high school",
+      "context": "Davi"
+    },
+    {
+      "seed": 33,
+      "domain": "work",
+      "subject": "Davi",
+      "predicate": "studied_at",
+      "object": "Colégio Santo Agostinho"
+    },
+    {
+      "seed": 34,
+      "domain": "time",
+      "subject": "Davi's orthodontist appointment",
+      "predicate": "scheduled",
+      "value": "2026-10-28"
+    },
+    {
+      "seed": 34,
+      "domain": "people",
+      "subject": "Paula Menezes",
+      "predicate": "related_to",
+      "object": "Davi",
+      "label": "orthodontist"
+    },
+    {
+      "seed": 34,
+      "domain": "projects",
+      "subject": "IPTU on the Lagoa Santa lot",
+      "predicate": "due_on",
+      "value": "2026-09-30"
+    },
+    {
+      "seed": 34,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Prefeitura de Lagoa Santa",
+      "amount": 1840,
+      "date": "2026-09-25",
+      "context": "IPTU on the Lagoa Santa lot",
+      "currency": "BRL"
+    },
+    {
+      "seed": 35,
+      "domain": "people",
+      "subject": "Fábio Lima",
+      "predicate": "related_to",
+      "object": "Gustavo",
+      "label": "donated a kidney to",
+      "date": "2018"
+    },
+    {
+      "seed": 35,
+      "domain": "people",
+      "subject": "Edson Lima",
+      "predicate": "relative_of",
+      "object": "Fábio Lima",
+      "label": "cousin"
+    },
+    {
+      "seed": 35,
+      "domain": "people",
+      "subject": "Zilda",
+      "predicate": "parent_of",
+      "object": "Marta Ferreira"
+    },
+    {
+      "seed": 35,
+      "domain": "time",
+      "subject": "Zilda",
+      "predicate": "died",
+      "value": "2015-06-21"
+    },
+    {
+      "seed": 36,
+      "domain": "assets",
+      "subject": "me",
+      "predicate": "rents",
+      "object": "flat in Santa Tereza",
+      "date": "2021-03"
+    },
+    {
+      "seed": 36,
+      "domain": "assets",
+      "subject": "flat in Santa Tereza",
+      "predicate": "located_in",
+      "object": "Santa Tereza"
+    },
+    {
+      "seed": 36,
+      "domain": "people",
+      "subject": "Joaquim Moreira",
+      "predicate": "parent_of",
+      "object": "Renata Moreira"
+    },
+    {
+      "seed": 36,
+      "domain": "money",
+      "subject": "me",
+      "predicate": "paid",
+      "object": "Renata Moreira",
+      "amount": 3200,
+      "label": "per month (rent)",
+      "context": "flat in Santa Tereza",
+      "currency": "BRL"
+    },
+    {
+      "seed": 37,
+      "domain": "work",
+      "subject": "me",
+      "predicate": "works_at",
+      "object": "Banco Horizonte",
+      "label": "credit manager (started as trainee analyst)",
+      "date": "2009",
+      "until": "2022-03"
+    }
+  ]
+}

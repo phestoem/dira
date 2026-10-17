@@ -49,22 +49,22 @@ Return JSON:
 }
 
 Examples:
-'Change Coimbre to Coimbra in the farm records' →
+'Change Coimbre to Akureyri in the farm records' →
   intentType: correction
-  correction: { findText: 'Coimbre', replaceText: 'Coimbra',
+  correction: { findText: 'Coimbre', replaceText: 'Akureyri',
                 scope: 'farm records', recordType: 'all' }
-'Which projects completed last year in Cusco' →
+'Which projects completed last year in Ísafjörður' →
   intentType: query
   query: { entities: ['projects'],
-           filters: { location: 'Cusco',
+           filters: { location: 'Ísafjörður',
                      timeframe: 'last year',
                      status: 'completed' },
            aggregation: 'list' }
-'When was I in Cusco for the orchard purchase,
- include the Cusco repair cost' →
+'When was I in Ísafjörður for the orchard purchase,
+ include the Ísafjörður repair cost' →
   intentType: query
-  query: { entities: ['orchard purchase', 'Cusco repair'],
-           filters: { location: 'Cusco' },
+  query: { entities: ['orchard purchase', 'Ísafjörður repair'],
+           filters: { location: 'Ísafjörður' },
            aggregation: 'list',
            includeRelated: ['costs', 'dates'] }
 'Mark Valparaíso cottage garden as complete' →

@@ -4,7 +4,7 @@ import { categoryOf, inverseOf, normalizeType, typeMeta } from "./relationshipTy
 
 // Self pronouns are matched on their own (selfMatchKind), never stored or compared as aliases.
 const ROLE_WORDS = ["the individual", "the user", "the owner", "the occupier", "the buyer"];
-// "I married Ana on …" states a spouse without a kinship word; it supports spouse_of and nothing else.
+// "I married Ásta on …" states a spouse without a kinship word; it supports spouse_of and nothing else.
 const MARRIAGE_WORD = /\b(married|marriage|marry|wed|wedding|ndoa|alioa|aliolewa|tulioana)\b/i;
 // Any role word the vocabulary knows ("stepfather", "sister-in-law", "bibi"), or a birth-order word ("our youngest").
 const KINSHIP_WORD = new RegExp(`\\b(${KIN_PATTERN}|firstborn|first-born|eldest|oldest|youngest|last-born|twins)\\b`, "i");

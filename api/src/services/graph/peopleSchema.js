@@ -5,7 +5,7 @@ import { genderOf, kinOf, SELF_PRONOUNS, THIRD_PERSON } from "./kinship.js";
 
 // PEOPLE_ENGINE=tools extraction: the model returns typed people, relations and dates against a JSON schema. Code
 // checks invariants only; every name, date and evidence quote must appear in the source text as written. Working
-// out who "she", "we" or "Ana's husband" is belongs to the model, and is judged by its verbatim evidence.
+// out who "she", "we" or "Ásta's husband" is belongs to the model, and is judged by its verbatim evidence.
 export const RELATIONS = [
   "parent", "child", "sibling", "half_sibling", "step_parent", "step_child", "step_sibling",
   "spouse", "former_spouse", "partner", "grandparent", "grandchild", "aunt_uncle", "niece_nephew", "cousin",
@@ -103,8 +103,8 @@ export const PEOPLE_SCHEMA_PROMPT = `Extract the people in the text and what it 
 - places: where a person lives now.
 - evidence: an exact, contiguous quote from the text that states the fact.
 Work out who "she", "he", "they", "we", "our" and "X's wife" refer to; when the text names someone only by role, use their name from the known people. Use names exactly as written. State nothing the text does not say. Any language.
-Example — text: "Elena, my mother, still lives in Cusco. She married my stepfather Bruno on 2 May 1998." →
-people: Elena (female), Bruno (male); relations: Elena parent of narrator ("Elena, my mother"), Bruno step_parent of narrator ("my stepfather Bruno"), Bruno spouse of Elena ("She married my stepfather Bruno"); dates: marriage of Bruno with Elena, 1998-05-02, as_written "2 May 1998"; places: Elena, Cusco.`;
+Example — text: "Hekla, my mother, still lives in Ísafjörður. She married my stepfather Bjarki on 2 May 1998." →
+people: Hekla (female), Bjarki (male); relations: Hekla parent of narrator ("Hekla, my mother"), Bjarki step_parent of narrator ("my stepfather Bjarki"), Bjarki spouse of Hekla ("She married my stepfather Bjarki"); dates: marriage of Bjarki with Hekla, 1998-05-02, as_written "2 May 1998"; places: Hekla, Ísafjörður.`;
 
 const SELF_WORDS = new Set(["narrator", "self", "the narrator", "the user", "the speaker", "the individual", "you"]);
 
@@ -124,7 +124,7 @@ export function validateSchemaFacts(raw, { text: source = "", selfName = "", sel
   // A fact's evidence must name the person. The one exception is a person already known, whom the model may
   // recognise by role or pronoun ("we got married", "my late dad"); its evidence still has to be in the text.
   const nameOk = (name, evidence) => (contains(source, name) && contains(evidence, name)) || (knownBy(name) && contains(source, evidence));
-  // The other side of a relation ("his wife", "Ana's son") may be referred to; it must be written in the text or known.
+  // The other side of a relation ("his wife", "Ásta's son") may be referred to; it must be written in the text or known.
   const otherOk = (name) => contains(source, name) || Boolean(knownBy(name));
   const personProblem = (name) => {
     const key = normalizeName(name);
