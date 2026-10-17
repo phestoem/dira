@@ -28,7 +28,7 @@ test("extraction scoring types stored facts and traces each miss to the stage th
   assert.deepEqual(score.byType.half_sibling, { tp: 1, fp: 0, fn: 0 });
   assert.deepEqual(score.byType["date:born"], { tp: 1, fp: 0, fn: 0 });
   assert.deepEqual(score.byType.child, { tp: 0, fp: 1, fn: 0 });
-  assert.deepEqual(score.lost, { validation: 1, routing: 1, "not-extracted": 1 });
+  assert.deepEqual(score.lost, { "validation:person": 1, routing: 1, "not-extracted:person": 1 });
   assert.deepEqual(score.people, { tp: 1, fp: 1, fn: 2 });
   assert.deepEqual(score.validationDrops, { "name-not-in-text": 1 });
   assert.equal(sameName("Cian", { name: "Cian Byrne" }), true);

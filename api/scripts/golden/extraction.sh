@@ -2,7 +2,8 @@
 # Scores extraction alone: each extractor × model seeds every set 3 times and scores the stored graph against
 # test/extraction/<set>.expect.json. Usage: scripts/golden/extraction.sh [runs]   (default 3)
 # Output: logs/extraction/<extractor>-<model>-<set>-<run>.txt and one line per run in logs/extraction/summary.txt.
-# Hold-out sets run with --score-only and keep only their score and totals lines: never inspect them.
+# Hold-out sets run with --score-only and keep only their score and totals lines: never inspect them, nor their
+# dumps (logs/extraction/dumps/, kept only for re-scoring) or the traces.
 set -uo pipefail
 cd "$(dirname "$0")/../.."
 RUNS=${1:-3}
@@ -19,9 +20,9 @@ for extractor in $EXTRACTORS; do
       for set in synthetic holdout holdout2 holdout3; do
         file="$OUT/$extractor-$model-$set-$run.txt"
         if [ "$set" = synthetic ]; then
-          npm run golden -- --set "$set" --extraction --trace "$TRACE" 2>&1 | grep -v prisma:query > "$file"
+          npm run golden -- --set "$set" --extraction --trace "$TRACE" --dump "$OUT/dumps/$extractor-$model" 2>&1 | grep -v prisma:query > "$file"
         else
-          npm run golden -- --set "$set" --extraction --trace "$TRACE" --score-only 2>&1 | grep -E '^[0-9]+/[0-9]+ facts stored|^extraction:|^golden:' > "$file"
+          npm run golden -- --set "$set" --extraction --trace "$TRACE" --dump "$OUT/dumps/$extractor-$model" --score-only 2>&1 | grep -E '^[0-9]+/[0-9]+ facts stored|^extraction:|^golden:' > "$file"
         fi
         echo "$extractor $model $set run$run: $(grep -E '^[0-9]+/[0-9]+ facts stored|^golden:' "$file" | tail -1)" | tee -a "$OUT/summary.txt"
       done

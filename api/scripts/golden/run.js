@@ -7,14 +7,14 @@
 //                                                    production's (passed in the environment), and the server must
 //                                                    advertise readonly support on /health; nothing is ever reverted there
 // Options: --only wife,parents   --base http://127.0.0.1:4801
-//   npm run golden -- --set holdout3 --extraction --trace <file> [--score-only]
+//   npm run golden -- --set holdout3 --extraction --trace <file> [--dump <dir>] [--score-only]
 //                                                    seed only, then score the stored graph against
 //                                                    test/extraction/<set>.expect.json; <file> is the API's DIRA_EXTRACT_TRACE
 import "dotenv/config";
 import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { existsSync, readFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { precisionRecall, routeOf, scoreExtraction } from "./extraction.js";
 import { CASES, mentionsDate, MOTHER_SENTENCE, motherProblems, offeredLines, SEED_MESSAGES, SELF_NAME } from "./cases.js";
 
@@ -60,6 +60,7 @@ function parseArgs(argv) {
     else if (arg === "--score-only") out.scoreOnly = true;
     else if (arg === "--extraction") out.extraction = true;
     else if (arg === "--trace") out.trace = argv[++index];
+    else if (arg === "--dump") out.dump = argv[++index];
     else throw new Error(`unknown option ${arg}`);
   }
   return out;
@@ -189,6 +190,11 @@ async function extractionReport(userId, set, routes, quiet) {
   const snapshot = { self, entities, edges, byId: new Map(entities.map((entity) => [entity.id, entity])) };
   const traces = existsSync(args.trace) ? readFileSync(args.trace, "utf8").split("\n").filter(Boolean).map((line) => JSON.parse(line)).filter((entry) => entry.userId === userId) : [];
   const score = scoreExtraction({ expect, seeds: set.seeds, routes, snapshot, traces });
+  // --dump <dir> keeps what was scored, so the run can be re-scored without seeding again.
+  if (args.dump) {
+    mkdirSync(args.dump, { recursive: true });
+    writeFileSync(`${args.dump}/${args.set}-${userId}.json`, JSON.stringify({ set: args.set, seeds: set.seeds, routes, self, entities, edges, traces }));
+  }
   if (!quiet) {
     console.log("\n== extraction ==");
     for (const item of score.missed) console.log(`MISS  [${item.stage}]  seed ${item.fact.seed}  ${JSON.stringify(item.fact)}`);

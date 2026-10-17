@@ -54,7 +54,7 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
-- Extraction measurement, started 2026-10-17 ~12:40 UTC in tmux session
+- Extraction measurement, restarted 2026-10-17 17:55 UTC in tmux session
   `extraction`: `api/scripts/golden/extraction.sh 3` = extractors rules
   and schema × models gpt-4o-mini, gpt-4o, gpt-4.1 × synthetic and
   hold-outs 1–3 × 3 runs (72 fixture seedings, expect ~2.5 h). Progress:
@@ -68,7 +68,12 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   (expected facts written 2026-10-17 from seed sentences only; Phesto OK'd
   reading hold-out 1–2 seeds for this). The API must run with
   DIRA_EXTRACT_TRACE=<file>. Each miss gets a stage: routing,
-  no-extraction, not-extracted, validation, kept-not-stored.
+  no-extraction, not-extracted:person|fact, validation:person|fact,
+  kept-not-stored. Each run also dumps what it scored to
+  logs/extraction/dumps/ (for re-scoring; hold-out dumps never read).
+  First attempt (17:47) stopped after 3 runs: its attribution counted a
+  person kept without their relation as kept-not-stored; output in
+  logs/extraction-aborted-1/.
 - New switches: PEOPLE_EXTRACTOR=rules|schema (independent of
   PEOPLE_ENGINE), GRAPH_EXTRACT_MODEL (extraction only).
 

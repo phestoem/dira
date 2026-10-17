@@ -40,16 +40,40 @@ function pairKey(a, rel, b) {
   return [rel, a, b].join("|");
 }
 
-// Who each trace entry mentions, before (raw) and after (kept) validation, for either extractor.
-function tracePeople(entry, stage) {
+// Each trace entry's people as flat facts, before (raw) and after (kept) validation, for either extractor: who,
+// their relation and to whom, and every date stated for them.
+function traceFacts(entry, stage) {
   const value = entry[stage];
-  const names = [];
-  const add = (name) => typeof name === "string" && name.trim() && names.push(name);
-  if (Array.isArray(value)) value.forEach((item) => { add(item?.name); add(item?.relationOf); });
-  else if (value && typeof value === "object") {
-    for (const item of [...(value.people || []), ...(value.relations || []), ...(value.dates || [])]) { add(item?.name); add(item?.person); add(item?.of); }
+  const out = [];
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      if (!item?.name) continue;
+      out.push({ person: item.name, relation: item.relation || null, of: item.relationOf || "narrator", dates: [item.birthDate, item.deathDate, item.marriageDate, item.endDate].filter(Boolean).map(String) });
+    }
+  } else if (value && typeof value === "object") {
+    for (const item of value.people || []) if (item?.name) out.push({ person: item.name, relation: null, of: null, dates: [] });
+    for (const item of value.relations || []) if (item?.person) out.push({ person: item.person, relation: item.relation || null, of: item.of || "narrator", dates: [] });
+    for (const item of value.dates || []) {
+      const dates = [item?.value || item?.date].filter(Boolean).map(String);
+      for (const person of [item?.person, item?.with]) if (person) out.push({ person, relation: null, of: null, dates });
+    }
   }
-  return names;
+  return out;
+}
+
+// Does this stage hold the fact at all (person named, a relation to the right person, or the date)? Whether the
+// relation word was the right one is judged by the stored graph, not here.
+function holds(facts, fact) {
+  const mine = facts.filter((item) => sameName(fact.person, { name: item.person }));
+  if (!mine.length) return { named: false, has: false };
+  if (fact.relation) {
+    const of = fact.of || "narrator";
+    const toOf = (item) => (of === "narrator" ? !item.of || ["narrator", "self"].includes(String(item.of).toLowerCase()) : item.of && sameName(of, { name: item.of }));
+    return { named: true, has: mine.some((item) => item.relation && toOf(item)) };
+  }
+  const kind = DATE_KINDS.find((name) => fact[name]);
+  const wanted = fact[kind];
+  return { named: true, has: mine.some((item) => item.dates.some((date) => date === wanted || date.slice(0, 4) === wanted || date === wanted.slice(0, 4))) };
 }
 
 export function scoreExtraction({ expect, seeds, routes, snapshot, traces }) {
@@ -133,16 +157,18 @@ export function scoreExtraction({ expect, seeds, routes, snapshot, traces }) {
   return { facts: expect.facts.length, byType: tally, people: peopleScore, routing, validationDrops, lost, missed, extra, extraPeople: people.filter((entity) => !usedIds.has(entity.id)).map((entity) => entity.name) };
 }
 
-// The first stage that lost a fact: the seed never saved, no extraction ran on it, the model never named the person,
-// validation dropped them, or they were kept but not stored as expected.
+// The first stage that lost a fact: the seed never saved, no extraction ran on it, the model never stated it (or
+// never named the person), validation removed it, or it survived validation but the graph doesn't hold it (wrong
+// relation word, merged into the wrong person, or lost when saving).
 function lostAt(fact, seeds, routes, traces) {
   if (["question", "dropped"].includes(routes[fact.seed])) return "routing";
   const text = normalizeName(seeds[fact.seed]);
   const entries = traces.filter((entry) => normalizeName(entry.text).includes(text));
   if (!entries.length) return "no-extraction";
-  const named = (stage) => entries.some((entry) => tracePeople(entry, stage).some((name) => sameName(fact.person, { name })));
-  if (!named("raw")) return "not-extracted";
-  if (!named("kept")) return "validation";
+  const raw = holds(entries.flatMap((entry) => traceFacts(entry, "raw")), fact);
+  if (!raw.has) return raw.named ? "not-extracted:fact" : "not-extracted:person";
+  const kept = holds(entries.flatMap((entry) => traceFacts(entry, "kept")), fact);
+  if (!kept.has) return kept.named ? "validation:fact" : "validation:person";
   return "kept-not-stored";
 }
 
