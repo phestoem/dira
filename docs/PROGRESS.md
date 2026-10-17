@@ -134,7 +134,17 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   | v1 | 61% | 66% | first prompt |
   | v2 | 80% | 82% | direction examples, one entity per project, codes as identifiers, located_in, no arithmetic |
   | v3 | 82% | 86% | resolver: a thing keeps its name (longer phrase = alias; this was splitting projects); reuse known names; short names; no today-stamped dates; year-not-in-text check |
-  | v4 | running | | end-of-prompt checklist; has_client alias stored as client_of; joint decisions → me |
+  | v4 | 85% / 85% | 88–90% | end-of-prompt checklist; has_client alias stored as client_of; joint decisions → me (assets 68 / 60%) |
+  | v5 | 87% / 86% | 87–89% | mention `place` → located_in in code; insurance policies as documents; today-stamp check. Every domain ≥ 76% in both runs (assets 80%) |
+  Rescored with the final scorer (fixed name ranking: an entity holding
+  every expected word beats a place named inside the expected name; the
+  new place entities had been stealing project matches). v4 rescored:
+  88 / 87%. Hold-outs 1–3 with v5 (people/time only): 69 / 92 / 78%.
+- Gate readiness met on v5 (life ≥ 85% and every domain ≥ 70% in both
+  runs). Gate (Phesto, 2026-10-17): hold-out 4 seeded 3 times in one
+  session, score-only, judged on the mean per domain and overall
+  (≥ 85%, no domain < 70%, 0 dropped at routing). Running: tmux `phase2`,
+  `phase2.sh gate 3 holdout4` → logs/phase2/gate/summary.txt.
   Scorer equivalences (documented in docs/knowledge-layer.md): plans /
   intends / decided one family; owns met by bought (also a superseded
   one) or, with until, by sold; a missing context is not wrong. Life

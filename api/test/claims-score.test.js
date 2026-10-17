@@ -21,6 +21,8 @@ test("names resolve to the closest entity: exact, alias, then fewest extra words
   assert.deepEqual(ids("the Sintra plot"), ["plot"]);
   assert.deepEqual(ids("Rui"), ["rui"]);
   assert.deepEqual(ids("Marta"), []);
+  const build = resolver([{ id: "place", name: "Sintra" }, { id: "build", name: "house build on Sintra plot" }], "self");
+  assert.deepEqual(build("Sintra house"), ["build"], "the entity holding every word, not the place named inside the name");
 });
 
 test("claims score per domain with inverses, symmetry, precision, amounts and corrections", () => {

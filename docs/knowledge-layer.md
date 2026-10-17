@@ -206,7 +206,8 @@ Expected-claims file (`{ set, claims: [...] }`), one per stated fact:
   (`superseded` for a fact the seeds later correct).
 - Only facts the text states, in the vocabulary above; nothing derived.
 - Scoring (api/scripts/golden/claims.js): names match exactly, by alias, or
-  as the closest word-subset; symmetric predicates in either order;
+  as the closest word-subset (an entity whose name holds every expected
+  word ranks above one whose name is only part of the expected name); symmetric predicates in either order;
   received_from is paid turned around; dates at the stated precision;
   amounts within 0.5%; a corrected fact counts only if stored as
   superseded. Equivalences: plans / intends / decided are one family; an

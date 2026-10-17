@@ -5,8 +5,9 @@ import { DOMAINS, INVERSES, PREDICATES, domainOf } from "../../src/services/know
 const STOP = new Set(["the", "a", "an", "my", "our", "of", "to", "for", "and", "in", "on", "at", "s", "is", "will", "be", "mr", "mrs", "ms", "dr"]);
 const words = (text) => String(text || "").normalize("NFKD").replace(/[̀-ͯ]/g, "").toLowerCase().split(/[^\p{L}\p{N}]+/u).filter((word) => word && !STOP.has(word));
 
-// How well an expected name fits an entity: 3 exact name, 2 exact alias, 1 every word of the shorter inside the
-// longer, 0 no match. Ties go to the entity with fewest extra words.
+// How well an expected name fits an entity: 3 exact name, 2 exact alias, 1.5 the entity's name holds every expected
+// word ("Oslo house" in "house build on Oslo plot"), 1 the expected name holds the entity's ("Oslo" in "Oslo house"),
+// 0 no match. Ties go to the entity with fewest extra words.
 function nameFit(expected, entity) {
   const want = words(expected).join(" ");
   if (!want) return { fit: 0, extra: 0 };
@@ -17,8 +18,9 @@ function nameFit(expected, entity) {
     const a = want.split(" ");
     const [short, long] = a.length <= have.length ? [a, have] : [have, a];
     if (short.length && short.every((word) => long.includes(word))) {
+      const fit = short === a ? 1.5 : 1;
       const extra = long.length - short.length;
-      if (best.fit < 1 || extra < best.extra) best = { fit: 1, extra };
+      if (fit > best.fit || (fit === best.fit && extra < best.extra)) best = { fit, extra };
     }
   }
   return best;
