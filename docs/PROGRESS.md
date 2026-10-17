@@ -44,12 +44,16 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
-- Step a, post-check audit data: tmux session `audit`, 3 synthetic runs
-  with the tools engine. Dev API restarted by `api/scripts/devapi.sh tools
-  DIRA_POSTCHECK_AUDIT=...` (log logs/api-tools.log). Removed claims with
-  context go to logs/postcheck-audit.jsonl; run output to
-  logs/audit-tools-synthetic-{1,2,3}.txt. Finished when logs/audit.done
-  exists. Restart the API without the audit var before any hold-out run.
+- Step e, started 2026-10-17 ~10:00 UTC in tmux session `compare`:
+  `api/scripts/golden/compare.sh 825ed40f-1c2d-4d8b-8f6b-a375225bee21`
+  (rules, tools, hybrid × 3 runs × family fixture, synthetic, hold-outs
+  1–3, live readonly on dira_dev). Expect ~2 h. Progress: one line per run
+  in logs/compare/summary.txt; finished when it ends with "== ... done".
+  Driver log: logs/compare.log. Hold-out files hold scores only.
+- dira_dev rebuilt 2026-10-17 09:54–09:59 UTC with the rules extractor
+  (`api/scripts/rebuild-dev.mjs`): 48 events, 86 live entities, 220 edges.
+  Backup: logs/backups/dira-dev-graph-2026-10-17T095446079Z.json. Log:
+  logs/rebuild.log. Tools-engine live runs read this rules-built graph.
 
 ## Latest scores
 Engine comparison, 2026-10-16/17 at `7d26524`, fixture mode, 3 runs per
