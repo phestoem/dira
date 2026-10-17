@@ -5,8 +5,8 @@ Last updated: 2026-10-17
 ## Current goal
 2026-10-17 (Phesto): option (b), staged: rebuild DIRA's WHOLE knowledge
 layer (not just family) as one ingestion path → one claim store → one
-answer path. Design: docs/knowledge-layer.md. Phase 0 done; phase 1 code
-done (tests pass); its routing check waits for OpenAI credits.
+answer path. Design: docs/knowledge-layer.md. Phases 0 and 1 done; now
+phase 2 (claims extractor), tuned on the life set only, then the gate.
 
 ## Rebuild plan (Phesto, 2026-10-17)
 
@@ -123,11 +123,28 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
-- BLOCKED 2026-10-17 ~22:00 UTC: the OpenAI key returns 429 "You have no
-  credits remaining" (logs/api-rules.log), so no model call works. The
-  golden fixture after renaming old prompt examples (logs/golden-phase0.log)
-  is invalid and must be re-run once credits are added. The extraction
-  measurement finished before this: none of its 72 runs is near zero.
+- Credits were out for a while on 2026-10-17 (429); added back by Phesto.
+- Phase 1 exit check DONE (logs/phase1/, `api/scripts/golden/phase1.sh`):
+  dropped at routing = 0 on life (34 seeds: 33 statement, 1 mixed),
+  synthetic 11/11, hold-outs 1–3 10/10 each (hold-out 3 lost 4 of 10
+  before). Old engine after the prompt-example renames: family fixture
+  13/13; reset/mother gates failed once (9 of 12 edges) then passed 2/2
+  (model variance); live readonly dira_dev 9/13, same four failures as
+  step e. Hold-out 4 not seeded (used once, at the gate).
+- Phase 2 started: api/src/services/knowledge/extractor.js (claims-v1:
+  one gpt-4.1 JSON-schema call, whole vocabulary, known records as
+  context, today's date for relative dates) and validate.js (evidence in
+  text, names from text or records, amounts the text states). Default
+  extractor of ingest(). KNOWLEDGE_TRACE=<file> logs raw/dropped/skipped
+  per source (never read hold-out lines). /home/input takes a `source`
+  field and, with DIRA_ALLOW_AS_OF=1 (dev only), X-DIRA-As-Of; the runner
+  sends both from the set. Hold-outs 1–3 and synthetic expectations now
+  carry converted `claims` (scripts/golden/facts-to-claims.mjs).
+  First claims numbers (claims-v1, during the routing check: all seeds as
+  chat, no asOf): life 65% recall (people 67, work 74, assets 44, money
+  63, projects 33, time 100, plans 67); synthetic 78%; hold-outs 1–3
+  75 / 67 / 61% (people/time only; their property facts have no
+  expectations, so precision there is understated).
 - Phase 1 (2026-10-17), behind `KNOWLEDGE_LAYER=claims` (off by default):
   - Claim table (migration 20261017220000_claims, additive), applied to
     dira_dev only.

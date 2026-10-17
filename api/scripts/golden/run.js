@@ -34,6 +34,8 @@ const args = parseArgs(process.argv.slice(2));
 const base = (args.base || `http://127.0.0.1:${process.env.PORT}`).replace(/\/$/, "");
 const prisma = new PrismaClient();
 let token = "";
+// A set's "today" (asOf), sent as X-DIRA-As-Of; the dev API honours it only with DIRA_ALLOW_AS_OF=1.
+let asOf = null;
 let production = false;
 
 try {
@@ -117,6 +119,7 @@ async function post(path, body) {
       "content-type": "application/json",
       authorization: `Bearer ${token}`,
       "x-dira-metrics": "1",
+      ...(asOf ? { "x-dira-as-of": asOf } : {}),
       ...(args.readonly ? { "x-dira-readonly": "1" } : {}),
     },
     body: JSON.stringify(body),
@@ -166,8 +169,9 @@ async function fixture() {
   try {
     if (!quiet) console.log("\n== seeding through /home ==");
     const routes = [];
-    for (const message of set.seeds) {
-      const steps = await seed(message);
+    asOf = set.asOf || null;
+    for (const [index, message] of set.seeds.entries()) {
+      const steps = await seed(message, [], set.sources?.[index]);
       routes.push(routeOf(steps));
       if (!quiet) console.log(`- ${message.slice(0, 70)}${message.length > 70 ? "…" : ""}\n    ${steps.join(" → ")}`);
     }
@@ -233,7 +237,10 @@ async function extracted(userId, maxMs = 20 * 60 * 1000) {
 // --claims: score the stored claims per domain (docs/knowledge-layer.md). Hold-outs (--score-only) print totals
 // and the gate only; other sets list every miss and extra.
 async function claimsReport(userId, set, routes, quiet) {
-  const expect = JSON.parse(readFileSync(new URL(`../../test/extraction/${args.set}.expect.json`, import.meta.url), "utf8"));
+  const expectFile = new URL(`../../test/extraction/${args.set}.expect.json`, import.meta.url);
+  // Sets whose expectations are not claims yet (old people-only format) report routing only.
+  const expect = existsSync(expectFile) ? JSON.parse(readFileSync(expectFile, "utf8")) : {};
+  if (!Array.isArray(expect.claims)) expect.claims = [];
   const self = await prisma.entity.findFirst({ where: { userId, isSelf: true, status: { not: "archived" } } });
   const [entities, claims] = await Promise.all([
     prisma.entity.findMany({ where: { userId, status: { not: "archived" }, mergedIntoId: null } }),
@@ -388,8 +395,9 @@ async function motherGate() {
 }
 
 // Confirms whatever DIRA offers, the way a person tapping Save would. Relationship cards are collected in `cards`.
-async function seed(message, cards = []) {
-  let response = await sendWithRetry({ message, conversationHistory: [], lastAction: null });
+async function seed(message, cards = [], source = null) {
+  // A non-chat source (email, journal, file) is only read by the claim store; the old paths ignore it.
+  let response = await sendWithRetry({ message, conversationHistory: [], lastAction: null, ...(source && source !== "chat" ? { source } : {}) });
   const steps = [`${response.routing?.intent}/${response.result?.type}`];
   for (let round = 0; round < 3; round += 1) {
     if (response.action === "clarify" && response.sessionId) {

@@ -1,35 +1,332 @@
 {
-  "set": "synthetic",
-  "facts": [
-    { "seed": 0, "person": "Liam Byrne", "relation": "parent" },
-    { "seed": 0, "person": "Liam Byrne", "died": "2015-03-12" },
-    { "seed": 0, "person": "Siobhán Byrne", "relation": "parent" },
-    { "seed": 0, "person": "Conor Walsh", "relation": "step_parent" },
-    { "seed": 1, "person": "Eoin Byrne", "relation": "sibling" },
-    { "seed": 1, "person": "Eoin Byrne", "born": "1978-02-02" },
-    { "seed": 1, "person": "Aoife Byrne", "relation": "half_sibling" },
-    { "seed": 1, "person": "Gráinne Doyle", "relation": "former_spouse", "of": "Liam Byrne" },
-    { "seed": 2, "person": "Aoife Byrne", "born": "1985-09-08" },
-    { "seed": 2, "person": "Gráinne Doyle", "relation": "parent", "of": "Aoife Byrne" },
-    { "seed": 3, "person": "Nora Byrne", "relation": "grandparent" },
-    { "seed": 3, "person": "Nora Byrne", "born": "1931-07-14" },
-    { "seed": 3, "person": "Fergal Byrne", "relation": "aunt_uncle" },
-    { "seed": 3, "person": "Clodagh Byrne", "relation": "sibling_in_law" },
-    { "seed": 3, "person": "Clodagh Byrne", "relation": "spouse", "of": "Eoin Byrne" },
-    { "seed": 4, "person": "Róisín Kelly", "relation": "former_spouse" },
-    { "seed": 4, "person": "Róisín Kelly", "married": "2005-06-04" },
-    { "seed": 4, "person": "Róisín Kelly", "divorced": "2016" },
-    { "seed": 4, "person": "Cian", "relation": "child" },
-    { "seed": 4, "person": "Cian", "born": "2007-01-09" },
-    { "seed": 4, "person": "Saoirse", "relation": "child" },
-    { "seed": 4, "person": "Saoirse", "born": "2010-08-22" },
-    { "seed": 6, "person": "Maeve O'Connor", "relation": "spouse" },
-    { "seed": 6, "person": "Maeve O'Connor", "married": "2019-04-30" },
-    { "seed": 6, "person": "Darragh O'Connor", "relation": "step_child" },
-    { "seed": 6, "person": "Darragh O'Connor", "born": "2012-10-17" },
-    { "seed": 6, "person": "Maeve O'Connor", "relation": "parent", "of": "Darragh O'Connor" },
-    { "seed": 7, "person": "Oisín", "relation": "child" },
-    { "seed": 7, "person": "Oisín", "born": "2020-11-05" },
-    { "seed": 8, "person": "Cian Murphy", "relation": "neighbour" }
-  ]
+ "set": "synthetic",
+ "facts": [
+  {
+   "seed": 0,
+   "person": "Liam Byrne",
+   "relation": "parent"
+  },
+  {
+   "seed": 0,
+   "person": "Liam Byrne",
+   "died": "2015-03-12"
+  },
+  {
+   "seed": 0,
+   "person": "Siobhán Byrne",
+   "relation": "parent"
+  },
+  {
+   "seed": 0,
+   "person": "Conor Walsh",
+   "relation": "step_parent"
+  },
+  {
+   "seed": 1,
+   "person": "Eoin Byrne",
+   "relation": "sibling"
+  },
+  {
+   "seed": 1,
+   "person": "Eoin Byrne",
+   "born": "1978-02-02"
+  },
+  {
+   "seed": 1,
+   "person": "Aoife Byrne",
+   "relation": "half_sibling"
+  },
+  {
+   "seed": 1,
+   "person": "Gráinne Doyle",
+   "relation": "former_spouse",
+   "of": "Liam Byrne"
+  },
+  {
+   "seed": 2,
+   "person": "Aoife Byrne",
+   "born": "1985-09-08"
+  },
+  {
+   "seed": 2,
+   "person": "Gráinne Doyle",
+   "relation": "parent",
+   "of": "Aoife Byrne"
+  },
+  {
+   "seed": 3,
+   "person": "Nora Byrne",
+   "relation": "grandparent"
+  },
+  {
+   "seed": 3,
+   "person": "Nora Byrne",
+   "born": "1931-07-14"
+  },
+  {
+   "seed": 3,
+   "person": "Fergal Byrne",
+   "relation": "aunt_uncle"
+  },
+  {
+   "seed": 3,
+   "person": "Clodagh Byrne",
+   "relation": "sibling_in_law"
+  },
+  {
+   "seed": 3,
+   "person": "Clodagh Byrne",
+   "relation": "spouse",
+   "of": "Eoin Byrne"
+  },
+  {
+   "seed": 4,
+   "person": "Róisín Kelly",
+   "relation": "former_spouse"
+  },
+  {
+   "seed": 4,
+   "person": "Róisín Kelly",
+   "married": "2005-06-04"
+  },
+  {
+   "seed": 4,
+   "person": "Róisín Kelly",
+   "divorced": "2016"
+  },
+  {
+   "seed": 4,
+   "person": "Cian",
+   "relation": "child"
+  },
+  {
+   "seed": 4,
+   "person": "Cian",
+   "born": "2007-01-09"
+  },
+  {
+   "seed": 4,
+   "person": "Saoirse",
+   "relation": "child"
+  },
+  {
+   "seed": 4,
+   "person": "Saoirse",
+   "born": "2010-08-22"
+  },
+  {
+   "seed": 6,
+   "person": "Maeve O'Connor",
+   "relation": "spouse"
+  },
+  {
+   "seed": 6,
+   "person": "Maeve O'Connor",
+   "married": "2019-04-30"
+  },
+  {
+   "seed": 6,
+   "person": "Darragh O'Connor",
+   "relation": "step_child"
+  },
+  {
+   "seed": 6,
+   "person": "Darragh O'Connor",
+   "born": "2012-10-17"
+  },
+  {
+   "seed": 6,
+   "person": "Maeve O'Connor",
+   "relation": "parent",
+   "of": "Darragh O'Connor"
+  },
+  {
+   "seed": 7,
+   "person": "Oisín",
+   "relation": "child"
+  },
+  {
+   "seed": 7,
+   "person": "Oisín",
+   "born": "2020-11-05"
+  },
+  {
+   "seed": 8,
+   "person": "Cian Murphy",
+   "relation": "neighbour"
+  }
+ ],
+ "claims": [
+  {
+   "seed": 0,
+   "subject": "Liam Byrne",
+   "predicate": "parent_of",
+   "object": "me"
+  },
+  {
+   "seed": 0,
+   "subject": "Siobhán Byrne",
+   "predicate": "parent_of",
+   "object": "me"
+  },
+  {
+   "seed": 0,
+   "subject": "Conor Walsh",
+   "predicate": "parent_of",
+   "object": "me",
+   "label": "step"
+  },
+  {
+   "seed": 1,
+   "subject": "Eoin Byrne",
+   "predicate": "sibling_of",
+   "object": "me"
+  },
+  {
+   "seed": 1,
+   "subject": "Aoife Byrne",
+   "predicate": "sibling_of",
+   "object": "me",
+   "label": "half"
+  },
+  {
+   "seed": 1,
+   "subject": "Gráinne Doyle",
+   "predicate": "spouse_of",
+   "object": "Liam Byrne"
+  },
+  {
+   "seed": 2,
+   "subject": "Gráinne Doyle",
+   "predicate": "parent_of",
+   "object": "Aoife Byrne"
+  },
+  {
+   "seed": 3,
+   "subject": "Nora Byrne",
+   "predicate": "relative_of",
+   "object": "me",
+   "label": "grandparent"
+  },
+  {
+   "seed": 3,
+   "subject": "Fergal Byrne",
+   "predicate": "relative_of",
+   "object": "me",
+   "label": "aunt/uncle"
+  },
+  {
+   "seed": 3,
+   "subject": "Clodagh Byrne",
+   "predicate": "relative_of",
+   "object": "me",
+   "label": "sibling-in-law"
+  },
+  {
+   "seed": 3,
+   "subject": "Clodagh Byrne",
+   "predicate": "spouse_of",
+   "object": "Eoin Byrne"
+  },
+  {
+   "seed": 4,
+   "subject": "Róisín Kelly",
+   "predicate": "spouse_of",
+   "object": "me",
+   "date": "2005-06-04",
+   "until": "2016"
+  },
+  {
+   "seed": 4,
+   "subject": "me",
+   "predicate": "parent_of",
+   "object": "Cian"
+  },
+  {
+   "seed": 4,
+   "subject": "me",
+   "predicate": "parent_of",
+   "object": "Saoirse"
+  },
+  {
+   "seed": 6,
+   "subject": "Maeve O'Connor",
+   "predicate": "spouse_of",
+   "object": "me",
+   "date": "2019-04-30"
+  },
+  {
+   "seed": 6,
+   "subject": "me",
+   "predicate": "parent_of",
+   "object": "Darragh O'Connor",
+   "label": "step"
+  },
+  {
+   "seed": 6,
+   "subject": "Maeve O'Connor",
+   "predicate": "parent_of",
+   "object": "Darragh O'Connor"
+  },
+  {
+   "seed": 7,
+   "subject": "me",
+   "predicate": "parent_of",
+   "object": "Oisín"
+  },
+  {
+   "seed": 8,
+   "subject": "Cian Murphy",
+   "predicate": "neighbour_of",
+   "object": "me"
+  },
+  {
+   "seed": 0,
+   "subject": "Liam Byrne",
+   "predicate": "died",
+   "value": "2015-03-12"
+  },
+  {
+   "seed": 1,
+   "subject": "Eoin Byrne",
+   "predicate": "born",
+   "value": "1978-02-02"
+  },
+  {
+   "seed": 2,
+   "subject": "Aoife Byrne",
+   "predicate": "born",
+   "value": "1985-09-08"
+  },
+  {
+   "seed": 3,
+   "subject": "Nora Byrne",
+   "predicate": "born",
+   "value": "1931-07-14"
+  },
+  {
+   "seed": 4,
+   "subject": "Cian",
+   "predicate": "born",
+   "value": "2007-01-09"
+  },
+  {
+   "seed": 4,
+   "subject": "Saoirse",
+   "predicate": "born",
+   "value": "2010-08-22"
+  },
+  {
+   "seed": 6,
+   "subject": "Darragh O'Connor",
+   "predicate": "born",
+   "value": "2012-10-17"
+  },
+  {
+   "seed": 7,
+   "subject": "Oisín",
+   "predicate": "born",
+   "value": "2020-11-05"
+  }
+ ]
 }

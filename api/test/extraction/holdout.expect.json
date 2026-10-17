@@ -1,22 +1,195 @@
 {
-  "set": "holdout",
-  "facts": [
-    { "seed": 0, "person": "Jeroen Bakker", "relation": "spouse" },
-    { "seed": 1, "person": "Lotte", "relation": "child" },
-    { "seed": 1, "person": "Lotte", "born": "2014-03-19" },
-    { "seed": 1, "person": "Sem", "relation": "child" },
-    { "seed": 1, "person": "Sem", "born": "2014-03-19" },
-    { "seed": 1, "person": "Jeroen Bakker", "relation": "parent", "of": "Lotte" },
-    { "seed": 1, "person": "Jeroen Bakker", "relation": "parent", "of": "Sem" },
-    { "seed": 2, "person": "Henk de Jong", "relation": "parent" },
-    { "seed": 2, "person": "Henk de Jong", "died": "2019-12-02" },
-    { "seed": 3, "person": "Ingrid de Jong", "relation": "parent" },
-    { "seed": 4, "person": "Marloes de Jong", "relation": "sibling" },
-    { "seed": 4, "person": "Noor", "relation": "niece_nephew" },
-    { "seed": 4, "person": "Marloes de Jong", "relation": "parent", "of": "Noor" },
-    { "seed": 5, "person": "Ruben Bakker", "relation": "sibling_in_law" },
-    { "seed": 5, "person": "Ruben Bakker", "relation": "sibling", "of": "Jeroen Bakker" },
-    { "seed": 6, "person": "Bas Visser", "relation": "former_spouse" },
-    { "seed": 6, "person": "Bas Visser", "divorced": "2009" }
-  ]
+ "set": "holdout",
+ "facts": [
+  {
+   "seed": 0,
+   "person": "Jeroen Bakker",
+   "relation": "spouse"
+  },
+  {
+   "seed": 1,
+   "person": "Lotte",
+   "relation": "child"
+  },
+  {
+   "seed": 1,
+   "person": "Lotte",
+   "born": "2014-03-19"
+  },
+  {
+   "seed": 1,
+   "person": "Sem",
+   "relation": "child"
+  },
+  {
+   "seed": 1,
+   "person": "Sem",
+   "born": "2014-03-19"
+  },
+  {
+   "seed": 1,
+   "person": "Jeroen Bakker",
+   "relation": "parent",
+   "of": "Lotte"
+  },
+  {
+   "seed": 1,
+   "person": "Jeroen Bakker",
+   "relation": "parent",
+   "of": "Sem"
+  },
+  {
+   "seed": 2,
+   "person": "Henk de Jong",
+   "relation": "parent"
+  },
+  {
+   "seed": 2,
+   "person": "Henk de Jong",
+   "died": "2019-12-02"
+  },
+  {
+   "seed": 3,
+   "person": "Ingrid de Jong",
+   "relation": "parent"
+  },
+  {
+   "seed": 4,
+   "person": "Marloes de Jong",
+   "relation": "sibling"
+  },
+  {
+   "seed": 4,
+   "person": "Noor",
+   "relation": "niece_nephew"
+  },
+  {
+   "seed": 4,
+   "person": "Marloes de Jong",
+   "relation": "parent",
+   "of": "Noor"
+  },
+  {
+   "seed": 5,
+   "person": "Ruben Bakker",
+   "relation": "sibling_in_law"
+  },
+  {
+   "seed": 5,
+   "person": "Ruben Bakker",
+   "relation": "sibling",
+   "of": "Jeroen Bakker"
+  },
+  {
+   "seed": 6,
+   "person": "Bas Visser",
+   "relation": "former_spouse"
+  },
+  {
+   "seed": 6,
+   "person": "Bas Visser",
+   "divorced": "2009"
+  }
+ ],
+ "claims": [
+  {
+   "seed": 0,
+   "subject": "Jeroen Bakker",
+   "predicate": "spouse_of",
+   "object": "me"
+  },
+  {
+   "seed": 1,
+   "subject": "me",
+   "predicate": "parent_of",
+   "object": "Lotte"
+  },
+  {
+   "seed": 1,
+   "subject": "me",
+   "predicate": "parent_of",
+   "object": "Sem"
+  },
+  {
+   "seed": 1,
+   "subject": "Jeroen Bakker",
+   "predicate": "parent_of",
+   "object": "Lotte"
+  },
+  {
+   "seed": 1,
+   "subject": "Jeroen Bakker",
+   "predicate": "parent_of",
+   "object": "Sem"
+  },
+  {
+   "seed": 2,
+   "subject": "Henk de Jong",
+   "predicate": "parent_of",
+   "object": "me"
+  },
+  {
+   "seed": 3,
+   "subject": "Ingrid de Jong",
+   "predicate": "parent_of",
+   "object": "me"
+  },
+  {
+   "seed": 4,
+   "subject": "Marloes de Jong",
+   "predicate": "sibling_of",
+   "object": "me"
+  },
+  {
+   "seed": 4,
+   "subject": "Noor",
+   "predicate": "relative_of",
+   "object": "me",
+   "label": "niece/nephew"
+  },
+  {
+   "seed": 4,
+   "subject": "Marloes de Jong",
+   "predicate": "parent_of",
+   "object": "Noor"
+  },
+  {
+   "seed": 5,
+   "subject": "Ruben Bakker",
+   "predicate": "relative_of",
+   "object": "me",
+   "label": "sibling-in-law"
+  },
+  {
+   "seed": 5,
+   "subject": "Ruben Bakker",
+   "predicate": "sibling_of",
+   "object": "Jeroen Bakker"
+  },
+  {
+   "seed": 6,
+   "subject": "Bas Visser",
+   "predicate": "spouse_of",
+   "object": "me",
+   "until": "2009"
+  },
+  {
+   "seed": 1,
+   "subject": "Lotte",
+   "predicate": "born",
+   "value": "2014-03-19"
+  },
+  {
+   "seed": 1,
+   "subject": "Sem",
+   "predicate": "born",
+   "value": "2014-03-19"
+  },
+  {
+   "seed": 2,
+   "subject": "Henk de Jong",
+   "predicate": "died",
+   "value": "2019-12-02"
+  }
+ ]
 }

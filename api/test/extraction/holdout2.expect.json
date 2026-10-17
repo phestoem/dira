@@ -1,18 +1,148 @@
 {
-  "set": "holdout2",
-  "facts": [
-    { "seed": 0, "person": "Marek Wiśniewski", "relation": "spouse" },
-    { "seed": 1, "person": "Marek Wiśniewski", "married": "2011-08-12" },
-    { "seed": 2, "person": "Zofia", "relation": "child" },
-    { "seed": 2, "person": "Zofia", "born": "2013-01-03" },
-    { "seed": 2, "person": "Jan", "relation": "child" },
-    { "seed": 2, "person": "Jan", "born": "2016-05-27" },
-    { "seed": 3, "person": "Andrzej Nowak", "relation": "parent" },
-    { "seed": 3, "person": "Ewa", "relation": "parent" },
-    { "seed": 3, "person": "Ewa", "died": "2020-02-14" },
-    { "seed": 4, "person": "Halina Wiśniewska", "relation": "parent_in_law" },
-    { "seed": 4, "person": "Halina Wiśniewska", "relation": "parent", "of": "Marek Wiśniewski" },
-    { "seed": 5, "person": "Piotr Zieliński", "relation": "cousin" },
-    { "seed": 6, "person": "Agnieszka Lis", "relation": "friend" }
-  ]
+ "set": "holdout2",
+ "facts": [
+  {
+   "seed": 0,
+   "person": "Marek Wiśniewski",
+   "relation": "spouse"
+  },
+  {
+   "seed": 1,
+   "person": "Marek Wiśniewski",
+   "married": "2011-08-12"
+  },
+  {
+   "seed": 2,
+   "person": "Zofia",
+   "relation": "child"
+  },
+  {
+   "seed": 2,
+   "person": "Zofia",
+   "born": "2013-01-03"
+  },
+  {
+   "seed": 2,
+   "person": "Jan",
+   "relation": "child"
+  },
+  {
+   "seed": 2,
+   "person": "Jan",
+   "born": "2016-05-27"
+  },
+  {
+   "seed": 3,
+   "person": "Andrzej Nowak",
+   "relation": "parent"
+  },
+  {
+   "seed": 3,
+   "person": "Ewa",
+   "relation": "parent"
+  },
+  {
+   "seed": 3,
+   "person": "Ewa",
+   "died": "2020-02-14"
+  },
+  {
+   "seed": 4,
+   "person": "Halina Wiśniewska",
+   "relation": "parent_in_law"
+  },
+  {
+   "seed": 4,
+   "person": "Halina Wiśniewska",
+   "relation": "parent",
+   "of": "Marek Wiśniewski"
+  },
+  {
+   "seed": 5,
+   "person": "Piotr Zieliński",
+   "relation": "cousin"
+  },
+  {
+   "seed": 6,
+   "person": "Agnieszka Lis",
+   "relation": "friend"
+  }
+ ],
+ "claims": [
+  {
+   "seed": 0,
+   "subject": "Marek Wiśniewski",
+   "predicate": "spouse_of",
+   "object": "me",
+   "date": "2011-08-12"
+  },
+  {
+   "seed": 2,
+   "subject": "me",
+   "predicate": "parent_of",
+   "object": "Zofia"
+  },
+  {
+   "seed": 2,
+   "subject": "me",
+   "predicate": "parent_of",
+   "object": "Jan"
+  },
+  {
+   "seed": 3,
+   "subject": "Andrzej Nowak",
+   "predicate": "parent_of",
+   "object": "me"
+  },
+  {
+   "seed": 3,
+   "subject": "Ewa",
+   "predicate": "parent_of",
+   "object": "me"
+  },
+  {
+   "seed": 4,
+   "subject": "Halina Wiśniewska",
+   "predicate": "relative_of",
+   "object": "me",
+   "label": "parent-in-law"
+  },
+  {
+   "seed": 4,
+   "subject": "Halina Wiśniewska",
+   "predicate": "parent_of",
+   "object": "Marek Wiśniewski"
+  },
+  {
+   "seed": 5,
+   "subject": "Piotr Zieliński",
+   "predicate": "relative_of",
+   "object": "me",
+   "label": "cousin"
+  },
+  {
+   "seed": 6,
+   "subject": "Agnieszka Lis",
+   "predicate": "friend_of",
+   "object": "me"
+  },
+  {
+   "seed": 2,
+   "subject": "Zofia",
+   "predicate": "born",
+   "value": "2013-01-03"
+  },
+  {
+   "seed": 2,
+   "subject": "Jan",
+   "predicate": "born",
+   "value": "2016-05-27"
+  },
+  {
+   "seed": 3,
+   "subject": "Ewa",
+   "predicate": "died",
+   "value": "2020-02-14"
+  }
+ ]
 }

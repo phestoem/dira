@@ -110,3 +110,29 @@ test("ingest saves every statement, extracts it into claims in order, corrects a
     await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
   }
 });
+
+test("amounts are read in the formats people write them", async () => {
+  const { amountsIn } = await import("../src/services/knowledge/validate.js");
+  const has = (text, value) => amountsIn(text).some((found) => Math.abs(found - value) < 1);
+  assert.ok(has("I paid KES 1,750,000", 1750000));
+  assert.ok(has("custou R$ 55.000,00", 55000));
+  assert.ok(has("about 1.75 million", 1750000));
+  assert.ok(has("shilingi 120,000", 120000));
+  assert.ok(has("450k for the roof", 450000));
+  assert.ok(!has("in 2024 I paid 45,000", 450000));
+});
+
+test("extracted claims keep only evidence, names and amounts the text states", async () => {
+  const { validateClaims } = await import("../src/services/knowledge/validate.js");
+  const text = "I paid Nils 300 EUR for the survey of the Oslo plot in March 2024.";
+  const base = { subject: "me", predicate: "paid", object: { name: "Nils Lindqvist", type: "person" }, amount: 300, currency: "EUR", evidence: "I paid Nils 300 EUR", context: { name: "Oslo plot", type: "property" } };
+  const { kept, dropped } = validateClaims([
+    base,
+    { ...base, amount: 3000 },
+    { ...base, object: { name: "Elin", type: "person" } },
+    { ...base, evidence: "I sent Elin money for the boat" },
+    { ...base, object: { name: "Bergen", type: "place" }, predicate: "visited", amount: null },
+  ], text, { known: ["Bergen"], selfName: "Ada Lindqvist" });
+  assert.equal(kept.length, 2);
+  assert.deepEqual(dropped.map((item) => item.reason), ["amount-not-in-text", "name-not-in-text", "evidence-not-in-text"]);
+});

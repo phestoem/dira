@@ -14,7 +14,7 @@ import {
 } from "../services/contextEngine.js";
 import { extractConversationalFacts, previousExchangeFrom, routeIntent } from "../services/intentRouter.js";
 import { chat } from "../services/lifeAdvisor.js";
-import { ingest } from "../services/knowledge/ingest.js";
+import { ingest, SOURCES } from "../services/knowledge/ingest.js";
 import { claimsLayerOn } from "../services/knowledge/settings.js";
 import { extractAndLinkEntities } from "./entities.js";
 import { describeRelationshipLine, isRelationshipStatement } from "../services/graph/familyStatement.js";
@@ -101,7 +101,7 @@ async function takeInput(request, reply) {
     if (!message && !payload.file) {
       return reply.code(400).send({ error: "Say something, or attach a file." });
     }
-    if (claimsLayerOn() && message && !payload.file) return await takeIntoClaims(request.userId, message, payload);
+    if (claimsLayerOn() && message && !payload.file) return await takeIntoClaims(request, message, payload);
     const routing = await routeIntent(message, request.userId, payload.file, payload.history, payload.lastAction);
     console.log("[home]", routing.intent, routing.action, routing.confidence.toFixed(2), routing.followUp?.action || "none", isReadonly() ? "readonly" : "");
     if (message && !payload.file && routing.followUp?.action === "decline") {
@@ -125,8 +125,13 @@ async function takeInput(request, reply) {
 
 // KNOWLEDGE_LAYER=claims: one ingestion path. A statement is saved and extracted; a question is answered; a mixed
 // message is both. Answers still come from the advisor until phase 3 replaces it.
-async function takeIntoClaims(userId, message, payload) {
-  const taken = await ingest(userId, message, { source: "chat", history: payload.history || [] });
+async function takeIntoClaims(request, message, payload) {
+  const userId = request.userId;
+  // The golden harness seeds emails, journal entries and files through here and fixes "today" for a set; the UI
+  // sends neither. DIRA_ALLOW_AS_OF is a dev-only switch.
+  const source = SOURCES.includes(request.body?.source) ? request.body.source : "chat";
+  const asOf = process.env.DIRA_ALLOW_AS_OF === "1" && /^\d{4}-\d{2}-\d{2}$/.test(String(request.headers["x-dira-as-of"] || "")) ? request.headers["x-dira-as-of"] : null;
+  const taken = await ingest(userId, message, { source, asOf, history: payload.history || [] });
   console.log("[home] claims", taken.kind, taken.stored ? "stored" : "not stored", taken.fallback ? "router fallback" : "", isReadonly() ? "readonly" : "");
   const routing = { intent: taken.kind, confidence: taken.fallback ? 0.5 : 0.9, interpretation: taken.kind === "statement" ? "Saved" : "Answer", action: "proceed" };
   if (taken.kind === "statement") {
