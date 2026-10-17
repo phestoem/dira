@@ -44,36 +44,40 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
-- Step e, started 2026-10-17 ~10:00 UTC in tmux session `compare`:
-  `api/scripts/golden/compare.sh 825ed40f-1c2d-4d8b-8f6b-a375225bee21`
-  (rules, tools, hybrid × 3 runs × family fixture, synthetic, hold-outs
-  1–3, live readonly on dira_dev). Expect ~2 h. Progress: one line per run
-  in logs/compare/summary.txt; finished when it ends with "== ... done".
-  Driver log: logs/compare.log. Hold-out files hold scores only.
-- dira_dev rebuilt 2026-10-17 09:54–09:59 UTC with the rules extractor
-  (`api/scripts/rebuild-dev.mjs`): 48 events, 86 live entities, 220 edges.
-  Backup: logs/backups/dira-dev-graph-2026-10-17T095446079Z.json. Log:
-  logs/rebuild.log. Tools-engine live runs read this rules-built graph.
+Nothing running. Dev API is up on 4801 with PEOPLE_ENGINE=rules
+(`api/scripts/devapi.sh rules`, log logs/api-rules.log).
 
 ## Latest scores
-Engine comparison, 2026-10-16/17 at `7d26524`, fixture mode, 3 runs per
-engine per set. Mean (min). Raw output was in the 2026-10-16 session
-scratchpad (`compare/`, temporary); future runs go to logs/.
+2026-10-17, step e, at `15dc8b1`, 3 runs per engine per set, mean (min).
+dira_dev rebuilt with the rules extractor just before. Raw output:
+logs/compare/ (summary.txt). Hold-outs are scores only.
 
-| Set | Rules | Tools |
-|---|---|---|
-| Hold-out 2 (decides) | 6.0/10 (6) | 2.7/10 (2) |
-| Hold-out 1 | 4.0/10 (4) | 3.7/10 (2) |
-| Synthetic | 10.0/15 (9) | 8.0/15 (7) |
-| Family fixture | 12.0/13 (10) | 12.0/13 (12) |
+| Set | Rules | Tools | Hybrid |
+|---|---|---|---|
+| Hold-out 3 /13 (decides) | **3.3 (3)** | 3.0 (3) | 2.7 (2) |
+| Hold-out 2 /10 | **6.0 (6)** | 2.3 (2) | 4.0 (4) |
+| Hold-out 1 /10 | **4.3 (4)** | 3.7 (2) | 3.3 (3) |
+| Synthetic /15 | 11.0 (11) | 9.0 (9) | 12.7 (12)* |
+| Family fixture /13 | **12.0 (10)** | 11.0 (10) | 10.0 (10) |
+| Live readonly dira_dev /13 | 9.3 (9) | **12.0 (12)** | 9.0 (9) |
 
-Cost per answer: rules median 1.1–2.4 s, 1.3–1.9 model calls (max 5);
-tools median 2.7–3.4 s, 3.1–3.5 model calls (max 6). Tools fell back to the
-old advisor in 1 of 147 answers.
+\* Hybrid was fixed against synthetic failures (allowed), so its synthetic
+score is not a fair measure.
 
-Live readonly on dira_dev (family set): 7/13 at `6359ed4`, 9/13 at
-`9a68f4b` (single runs). Misses are facts the old pipeline never stored;
-needs a re-extraction of dira_dev. Not re-run since `7d26524`.
+Cost per answer (median latency, model calls mean): rules 1.4–2.0 s,
+1.3–1.9; tools 2.5–3.2 s, 3.1–3.5; hybrid 1.9–2.4 s, 2.1–2.8.
+
+Where they fail (family/live only; may be inspected):
+- rules live: children, children-follow-up, parents (3/3 runs),
+  properties (2/3).
+- tools live: properties (3/3). Note: tools reads the rules-built graph.
+- hybrid family+live: wife (code list omits the marriage date), cars (no
+  count by asset type; it lists every asset), properties (3/3);
+  live children-count says 6: dira_dev has messy child entities ("older
+  son", "Prisha - Neema", Presley unconfirmed) that the code counts as-is.
+
+Earlier: 2026-10-16/17 at `7d26524` (rules / tools): hold-out 2 6.0 / 2.7,
+hold-out 1 4.0 / 3.7, synthetic 10.0 / 8.0, family 12.0 / 12.0.
 
 ## Decisions made and why
 - Engine is picked by hold-out score; stop adding rules for single cases
@@ -84,6 +88,13 @@ needs a re-extraction of dira_dev. Not re-run since `7d26524`.
 - No personal data in src/: prompt examples use invented people and places;
   place names come from the user's own entities. Tests and golden cases may
   use the real family.
+- 2026-10-17: by hold-out 3, rules stays the default (3.3 vs 3.0 vs 2.7
+  /13). The spread is one question, so this is a tie, not a win; rules
+  also leads both older hold-outs. Tools and hybrid stay behind the flag.
+- Hybrid uses the rules extractor, and dira_dev holds one graph, so the
+  tools engine's live runs answer over a rules-built graph.
+- Post-check edge dates: a 1 January with no stored precision is shown as
+  its year (a bare year was stored that way); never more precise than said.
 - Relationship chips count as explicit confirmation, so they are not gated
   by graphAutoExtract (Phesto confirmed).
 - The "User has four sisters" event (8a58cc4c) in dira_dev was archived at
@@ -126,16 +137,34 @@ Long jobs run in tmux with logs in logs/.
   direct link, and owned_assets with no ownership edges, also go open.
   Uses the rules extractor. In-laws derived from the graph; a role word
   passed as a name reads stored roles. Replies are English (code wording).
-- [ ] e. Re-score rules, tools (fixed post-check) and hybrid on family
+- [x] e. Re-score rules, tools (fixed post-check) and hybrid on family
   fixture, synthetic, hold-outs 1–3, plus live readonly on dira_dev after
   the rebuild. 3 runs each. Pick by hold-out 3.
+  Done 2026-10-17: rules 3.3, tools 3.0, hybrid 2.7 out of 13. Default
+  stays rules (see decisions and scores).
 
 ## Next steps
-1. Rebuild the dira_dev graph (approved 2026-10-17); a backup of the first
-   forced rebuild exists from 2026-10-16.
-2. Hybrid plan above, in the order d, a, b, c, e.
-3. Look at why both engines fail synthetic `sister-in-law` and `owned-now`.
+1. All engines score at most 4/13 on hold-out 3, and Phesto's questions
+   below decide what comes next. Extraction is the likely common cause:
+   every engine reads the same kind of stored graph, and the synthetic
+   misses that remain are missing entities and edges, not wording.
+2. Hybrid gaps seen on the family set (not fixed, pending a decision):
+   marriage date in spouse lists, counting assets by type, messy child
+   entities on dira_dev.
+3. Both engines still miss synthetic `owned-now` (flat and field have no
+   ownership edges after extraction).
 4. Later: timezone and default currency become user settings.
 
 ## Open questions for Phesto
-- None yet.
+- No engine generalises (best hold-out 3: 4/13). Next: measure
+  extraction on its own (what entities/edges each hold-out family should
+  produce vs. what is stored), so we know whether to work on extraction or
+  answering? That needs a stored-graph expectation per set, written
+  without looking at hold-out answers.
+- Tools scores 12/13 live on dira_dev (rules 9.3) but lowest on the
+  hold-outs. Worth a "rules extraction + tools answering" variant, or keep
+  narrowing to one engine?
+- Fix the hybrid's family-set gaps (marriage date, asset counts), or drop
+  hybrid since it doesn't beat rules on any hold-out?
+- dira_dev after the rebuild has messy child entities ("older son",
+  "Prisha - Neema"). Clean them up by hand, or leave as a realistic test?
