@@ -3,20 +3,88 @@
 Last updated: 2026-10-17
 
 ## Current goal
-2026-10-17 (afternoon): measure extraction on its own. All engines score
-~3/13 on hold-out 3; extraction is the suspected bottleneck. Per seed:
-routing (intake / relationship_add / journal / question / dropped), what
-was extracted, what survived validation; scored against expected people,
-relations and dates (precision/recall per relation type, dropped at
-routing, dropped at validation). Hold-outs: totals only. Then compare a
-stronger extraction model (gpt-4o / gpt-4.1 vs gpt-4o-mini) on recall.
-Next scoring round adds a 4th combination: rules extraction + tools
-answering, judged on the hold-outs.
+2026-10-17 (Phesto): option (b), staged: rebuild DIRA's WHOLE knowledge
+layer (not just family) as one ingestion path → one claim store → one
+answer path. Design: docs/knowledge-layer.md. Now: phase 0 (tests first).
 
-Background goal: DIRA answers questions about the user's people (family, dates, relations)
-and property only from facts it actually stored, and it generalises: the
-engine is chosen by hold-out score, not by fixes for single golden cases.
-Phesto merges after review; nothing goes to main from here.
+## Rebuild plan (Phesto, 2026-10-17)
+
+### Scope: a whole life, family is one slice
+- People and all relationships: family, work (colleague, supervisor,
+  contractor, client, partner), social.
+- Organisations and roles (works_at, founded, director_of).
+- Places, properties, vehicles, documents and their details (plot
+  numbers, registrations, expiry dates).
+- Projects: status, costs, people involved, milestones.
+- Money: payments, contributions, transfers, debts, by person, project,
+  place and period.
+- Time: events, deadlines, renewals, birthdays, plans.
+- Visions, intentions, decisions ("I plan to…", "we decided…").
+- Corrections and changes over time (sold, moved, ended, replaced).
+Nothing may be designed so that it only works for family.
+Out of scope for now (don't design them out): streaming and speed,
+Swahili answer templates, timezone/currency settings.
+
+### Design
+1. One ingestion path `ingest(userId, text, source, ref)` for every input
+   (chat, file, email, journal, queue, confirmed chips, relationship
+   statements). The router decides only question vs statement; a mixed
+   message does both. A statement is always stored and extracted.
+2. One claim store: subject entity, predicate, object (entity or value),
+   amount + currency, date with precision (day/month/year), status
+   (stated/confirmed/rejected/superseded), evidence quote, source ref,
+   extractor + model version. Closed core vocabulary across all domains,
+   plus `related_to` with a free-text label and evidence.
+3. One resolver for all entity types.
+4. Derived in code, never extracted: in-laws, step/half relations,
+   counts, sums, eldest/youngest, assets held on a date, project totals,
+   what's due.
+5. Answers: structured tools over claims (exact facts, lists, counts,
+   sums, timelines, formatted by code) plus pgvector retrieval over
+   source text (events.fullText, journal, documents) for open questions.
+   The model writes open answers from both; meaning-based post-check.
+   One answer path.
+6. Relationship and other graph/UI views become tables materialised from
+   claims, so the UI keeps working until phase 4.
+Model: schema extractor + gpt-4.1, as a setting. Production untouched
+until phase 5.
+
+### Phases and exit criteria
+- **Phase 0, tests first** (no engine code):
+  synthetic LIFE set replacing the synthetic family (job, business,
+  building project with contractors and payments, property bought and
+  sold, vehicles, travel, plans, family), with expected claims and
+  questions in every domain, a few in Swahili; non-family golden cases
+  (projects cost/status, money by person/place/period, work relations,
+  documents, what's due, plans/decisions, corrections, open/summary
+  questions); claims scorer reporting per domain (people, work, money,
+  projects, assets/documents, time, plans, open questions); hold-out 4
+  written by a separate subagent (fresh context, no access to src/ or
+  results), a stranger's whole life, used once at the gate.
+  Exit: all sets committed; scorer runs on them; hold-out 4 shape-checked
+  by script only (never read by the main session).
+- **Phase 1, store and ingestion** behind a flag: Claim table and
+  migration, one resolver for all entity types, `ingest()`, the
+  question/statement/mixed router, Relationship materialised from claims.
+  Exit: npm test green; old path unchanged with the flag off; on every
+  set no statement is dropped at routing.
+- **Cost estimate** (before phase 2): cost per save and for re-ingesting
+  Phesto's account with gpt-4.1.
+- **Phase 2, extraction into claims**: one schema extractor over the
+  whole vocabulary, validation invariants, corrections → superseded;
+  scorer reports claims recall/precision per domain.
+  **Gate:** on hold-out 4, recall >= 85% overall, no domain < 70%,
+  nothing dropped at routing. Otherwise stop and report to Phesto.
+- **Phase 3, answers**: tools over claims, code derivations, pgvector
+  retrieval, one answer path, post-check. Exit: per-domain answer scores
+  on the life set and hold-outs 1–3, against the current rules engine.
+- **Phase 4, switch entry points**: every input goes through `ingest()`;
+  UI endpoints (cards, confirm/reject, /graph/family, suggestions,
+  merge), bridge and digest read the materialised tables; old readers
+  and writers removed. Exit: npm test, golden fixture, live readonly on
+  dira_dev, contamination test.
+- **Phase 5, migrate**: re-ingest dira_dev from events, parity runs on
+  all sets, production migration plan for Phesto (not executed here).
 
 ## Done (with commit hashes)
 Pushed to origin/fix/people-answers and merged to main (fast-forward):
@@ -140,64 +208,22 @@ hold-out 1 4.0 / 3.7, synthetic 10.0 / 8.0, family 12.0 / 12.0.
 - The "User has four sisters" event (8a58cc4c) in dira_dev was archived at
   Phesto's request.
 
-## Hybrid plan (Phesto, 2026-10-17)
-Long jobs run in tmux with logs in logs/.
-- [x] d. (2026-10-17, Korean family, api/test/holdout/holdout3.json, 13
-  questions; `--set holdout3`) Write hold-out 3 first (a different culture again, before any
-  engine changes), score-only.
-- [x] a. Post-check audit (synthetic only, never the hold-outs): sample 30
-  removed claims, classify each as a true invention or a wrongly removed
-  fact, report the ratio.
-  Result (2026-10-17, tools engine at `d55e031`, 3 synthetic runs = 45
-  answers): 3 post-checks removed anything, 57 claims, all from "show my
-  family tree". Random sample of 30 (seed 20261017): 0 true inventions, 30
-  wrongly removed (0:30). Every one was a Markdown heading or role label
-  whose meaning was in the tool output ("Parents", "Stepfather",
-  "Half-sister", "Former Spouse"); each removal wiped the whole tree,
-  because the check split on .!? only, so a whole list was one sentence.
-  Audit data: logs/postcheck-audit.jsonl (DIRA_POSTCHECK_AUDIT).
-- [x] b. Post-check compares meaning, not text: dates normalised (any
-  format → ISO; year-only stays year-only), people compared by resolved
-  entity id or alias, not exact string.
-  Done: datesIn reads ISO, d/m/y (either order kept ambiguous), d.m.y,
-  Korean/Japanese, month names in 18 languages from Intl, "March 2019" as
-  a month; a claim must match at the stored precision. Names resolve
-  through snapshot aliases; role words, month words and the results' own
-  labels are vocabulary; checked per line so lists survive. Replaying the
-  3 audited trees: 57 removals → 0. Edge dates stored from a bare year
-  (1 January, no precision) are shown as the year.
-- [x] c. Hybrid engine (`PEOPLE_ENGINE=hybrid`): the model only picks a tool
-  and its arguments. List, count, date and family-tree tools return the
-  final answer formatted by code from stored facts; the model doesn't
-  rewrite it. Open questions ("how is X connected to Y", "tell me about my
-  family") get a model-written answer from tool results, post-checked.
-  Done: api/src/services/graph/peopleHybrid.js. Tools: list_people,
-  count_people, person_dates, family_tree, who_is, owned_assets (code
-  formatted) and open_question (→ tools agent + post-check). who_is with no
-  direct link, and owned_assets with no ownership edges, also go open.
-  Uses the rules extractor. In-laws derived from the graph; a role word
-  passed as a name reads stored roles. Replies are English (code wording).
-- [x] e. Re-score rules, tools (fixed post-check) and hybrid on family
-  fixture, synthetic, hold-outs 1–3, plus live readonly on dira_dev after
-  the rebuild. 3 runs each. Pick by hold-out 3.
-  Done 2026-10-17: rules 3.3, tools 3.0, hybrid 2.7 out of 13. Default
-  stays rules (see decisions and scores).
+- 2026-10-17 (Phesto): option (b), staged, scope = whole knowledge layer
+  (see Rebuild plan). Reason: the extraction measurement showed hold-out 3
+  capped at ~53% by routing for every extractor/model, and every fix
+  under (a) lands in 2–5 duplicated places.
+
+## Earlier plan (done)
+Hybrid plan a–e, 2026-10-17: post-check audit (0 inventions : 30 wrong
+removals), meaning-based post-check, hybrid engine (parked), hold-out 3,
+re-score (rules 3.3, tools 3.0, hybrid 2.7 /13). Details in git history
+of this file (`7240988`).
 
 ## Next steps
-1. All engines score at most 4/13 on hold-out 3, and Phesto's questions
-   below decide what comes next. Extraction is the likely common cause:
-   every engine reads the same kind of stored graph, and the synthetic
-   misses that remain are missing entities and edges, not wording.
-2. Hybrid gaps seen on the family set (not fixed, pending a decision):
-   marriage date in spouse lists, counting assets by type, messy child
-   entities on dira_dev.
-3. Both engines still miss synthetic `owned-now` (flat and field have no
-   ownership edges after extraction).
-4. Later: timezone and default currency become user settings.
+1. Phase 0: docs/knowledge-layer.md (claim shape + core vocabulary, so the
+   test writers share it); hold-out 4 subagent; synthetic life set and
+   expectations; non-family golden cases; per-domain claims scorer.
+2. Phase 1 (see plan).
 
 ## Open questions for Phesto
-- Architecture review delivered 2026-10-17 (docs/architecture-review.md,
-  §8 now has the final extraction results):
-  (a) keep patching vs (b) replace the knowledge layer with one ingestion
-  path, one claim store and tool answers. Recommendation (b), staged.
-  Which one? No fixes until decided.
+- None open. (a) vs (b) decided 2026-10-17: (b), whole-life scope.
