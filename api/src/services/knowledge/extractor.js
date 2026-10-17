@@ -8,11 +8,11 @@ import { extractModel } from "./settings.js";
 import { validateClaims } from "./validate.js";
 import { ENTITY_TYPES, PREDICATES } from "./vocabulary.js";
 
-export const EXTRACTOR_VERSION = "claims-v1";
+export const EXTRACTOR_VERSION = "claims-v4";
 
 // What each predicate means and its direction, for the prompt. Kept beside the vocabulary's domain table.
 const MEANING = {
-  parent_of: "subject is a parent of object; label step/adoptive/foster when said",
+  parent_of: "subject is the PARENT, object the child (\"my son Kai\" → me parent_of Kai; \"Lena, my mother\" → Lena parent_of me); label step/adoptive/foster when said",
   spouse_of: "married or partners; date = wedding, until = divorce/separation/death of the marriage; label partner/fiancé(e)/ex when said",
   sibling_of: "brother/sister; label half or step when said",
   relative_of: "any other kin word whose chain is not stated (grandmother, uncle, cousin, sister-in-law, godmother…); label = the word used",
@@ -22,7 +22,8 @@ const MEANING = {
   works_at: "employed at an organisation; label = job title; date = start, until = left",
   colleague_of: "work colleagues",
   manages: "subject is the boss/supervisor of object",
-  client_of: "subject is a client/customer of object",
+  client_of: "subject is the client, object the business serving them; prefer has_client",
+  has_client: "subject is the business, object its client or customer (\"Shop Z supplies Hotel X, our biggest client\" → Shop Z has_client Hotel X)",
   contractor_for: "subject (person or company) does paid work for object (person, organisation or project); label = trade",
   business_partner_of: "business partners",
   founded: "subject founded/started the organisation; date",
@@ -30,10 +31,10 @@ const MEANING = {
   owns_share_of: "value = percentage owned of the organisation",
   member_of: "member of a group, association, church, savings group, club; date = since",
   studied_at: "studied at; label = course/degree; until = graduated",
-  owns: "subject owns object (property, vehicle, asset, document); date = acquired, until = disposed; label inherited/gift/co-owned/bought when said",
+  owns: "subject owns object (property, vehicle, asset, document) when ownership is stated without a purchase (inherited, a gift, \"I have\", \"our house\", someone renting it out); date = acquired, until = disposed; label inherited/gift/co-owned",
   rents: "subject rents the property; date = since, until = moved out",
   bought: "subject bought object; amount, date; context = the seller",
-  sold: "subject sold object; amount, date; context = the buyer",
+  sold: "subject (the seller) sold object (the thing); amount, date; context = the buyer",
   located_in: "object is the place where the subject is",
   identifier: "value = a number or code of the subject (plot number, registration, title number, policy number); label = what kind",
   expires_on: "value = ISO date the subject (document, policy, licence) expires",
@@ -43,7 +44,7 @@ const MEANING = {
   paid: "subject paid money to object; amount, currency, date; context = what it was for (project, asset, person)",
   received_from: "subject received money from object; amount, date; context",
   contributed_to: "subject put money into object (project, group, person); amount, date; label monthly etc.",
-  owes: "subject owes object money (debt, loan); amount; date = since; until = repaid",
+  owes: "subject is the DEBTOR, object the lender (\"I lent Kai 50\" → Kai owes me 50; \"my loan from Lender Y\" → me owes Lender Y); amount; date = since; until = repaid",
   earns: "subject's income; object = employer or source when named; amount; label per month/per year/salary/rent",
   costs: "subject (project, asset, event) costs or is budgeted at amount; label budget/quote/total/estimate",
   status: "value = planned | active | paused | done | cancelled; date",
@@ -62,6 +63,14 @@ const MEANING = {
   intends: "value = a wish, hope, intention or vision",
   related_to: "anything stated that fits nothing above; label = the relation in the user's words",
 };
+
+// Predicates the model may use in their natural direction, turned into the stored one: "Shop Z has_client Hotel X"
+// is stored as "Hotel X client_of Shop Z" (models reliably reverse client_of when asked for it directly).
+const EXTRACTION_ALIASES = { has_client: "client_of" };
+export function fromAlias(claim) {
+  const stored = EXTRACTION_ALIASES[claim.predicate];
+  return stored ? { ...claim, predicate: stored, subject: claim.object, object: claim.subject } : claim;
+}
 
 const mention = {
   type: ["object", "null"],
@@ -84,7 +93,7 @@ export const CLAIMS_SCHEMA = {
         required: ["subject", "predicate", "object", "value", "label", "amount", "currency", "context", "date", "until", "evidence", "corrects"],
         properties: {
           subject: { ...mention, type: "object" },
-          predicate: { type: "string", enum: Object.keys(PREDICATES) },
+          predicate: { type: "string", enum: [...Object.keys(PREDICATES), ...Object.keys(EXTRACTION_ALIASES)] },
           object: mention,
           value: nullable("string"),
           label: nullable("string"),
@@ -108,15 +117,28 @@ Claim fields:
 - predicate: one of the predicates below, in the direction given.
 - value: for value predicates (dates, identifiers, statuses, plans, percentages); otherwise null.
 - label, amount (a number in major units, no separators), currency (ISO 4217 code), date, until: when stated, else null.
-- Dates are ISO and never more precise than the text: "in 2019" → "2019", "May 2019" → "2019-05", "3 May 2019" → "2019-05-03". Resolve relative dates ("last month", "this September") against today's date, at the precision they imply.
+- Dates are ISO and never more precise than the text: "in 2019" → "2019", "May 2019" → "2019-05", "3 May 2019" → "2019-05-03". Resolve relative dates against today's date at the precision the words carry: "yesterday" → a day, "last week" / "this September" / "next month" → a month, "next year" → a year.
 - evidence: the shortest exact quote from the text that states the fact.
-- corrects: true when the text corrects an earlier statement ("actually", "correction", "I meant"); the claim carries the corrected value.
+- corrects: true when the text corrects an earlier statement ("actually", "correction", "I meant"); the claim uses the same subject, predicate and object as the claim it corrects and carries the corrected value.
+- date is when the fact happened or starts, only if the text gives it. Never use today's date unless the text says "today"; a target or deadline inside a plan belongs in the plan's value or date only when stated.
 
 Predicates:
-${Object.keys(PREDICATES).map((name) => `- ${name}: ${MEANING[name]}`).join("\n")}
+${[...Object.keys(PREDICATES), ...Object.keys(EXTRACTION_ALIASES)].map((name) => `- ${name}: ${MEANING[name]}`).join("\n")}
 
 Rules:
-- Only facts the text states. Never add what follows from other facts: no child/grandchild/in-law claims worked out from chains, no sums, no ages.
+- Only facts the text states. Never add what follows from other facts: no child/grandchild/in-law claims worked out from chains, no sums, no ages, and never compute a date or amount from an age, a duration or other numbers (only relative dates are resolved, see above).
+- Every person the text names with a role gets that role claim, even when the same sentence says more about them.
+- "X's <role> Y" is a claim between Y and X in the role's direction: "Arni's sister Sola" → Sola sibling_of Arni; "Arni's son Bo" → Arni parent_of Bo.
+- Kin and role words in any language count like the English ones.
+- Before naming anything, look in Known records: if it is the same person or thing, or a task or part of a known project, use the known name exactly.
+- Names are short (one to four words), the way the user would say them: "lake house", "garage build", "boat licence".
+- Names: call a thing what the user calls it ("the lake plot", "the garage build"). Numbers and codes (plot numbers, registrations, title or policy numbers) never go into a name; they are identifier claims.
+- Project state: work going on now → status active; decided or planned but not started → status planned; finished → done. A target finish date ("hope to finish by June") is due_on.
+- A project is one entity for the whole undertaking (a build, a renovation, a launch). Trades, tasks, quotes, payments and milestones attach to that project (contractor_for, costs, paid with context, milestone); never make an entity per task.
+- Documents, policies, licences and certificates are their own entities (type document), e.g. "car insurance policy"; their issuer, number and expiry are claims about the document.
+- When the text says where a person, thing or project is, add located_in (things) or lives_in (people). An organisation's town is not an employer: works_at needs an organisation.
+- Plans and decisions: value is the whole intention or decision in a few words ("move the family to the countryside"), never one word. "We agreed/decided" → decided; "I plan/will/want to" → plans or intends.
+- Ended employment: "after N years at X" or "I left X" → works_at X with until.
 - A kin word ties people only as the text says: "Arni's wife Sola" is spouse_of between Sola and Arni, not a claim about the narrator. "My sister-in-law Sola" with no chain is relative_of Sola → me, label "sister-in-law".
 - "Our children" names both parents when the other parent is known from the text or records.
 - When the text says a state ended (sold, moved, left a job, divorced, repaid, quit), give the ended claim with until, plus the new state.
@@ -124,7 +146,10 @@ Rules:
 - Ignore questions in the text; extract only what it tells.
 - Text in any language: claims are in English, names and quotes as written.
 - If a fact fits no predicate, use related_to with a label in the user's words. Never drop a stated fact.
-- No facts → an empty list.`;
+- Something done or decided together ("Ana and I decided", "we bought") → one claim with subject me; name the others in a separate claim only when the text gives them their own part.
+- No facts → an empty list.
+
+Before answering, check the text once more: every named person has their role claim; every thing described with a place ("the flat in X", "our farm near Y") has located_in; every amount is in a claim; every date is in a claim; every ended state has until; every contractor or company working on something has contractor_for; every plan or decision is there.`;
 
 function knownLines(self, entities, claims) {
   const name = new Map(entities.map((entity) => [entity.id, entity]));
@@ -159,7 +184,7 @@ export async function extractClaims(text, { userId, asOf = null, source = "chat"
   ].join("\n\n");
   const model = extractModel();
   const { json, usage } = await jsonCall({ model, name: "claims", schema: CLAIMS_SCHEMA, system: CLAIMS_PROMPT, user, timeoutMs: 60000 });
-  const raw = (json.claims || []).map((claim) => ({ ...claim, subject: claim.subject?.type === "self" ? "me" : claim.subject, object: claim.object?.type === "self" ? "me" : claim.object, context: claim.context?.type === "self" ? "me" : claim.context }));
-  const { kept, dropped } = validateClaims(raw, text, { known: entities.map((entity) => [entity.name, ...(entity.aliases || [])]).flat(), selfName: self.name });
+  const raw = (json.claims || []).map(fromAlias).map((claim) => ({ ...claim, subject: claim.subject?.type === "self" ? "me" : claim.subject, object: claim.object?.type === "self" ? "me" : claim.object, context: claim.context?.type === "self" ? "me" : claim.context }));
+  const { kept, dropped } = validateClaims(raw, text, { known: entities.map((entity) => [entity.name, ...(entity.aliases || [])]).flat(), selfName: self.name, today });
   return { claims: kept, dropped, raw, usage, extractor: EXTRACTOR_VERSION, model };
 }

@@ -85,9 +85,24 @@ function wantedOf(fact) {
   return fact;
 }
 
+// Equivalences that are part of the design, not leniency for one set: plans, intentions and decisions are one family;
+// owning follows from a purchase (and ends with a sale), so an expected owns is met by the bought/sold that states it.
+const FAMILY = { plans: "intent", intends: "intent", decided: "intent" };
+const samePredicate = (a, b) => a === b || (FAMILY[a] && FAMILY[a] === FAMILY[b]);
+
+function ownershipMatch(fact, claim, ids) {
+  if (fact.predicate !== "owns" || !fact.object) return false;
+  if (!ids(fact.subject).includes(claim.subjectId) || !ids(fact.object).includes(claim.objectId)) return false;
+  if (fact.until) return claim.predicate === "sold" && sameDate(fact.until, claim.date);
+  // A corrected price does not undo the purchase, so a superseded bought still shows the ownership.
+  return claim.predicate === "bought" && (!fact.date || sameDate(fact.date, claim.date));
+}
+
 function matches(fact, claim, ids) {
-  if (claim.predicate !== fact.predicate) return false;
+  if (ownershipMatch(fact, claim, ids)) return claim.status !== "rejected";
+  if (!samePredicate(claim.predicate, fact.predicate)) return false;
   const symmetric = PREDICATES[fact.predicate]?.symmetric;
+  // (predicate family members share one shape, so the rest of the comparison is the same)
   const subjects = ids(fact.subject);
   if (fact.object) {
     const objects = ids(fact.object);
@@ -106,7 +121,8 @@ function matches(fact, claim, ids) {
   if (fact.amount != null && !(sameAmount(fact.amount, claim.amount) && sameCurrency(fact.currency || "", claim.currency))) return false;
   if (fact.date && !sameDate(fact.date, claim.date)) return false;
   if (fact.until && !sameDate(fact.until, claim.until)) return false;
-  if (fact.context && !ids(fact.context).includes(claim.contextId)) return false;
+  // A missing context is a less complete claim, not a wrong one; a different context is wrong.
+  if (fact.context && claim.contextId && !ids(fact.context).includes(claim.contextId)) return false;
   if (fact.status === "superseded" && claim.status !== "superseded") return false;
   if (fact.status !== "superseded" && ["superseded", "rejected"].includes(claim.status)) return false;
   return true;

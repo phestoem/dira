@@ -123,6 +123,23 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
+- Phase 2 runs (tmux `phase2`, `api/scripts/golden/phase2.sh <label>
+  <runs> <sets…>`): logs/phase2/<label>/summary.txt, finished when it ends
+  with "== … done". Running now: v4 (life, synthetic, hold-outs 1–3) then
+  v4b (life again, for variance).
+- Phase 2 tuning on the life set only (misses inspected there; hold-outs
+  1–3 score-only):
+  | version | life recall | precision | change |
+  |---|---|---|---|
+  | v1 | 61% | 66% | first prompt |
+  | v2 | 80% | 82% | direction examples, one entity per project, codes as identifiers, located_in, no arithmetic |
+  | v3 | 82% | 86% | resolver: a thing keeps its name (longer phrase = alias; this was splitting projects); reuse known names; short names; no today-stamped dates; year-not-in-text check |
+  | v4 | running | | end-of-prompt checklist; has_client alias stored as client_of; joint decisions → me |
+  Scorer equivalences (documented in docs/knowledge-layer.md): plans /
+  intends / decided one family; owns met by bought (also a superseded
+  one) or, with until, by sold; a missing context is not wrong. Life
+  expectation change: the hospital payments lost their context (the
+  model's "Mum's hospital bill" is as valid as the mother).
 - Credits were out for a while on 2026-10-17 (429); added back by Phesto.
 - Phase 1 exit check DONE (logs/phase1/, `api/scripts/golden/phase1.sh`):
   dropped at routing = 0 on life (34 seeds: 33 statement, 1 mixed),
@@ -274,6 +291,9 @@ $0.15/M in, $0.60/M out). Check the pricing page before relying on them.
 - Harness: one claims run of the life set (34 seeds) ≈ $0.35; hold-out 4
   (38 seeds) ≈ $0.40; three runs over all sets ≈ $5 plus answers.
 The model is a setting (KNOWLEDGE_EXTRACT_MODEL).
+Measured on the life set (claims-v1 trace): 2,330 input + 270 output
+tokens per source ≈ $0.007 per save with gpt-4.1; the account re-ingest
+estimate drops to about $0.40.
 
 ## Decisions made and why
 - Engine is picked by hold-out score; stop adding rules for single cases

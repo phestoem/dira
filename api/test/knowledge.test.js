@@ -136,3 +136,13 @@ test("extracted claims keep only evidence, names and amounts the text states", a
   assert.equal(kept.length, 2);
   assert.deepEqual(dropped.map((item) => item.reason), ["amount-not-in-text", "name-not-in-text", "evidence-not-in-text"]);
 });
+
+test("a year worked out from an age is not stated; a resolved relative date is", async () => {
+  const { validateClaims } = await import("../src/services/knowledge/validate.js");
+  const text = "My mother turns 75 this September. We moved last month.";
+  const born = { subject: { name: "mother", type: "person" }, predicate: "born", value: "1951-09", evidence: "My mother turns 75 this September" };
+  const moved = { subject: "me", predicate: "lives_in", object: { name: "mother", type: "place" }, date: "2026-05", evidence: "We moved last month" };
+  const { kept, dropped } = validateClaims([born, moved], text, { today: "2026-06-15" });
+  assert.deepEqual(dropped.map((item) => item.reason), ["year-not-in-text"]);
+  assert.equal(kept.length, 1);
+});

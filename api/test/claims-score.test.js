@@ -79,3 +79,21 @@ test("the life set's expected claims use only the core vocabulary and cover ever
   const asked = new Set(set.questions.map((question) => question.domain));
   for (const domain of [...DOMAINS, "open"]) assert.ok(asked.has(domain), `no questions in ${domain}`);
 });
+
+test("ownership follows from a purchase or sale, and plans, intentions and decisions are one family", () => {
+  const expect = { claims: [
+    { seed: 0, subject: "me", predicate: "owns", object: "Sintra plot", date: "2020" },
+    { seed: 1, subject: "me", predicate: "owns", object: "Sintra house", until: "2023-09" },
+    { seed: 2, subject: "me", predicate: "decided", value: "move into the Sintra house" },
+    { seed: 3, subject: "me", predicate: "paid", object: "Tiago Mendes", amount: 500, context: "Sintra house" },
+  ] };
+  const claims = [
+    { id: 1, subjectId: "self", predicate: "bought", objectId: "plot", date: new Date("2020-01-01"), datePrecision: "year" },
+    { id: 2, subjectId: "self", predicate: "sold", objectId: "house", date: new Date("2023-09-01"), datePrecision: "month" },
+    { id: 3, subjectId: "self", predicate: "plans", value: "we will move into the Sintra house" },
+    { id: 4, subjectId: "self", predicate: "paid", objectId: "tiago", amount: 500 },
+  ];
+  assert.equal(scoreClaims({ expect, entities, claims, selfId: "self" }).total.tp, 4);
+  const wrong = scoreClaims({ expect: { claims: [expect.claims[3]] }, entities, claims: [{ ...claims[3], contextId: "plot" }], selfId: "self" });
+  assert.equal(wrong.total.tp, 0, "a different context is wrong");
+});

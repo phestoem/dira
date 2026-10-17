@@ -22,7 +22,7 @@ const show = (text) => (SEALED_WORDS.has(String(text).toLowerCase()) || SEALED.s
 const SET_TURNS = SETS.flatMap((set) => set.questions.flatMap((question) => question.turns));
 
 // Proper nouns from the golden seeds are found automatically; these words in them are ordinary English or brands.
-const ORDINARY = new Set(["my", "she", "i", "i'm", "mum", "eur", "jina", "mama", "dada", "after", "in", "our", "her", "jeroen's", "eoin's", "marek's", "zofia's", "we", "our", "my", "is", "jan", "januari", "februari", "machi", "aprili", "mei", "juni", "julai", "agosti", "septemba", "oktoba", "novemba", "desemba", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "tsh", "toyota", "suzuki", "kes", "brl", "hotel", "fit", "dr", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"]);
+const ORDINARY = new Set(["my", "she", "i", "i'm", "mum", "eur", "jina", "mama", "dada", "after", "in", "our", "her", "jeroen's", "eoin's", "marek's", "zofia's", "we", "our", "my", "is", "jan", "januari", "februari", "machi", "aprili", "mei", "juni", "julai", "agosti", "septemba", "oktoba", "novemba", "desemba", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "tsh", "toyota", "suzuki", "kes", "brl", "hotel", "insurance", "fit", "dr", "feb", "mar", "apr", "jun", "jul", "aug", "sep", "sept", "oct", "nov", "dec"]);
 // Personal identifiers that are not in the golden seeds.
 const PERSONAL = ["Burton", "Ntagha", "Makoba", "Emmiliana", "Hassani", "Mrisho", "Juma Enock", "RZJ1200017194", "P9200", "Tent Camping Plans", "Dar es Salaam", "Finland", "Tanzania", "Arusha", "Nairobi"];
 

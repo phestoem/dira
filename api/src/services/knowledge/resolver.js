@@ -57,12 +57,13 @@ export async function createResolver(userId, client = prisma) {
     return entity;
   }
 
-  // A longer name replaces a shorter one and keeps it as an alias; a different spelling becomes an alias.
+  // A person's longer name replaces a shorter one ("Ada" → "Ada Lindqvist") and keeps it as an alias. A thing keeps
+  // its name: a longer phrase for it ("the roof work on the lake house") is only an alias.
   async function learn(entity, mention) {
     const said = String(mention.name).trim();
     const known = [entity.name, ...(entity.aliases || [])].some((name) => normalizeName(name) === normalizeName(said));
     if (known) return entity;
-    const longer = words(said).length > words(entity.name).length;
+    const longer = entity.entityType === "person" && words(said).length > words(entity.name).length;
     const data = longer
       ? { name: said, normalizedName: normalizeName(said), aliases: [...new Set([...(entity.aliases || []), entity.name])] }
       : { aliases: [...new Set([...(entity.aliases || []), said])] };

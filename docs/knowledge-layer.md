@@ -205,4 +205,12 @@ Expected-claims file (`{ set, claims: [...] }`), one per stated fact:
   gives precision: `2024`, `2024-03`, `2024-03-15`), `status`
   (`superseded` for a fact the seeds later correct).
 - Only facts the text states, in the vocabulary above; nothing derived.
+- Scoring (api/scripts/golden/claims.js): names match exactly, by alias, or
+  as the closest word-subset; symmetric predicates in either order;
+  received_from is paid turned around; dates at the stated precision;
+  amounts within 0.5%; a corrected fact counts only if stored as
+  superseded. Equivalences: plans / intends / decided are one family; an
+  expected owns is met by a bought (same date if given) and an owns with
+  until by a sold on that date; a stored claim without context is not
+  wrong when the expected one has a context (a different context is).
 - Claim domains: people, work, money, projects, assets, time, plans.

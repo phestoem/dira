@@ -24,8 +24,10 @@ export function amountsIn(text) {
 
 const near = (a, b) => Math.abs(a - b) <= Math.max(1, Math.abs(b) * 0.005);
 
-export function validateClaims(claims, text, { known = [], selfName = "" } = {}) {
+export function validateClaims(claims, text, { known = [], selfName = "", today = new Date() } = {}) {
   const words = new Set(tokens(text));
+  const years = new Set((String(text).match(/(?<!\d)\d{4}(?!\d)/g) || []).map(Number));
+  const thisYear = new Date(today).getUTCFullYear();
   const knownWords = new Set(known.flatMap(tokens));
   const amounts = amountsIn(text);
   const kept = [];
@@ -56,6 +58,12 @@ export function validateClaims(claims, text, { known = [], selfName = "" } = {})
       if (reason) return reason;
     }
     if (claim.amount != null && !amounts.some((value) => near(value, Number(claim.amount)))) return "amount-not-in-text";
+    // A year must be written in the text, or be close to today (a resolved "last month", "next year"); a year worked
+    // out from an age or a duration is not stated.
+    for (const field of ["value", "date", "until"]) {
+      const year = /^(\d{4})(-\d{2}){0,2}$/.test(String(claim[field] ?? "")) ? Number(String(claim[field]).slice(0, 4)) : null;
+      if (year && !years.has(year) && Math.abs(year - thisYear) > 1) return "year-not-in-text";
+    }
     return null;
   }
 }
