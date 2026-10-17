@@ -6,7 +6,7 @@ cd "$(dirname "$0")/../.."
 LABEL=${1:?label}; RUNS=${2:?runs}; shift 2
 OUT=$(cd .. && pwd)/logs/phase2/$LABEL
 mkdir -p "$OUT"
-bash scripts/devapi.sh rules KNOWLEDGE_LAYER=claims DIRA_ALLOW_AS_OF=1 KNOWLEDGE_TRACE="$OUT/trace.jsonl"
+bash scripts/devapi.sh rules KNOWLEDGE_LAYER=claims DIRA_ALLOW_AS_OF=1 KNOWLEDGE_TRACE="$OUT/trace.jsonl" ${PHASE2_ENV:-}
 for run in $(seq 1 "$RUNS"); do
   for set in "$@"; do
     flags="--claims"
