@@ -375,6 +375,9 @@ of this file (`7240988`).
    versions), then the gate on hold-out 4.
 
 ## Open questions for Phesto
+- OpenAI credits ran out again (gpt-5.x runs use more tokens: ~4.2k in +
+  400–800 out per save; a 4-set run ≈ 140 saves). Add credits to finish
+  the readiness check and the hold-out 5 gate.
 - Hold-out 4 diagnosis (2026-10-17, one inspectable run, logs/phase2/diag4/):
   58 misses. Scorer bug: an expected owns used up the sold claim in the
   direct pass (2 sales lost). Two-writer conventions: contractor_for vs
@@ -420,7 +423,21 @@ of this file (`7240988`).
   | gpt-5.4 | 84 | 91 | 4.2k / 810 |
   | gpt-5.5 | 85 | 88 | 4.2k / 390 |
   Weakest domains with gpt-5.5: dev2 assets 69%, dev3 money 75%,
-  projects 70–73%. Switching the default model is Phesto's call (cost).
+  projects 70–73%.
+- v11 on gpt-5.5 (default since Phesto's decision): joint ownership gives
+  one claim per owner (the joint-decision rule had collapsed "we bought
+  it, half each"); a claim that only gives an end closes the open claim
+  (repaid loan, left a job); scorer matches compound words. Gpt-5.5 v10
+  dumps rescored: dev2 86%, dev3 88%.
+- BLOCKED 2026-10-17 23:26 UTC: OpenAI credits exhausted again (429
+  credit_balance_exhausted) during the v11 readiness runs. dev2 run 1 is
+  invalid (some events never extracted: 73%, plans 23%); remaining runs
+  stopped, leftover fixture user removed. Re-run when credits are back:
+  `phase2.sh v11 2 dev2 dev3` then `phase2.sh v11b 1 life holdout4`.
+- Gap found: a failed extraction call (429, timeout) leaves the event
+  saved but never extracted. The claim store needs a retry / catch-up
+  for events with graphExtractedAt null (old catch-up is off under the
+  flag). To do before phase 4.
 - DECIDED 2026-10-17 (Phesto): option 1. Hold-out 4 is now a diagnostic
   set (may be read); hold-out 5 + 2 dev sets by fresh subagents after the
   diagnosis and any design-doc clarification.
