@@ -5,8 +5,9 @@ Last updated: 2026-10-17
 ## Current goal
 2026-10-17 (Phesto): option (b), staged: rebuild DIRA's WHOLE knowledge
 layer (not just family) as one ingestion path → one claim store → one
-answer path. Design: docs/knowledge-layer.md. Phases 0 and 1 done; now
-phase 2 (claims extractor), tuned on the life set only, then the gate.
+answer path. Design: docs/knowledge-layer.md. Phases 0 and 1 done.
+Phase 2 gate FAILED on 2026-10-17 (hold-out 4 mean recall 62%); stopped,
+waiting for Phesto's decision (see open questions).
 
 ## Rebuild plan (Phesto, 2026-10-17)
 
@@ -143,8 +144,25 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
 - Gate readiness met on v5 (life ≥ 85% and every domain ≥ 70% in both
   runs). Gate (Phesto, 2026-10-17): hold-out 4 seeded 3 times in one
   session, score-only, judged on the mean per domain and overall
-  (≥ 85%, no domain < 70%, 0 dropped at routing). Running: tmux `phase2`,
-  `phase2.sh gate 3 holdout4` → logs/phase2/gate/summary.txt.
+  (≥ 85%, no domain < 70%, 0 dropped at routing).
+- GATE RESULT 2026-10-17 21:41 UTC (claims-v5, gpt-4.1, logs/phase2/gate/,
+  totals only, hold-out 4 items never read): FAIL.
+  | domain | run1 | run2 | run3 | mean | bar |
+  |---|---|---|---|---|---|
+  | overall | 63% | 61% | 63% | 62% (296/474) | 85% |
+  | people | 54 | 62 | 69 | 62% | 70 |
+  | work | 72 | 72 | 66 | 70% | 70 |
+  | assets | 60 | 56 | 44 | 53% | 70 |
+  | money | 63 | 60 | 70 | 64% | 70 |
+  | projects | 25 | 25 | 25 | 25% | 70 |
+  | time | 71 | 67 | 71 | 70% | 70 |
+  | plans | 80 | 73 | 87 | 80% | 70 |
+  Dropped at routing: 0 in all runs (that criterion passes). Precision
+  68–71%. Life set on the same code: 87% / 86%. The 25-point drop from
+  the tuning set to the hold-out means v2–v5 were fitted to the life set
+  and/or to my own expectation conventions (entity naming, predicate
+  choice), which the separate writer did not share. Which of the two it
+  is cannot be told from totals.
   Scorer equivalences (documented in docs/knowledge-layer.md): plans /
   intends / decided one family; owns met by bought (also a superseded
   one) or, with until, by sold; a missing context is not wrong. Life
@@ -354,6 +372,13 @@ of this file (`7240988`).
    versions), then the gate on hold-out 4.
 
 ## Open questions for Phesto
+- Phase 2 gate failed (62% vs 85%). Process says stop. Options:
+  (1) hold-out 4 is now spent as a gate: use it as a diagnostic set
+  (read its misses to separate convention mismatches from real
+  extraction failures), have a fresh subagent write hold-out 5 for the
+  next gate, and add 2–3 more whole-life dev sets written by separate
+  subagents so tuning is not fitted to one life and one author;
+  (2) stop the rebuild here. Recommendation: (1).
 - OpenAI credits ran out (429 "no credits remaining"). Model-dependent
   work (golden runs, extraction, cost check) waits until they're added.
 - Live non-family check: the golden live run can only test facts that
