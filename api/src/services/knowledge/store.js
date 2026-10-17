@@ -3,7 +3,7 @@
 import { prisma } from "../../prisma.js";
 import { materialize } from "./materialize.js";
 import { createResolver } from "./resolver.js";
-import { PREDICATES } from "./vocabulary.js";
+import { PREDICATES, SINGLE_VALUED } from "./vocabulary.js";
 
 // "2024" → year, "2024-03" → month, "2024-03-15" → day. Anything else is not a date the text stated.
 export function parseWhen(value) {
@@ -79,9 +79,9 @@ export async function writeClaims(userId, items, meta = {}) {
     };
     if (row.subjectId && row.subjectId === row.objectId) { skipped.push({ item, reason: "self-loop" }); continue; }
     if (seen.has(key(row))) { skipped.push({ item, reason: "duplicate" }); continue; }
-    if (item.corrects) {
+    if (item.corrects || SINGLE_VALUED.has(row.predicate)) {
       // The claims this one corrects: same subject and predicate (and same object, when the object is an entity).
-      const replaced = existing.filter((old) => old.subjectId === row.subjectId && old.predicate === row.predicate && old.status !== "superseded" && (PREDICATES[row.predicate].object !== "entity" || old.objectId === row.objectId));
+      const replaced = existing.filter((old) => old.subjectId === row.subjectId && old.predicate === row.predicate && old.status !== "superseded" && (PREDICATES[row.predicate].object !== "entity" || old.objectId === row.objectId) && (item.corrects || old.value !== row.value));
       if (replaced.length) {
         await prisma.claim.updateMany({ where: { id: { in: replaced.map((old) => old.id) } }, data: { status: "superseded" } });
         replaced.forEach((old) => { old.status = "superseded"; });

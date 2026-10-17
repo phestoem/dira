@@ -8,7 +8,7 @@ import { extractModel } from "./settings.js";
 import { validateClaims } from "./validate.js";
 import { ENTITY_TYPES, PREDICATES } from "./vocabulary.js";
 
-export const EXTRACTOR_VERSION = "claims-v6";
+export const EXTRACTOR_VERSION = "claims-v7";
 
 // What each predicate means and its direction, for the prompt. Kept beside the vocabulary's domain table.
 const MEANING = {
@@ -76,7 +76,8 @@ export function withPlaces(claims) {
   for (const claim of claims) {
     out.push(claim);
     for (const entity of [claim.subject, claim.object, claim.context]) {
-      if (!entity || entity === "me" || entity.type === "person" || entity.type === "place" || !String(entity.place || "").trim()) continue;
+      if (!entity || entity === "me" || entity.type === "person" || !String(entity.place || "").trim()) continue;
+    if (entity.type === "place" && entity.place.trim().toLowerCase() === String(entity.name).trim().toLowerCase()) continue;
       const key = `${entity.name}|${entity.place}`.toLowerCase();
       if (seen.has(key)) continue;
       seen.add(key);
@@ -137,7 +138,7 @@ export const CLAIMS_SCHEMA = {
 export const CLAIMS_PROMPT = `You turn what a person tells their personal record keeper into claims: one claim per fact the text states.
 
 Claim fields:
-- subject, object, context: entities as { name, type, place }. The narrator is { "name": "me", "type": "self", "place": null }. place is where a thing (property, vehicle, organisation, project, asset, event) is when the text says so, also when the place is part of how it is called ("the farm in X", "our house near Y", "the Z outlet" → the town); null for people and when unknown. Use the fullest name the text or the known records give (a known name when it is the same person or thing). A thing without a proper name gets a short name built from the text, e.g. "lake plot", "boat licence", "tuition fees", "eye test appointment".
+- subject, object, context: entities as { name, type, place }. The narrator is { "name": "me", "type": "self", "place": null }. place is where a thing (property, vehicle, organisation, project, asset, event, or a place inside a larger place: a district in its city) is when the text says so, also when the place is part of how it is called ("the farm in X", "our house near Y", "the Z outlet" → the town); null for people and when unknown. Use the fullest name the text or the known records give (a known name when it is the same person or thing). A thing without a proper name gets a short name built from the text, e.g. "lake plot", "boat licence", "tuition fees", "eye test appointment".
 - predicate: one of the predicates below, in the direction given.
 - value: for value predicates (dates, identifiers, statuses, plans, percentages); otherwise null.
 - label, amount (a number in major units, no separators), currency (ISO 4217 code), date, until: when stated, else null.
@@ -163,7 +164,8 @@ Rules:
 - A plan or intention that names money carries it in amount and currency.
 - Repaid debts: "Kai paid back the 500 I lent him" → Kai owes me (until = when repaid) and me received_from Kai 500.
 - Before naming anything, look in Known records: if it is the same person or thing, or a task or part of a known project, use the known name exactly.
-- Names are short (one to four words), the way the user would say them: "lake house", "garage build", "boat licence".
+- Names are short (one to four words), the way the user would say them: "lake house", "garage build", "boat licence". Proper names stay as written; a thing without a proper name gets an English name whatever the text's language ("passport", "dentist appointment", "tax return").
+- A date-valued claim (scheduled, due_on, expires_on, renews_on, happened, milestone, status) is about the thing that has the date (the appointment, deadline, document, event or project), never about the narrator or another person; born and died are about the person.
 - Names: call a thing what the user calls it ("the lake plot", "the garage build"). Numbers and codes (plot numbers, lot and block numbers, registrations, plates, title or policy numbers) never go into a name, not even in brackets; they are identifier claims. "Lot 9, block B in Pine Estate, Riverton" → name "Riverton lot", identifier "lot 9, block B", place Riverton (and Pine Estate). "the Corolla (plate ABC-123)" → name "Corolla", identifier "ABC-123".
 - Co-ownership: "Kai and I own it together" → me owns X and Kai owns X (the owner is always the subject).
 - Project state: work going on now → status active; decided or planned but not started → status planned; finished → done. A target finish date ("hope to finish by June") is due_on.

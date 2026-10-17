@@ -5,14 +5,14 @@ import { normalizeName } from "../graph/entityResolver.js";
 
 const tokens = (text) => normalizeName(text).split(" ").filter(Boolean);
 
-const SCALE = { k: 1e3, thousand: 1e3, elfu: 1e3, mil: 1e3, m: 1e6, mn: 1e6, million: 1e6, millions: 1e6, milioni: 1e6, milhao: 1e6, milhoes: 1e6, bn: 1e9, billion: 1e9 };
+const SCALE = { k: 1e3, thousand: 1e3, elfu: 1e3, mil: 1e3, tausend: 1e3, m: 1e6, mn: 1e6, mio: 1e6, million: 1e6, millions: 1e6, millionen: 1e6, milioni: 1e6, milhao: 1e6, milhoes: 1e6, lakh: 1e5, lakhs: 1e5, lac: 1e5, lacs: 1e5, crore: 1e7, crores: 1e7, cr: 1e7, bn: 1e9, billion: 1e9 };
 
 // Every amount written in the text, in any common format: 1,750,000 · 1.750.000 · 1 750 000 · 1.75 million · 450k ·
-// R$ 55.000,00 (decimal comma).
+// R$ 55.000,00 (decimal comma) · 38,50,000 and ₹5 lakh / 1.2 crore (Indian grouping and units).
 export function amountsIn(text) {
   const flat = String(text || "").normalize("NFD").replace(/\p{M}/gu, "");
   const found = [];
-  const pattern = /(\d{1,3}(?:[,\s. '’]\d{3})+|\d+)(?:[.,](\d{1,2}|\d+))?\s*(thousand|millions|million|milioni|milhoes|milhao|billion|elfu|mil|mn|bn|k|m)?(?![\p{L}\d])/giu;
+  const pattern = /(\d{1,3}(?:,\d{2})+,\d{3}|\d{1,3}(?:[,\s.\u00a0'’]\d{3})+|\d+)(?:[.,](\d{1,2}|\d+))?\s*(thousand|tausend|millionen|millions|million|milioni|milhoes|milhao|billion|crores|crore|lakhs|lakh|lacs|lac|elfu|mil|mio|mn|bn|cr|k|m)?(?![\p{L}\d])/giu;
   for (const match of flat.matchAll(pattern)) {
     const whole = Number(match[1].replace(/[^\d]/g, ""));
     const number = match[2] ? Number(`${whole}.${match[2]}`) : whole;

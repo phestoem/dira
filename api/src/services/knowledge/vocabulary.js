@@ -68,6 +68,10 @@ export const PREDICATES = {
   related_to: P("people", "either"),
 };
 
+// One current value per subject: a newer different value replaces the older one (a postponed deadline, a moved
+// appointment, a corrected birth date). Statuses, values and identifiers keep their history instead.
+export const SINGLE_VALUED = new Set(["born", "died", "due_on", "expires_on", "renews_on", "scheduled"]);
+
 // Same fact, other direction: "B received from A" is "A paid B".
 export const INVERSES = { received_from: "paid" };
 

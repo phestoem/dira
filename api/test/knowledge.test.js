@@ -119,6 +119,11 @@ test("amounts are read in the formats people write them", async () => {
   assert.ok(has("about 1.75 million", 1750000));
   assert.ok(has("shilingi 120,000", 120000));
   assert.ok(has("450k for the roof", 450000));
+  assert.ok(has("₹38,50,000 per annum", 3850000));
+  assert.ok(has("each put in ₹5 lakh", 500000));
+  assert.ok(has("₹14.2 lakh on-road", 1420000));
+  assert.ok(has("about 1.2 crore", 12000000));
+  assert.ok(has("Angebot über 12.500 €", 12500));
   assert.ok(!has("in 2024 I paid 45,000", 450000));
 });
 
@@ -158,4 +163,22 @@ test("a thing's place becomes located_in, and today's date on an undated fact is
   const { dropped } = validateClaims([stamped], "My late brother Nils loved the sea.", { today: "2026-06-15" });
   assert.deepEqual(dropped.map((item) => item.reason), ["today-stamp"]);
   assert.equal(validateClaims([{ ...stamped, evidence: "Nils died this morning" }], "Nils died this morning, on the 15th.", { today: "2026-06-15" }).kept.length, 1);
+});
+
+test("a newer deadline replaces the older one; places inside places are kept", async () => {
+  const { withPlaces } = await import("../src/services/knowledge/extractor.js");
+  const out = withPlaces([{ subject: { name: "Old Town", type: "place", place: "Bergen" }, predicate: "lives_in", object: null, evidence: "Old Town in Bergen" }]);
+  assert.deepEqual(out.map((item) => item.predicate), ["lives_in", "located_in"]);
+  const stamp = Date.now();
+  const user = await prisma.user.create({ data: { email: `single-${stamp}@example.com`, handle: `single${stamp}`, name: "Ada Lindqvist" } });
+  try {
+    const { writeClaims } = await import("../src/services/knowledge/store.js");
+    const due = (value) => ({ subject: { name: "kitchen refit", type: "project" }, predicate: "due_on", value, evidence: "due" });
+    await writeClaims(user.id, [due("2026-07-31")]);
+    await writeClaims(user.id, [due("2026-09-30")]);
+    const rows = await prisma.claim.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+    assert.deepEqual(rows.map((row) => [row.value, row.status]), [["2026-07-31", "superseded"], ["2026-09-30", "stated"]]);
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+  }
 });

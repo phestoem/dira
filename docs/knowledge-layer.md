@@ -168,7 +168,8 @@ Nothing stated is dropped for lack of a predicate: it becomes
 Added 2026-10-17 after hold-out 4 showed two writers recording the same
 fact in different shapes. One fact, one shape:
 - Names are short, the way the user says them ("Riverton lot", "garage
-  build", "Corolla"). Codes never go into names: plot/lot/block numbers,
+  build", "Corolla"). Proper names stay as written; things without a
+  proper name get an English name in any language ("passport"). Codes never go into names: plot/lot/block numbers,
   plates, registrations, title and policy numbers are `identifier` claims.
 - Kin words with a core predicate use it, also between other people:
   mother/father/son/daughter → parent_of, brother/sister → sibling_of,
@@ -188,7 +189,11 @@ fact in different shapes. One fact, one shape:
 - A document's coming date is `expires_on` (or `renews_on`); an event's
   date is `happened` (past) or `scheduled` (future).
 - A correction repeats the whole claim it corrects with the changed part,
-  and the old claim is marked superseded.
+  and the old claim is marked superseded. born, died, due_on, expires_on,
+  renews_on and scheduled have one current value per subject: a newer
+  different value supersedes the older one (a postponed deadline).
+- Date-valued claims are about the thing with the date (appointment,
+  document, deadline, event, project), never about the narrator.
 - `context` (what a payment or decision was for) is useful but optional.
 
 ## Derived in code, never extracted
