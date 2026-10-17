@@ -372,6 +372,24 @@ of this file (`7240988`).
    versions), then the gate on hold-out 4.
 
 ## Open questions for Phesto
+- Hold-out 4 diagnosis (2026-10-17, one inspectable run, logs/phase2/diag4/):
+  58 misses. Scorer bug: an expected owns used up the sold claim in the
+  direct pass (2 sales lost). Two-writer conventions: contractor_for vs
+  works_on doubled (5), descriptive value on costs (5), milestone text in
+  value vs label (3), relative_of direction, expires_on/renews_on,
+  happened/scheduled, differently worded entity names and contexts. Real
+  extraction failures: codes in names (lot, plates: 9 claims), kin words
+  stored as relative_of instead of parent_of, a birth as a date on the
+  parent claims, moves, employers of boss/colleague, paid vendors not
+  contractors, co-owned lot reversed, client_of reversed, correction
+  without its start year. Rescored with the fixed scorer: 63% → 77%
+  (people 85, work 69, assets 60, money 90, projects 83, time 71,
+  plans 87). Fixes: scorer families + sharing (docs/knowledge-layer.md),
+  extractor v6, and a "Conventions" section in the design doc that every
+  writer and the extractor follow.
+- Running: v6 (tmux `phase2`, logs/phase2/v6/): life, hold-out 4 ×2 (dev),
+  hold-outs 1–3. Subagents writing: hold-out 5 (sealed, culture not used
+  before), dev2 (India), dev3 (Germany), from the design doc only.
 - DECIDED 2026-10-17 (Phesto): option 1. Hold-out 4 is now a diagnostic
   set (may be read); hold-out 5 + 2 dev sets by fresh subagents after the
   diagnosis and any design-doc clarification.
