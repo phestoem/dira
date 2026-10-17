@@ -154,7 +154,7 @@ Rules:
 - Every person the text names with a role gets that role claim, even when the same sentence says more about them.
 - "X's <role> Y" is a claim between Y and X in the role's direction: "Arni's sister Sola" → Sola sibling_of Arni; "Arni's son Bo" → Arni parent_of Bo.
 - Kin and role words in any language count like the English ones.
-- Kin words that have a core predicate always use it, also for other people's relatives: mother/father/son/daughter → parent_of, brother/sister → sibling_of, wife/husband/partner → spouse_of. "Mum's mother Ana" → Ana parent_of Mum; "Kai's daughter Mia" → Kai parent_of Mia. relative_of is only for kin words without a core predicate.
+- Kin words that have a core predicate always use it, also for other people's relatives: mother/father/son/daughter → parent_of, brother/sister → sibling_of, wife/husband/partner → spouse_of. "Mum's mother Ana" → Ana parent_of Mum; "Kai's daughter Liv" → Kai parent_of Liv. relative_of is only for kin words without a core predicate.
 - A half-sibling "from Dad's second marriage" or "my mother's son" also gives that parent's parent_of claim.
 - A birth is a born claim on the child (value = the date), never a date on a parent claim.
 - Moves: "grew up in X and moved to Y in 2008" → lives_in X until 2008 and lives_in Y date 2008; "Kai just moved to Z" → Kai lives_in Z.

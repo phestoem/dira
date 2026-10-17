@@ -1,0 +1,175 @@
+{
+  "set": "dev3",
+  "claims": [
+    { "seed": 0, "domain": "time", "subject": "me", "predicate": "born", "value": "1983-07-09", "date": "1983-07-09" },
+    { "seed": 0, "domain": "work", "subject": "me", "predicate": "founded", "object": "Brenner Möbelbau", "date": "2016-04-01" },
+    { "seed": 0, "domain": "time", "subject": "me", "predicate": "lives_in", "object": "Emmendingen", "until": "2020-04" },
+    { "seed": 0, "domain": "time", "subject": "me", "predicate": "lives_in", "object": "Wiehre", "date": "2020-04" },
+    { "seed": 0, "domain": "assets", "subject": "Wiehre", "predicate": "located_in", "object": "Freiburg" },
+
+    { "seed": 1, "domain": "people", "subject": "me", "predicate": "spouse_of", "object": "Katrin", "date": "2019-06-14" },
+    { "seed": 1, "domain": "people", "subject": "Katrin", "predicate": "parent_of", "object": "Mia" },
+    { "seed": 1, "domain": "people", "subject": "me", "predicate": "parent_of", "object": "Mia", "label": "step" },
+    { "seed": 1, "domain": "time", "subject": "Mia", "predicate": "born", "value": "2012", "date": "2012" },
+    { "seed": 1, "domain": "time", "subject": "Paul", "predicate": "born", "value": "2021-08-22", "date": "2021-08-22" },
+    { "seed": 1, "domain": "people", "subject": "me", "predicate": "parent_of", "object": "Paul" },
+    { "seed": 1, "domain": "people", "subject": "Katrin", "predicate": "parent_of", "object": "Paul" },
+
+    { "seed": 2, "domain": "people", "subject": "me", "predicate": "spouse_of", "object": "Sabine", "date": "2008", "until": "2015" },
+    { "seed": 2, "domain": "people", "subject": "me", "predicate": "parent_of", "object": "Jonas" },
+    { "seed": 2, "domain": "people", "subject": "Sabine", "predicate": "parent_of", "object": "Jonas" },
+    { "seed": 2, "domain": "time", "subject": "Jonas", "predicate": "born", "value": "2010-02-03", "date": "2010-02-03" },
+    { "seed": 2, "domain": "time", "subject": "Jonas", "predicate": "lives_in", "object": "Emmendingen" },
+    { "seed": 2, "domain": "time", "subject": "Sabine", "predicate": "lives_in", "object": "Emmendingen" },
+    { "seed": 2, "domain": "money", "subject": "me", "predicate": "paid", "object": "Sabine", "amount": 480, "currency": "EUR", "label": "child support per month", "context": "Jonas" },
+
+    { "seed": 3, "domain": "time", "subject": "Dieter Brenner", "predicate": "died", "value": "2023-11-11", "date": "2023-11-11" },
+    { "seed": 3, "domain": "people", "subject": "Dieter Brenner", "predicate": "parent_of", "object": "me" },
+    { "seed": 3, "domain": "people", "subject": "Ursula", "predicate": "parent_of", "object": "me" },
+    { "seed": 3, "domain": "people", "subject": "me", "predicate": "sibling_of", "object": "Florian", "label": "half" },
+    { "seed": 3, "domain": "time", "subject": "Florian", "predicate": "lives_in", "object": "Hamburg" },
+
+    { "seed": 4, "domain": "assets", "subject": "me", "predicate": "owns", "object": "Elzach forest", "label": "inherited", "date": "2024-03" },
+    { "seed": 4, "domain": "assets", "subject": "Elzach forest", "predicate": "identifier", "value": "Flurstück 418/2", "label": "plot number" },
+    { "seed": 4, "domain": "assets", "subject": "Elzach forest", "predicate": "located_in", "object": "Elzach" },
+    { "seed": 4, "domain": "money", "subject": "me", "predicate": "received_from", "object": "Dieter Brenner", "amount": 40000, "currency": "EUR", "date": "2024-03", "label": "inheritance" },
+    { "seed": 4, "domain": "assets", "subject": "Ursula", "predicate": "owns", "object": "Emmendingen house" },
+    { "seed": 4, "domain": "assets", "subject": "Emmendingen house", "predicate": "located_in", "object": "Emmendingen" },
+
+    { "seed": 5, "domain": "people", "subject": "me", "predicate": "relative_of", "object": "Gisela", "label": "mother-in-law" },
+    { "seed": 5, "domain": "time", "subject": "Gisela", "predicate": "lives_in", "object": "Kenzingen" },
+    { "seed": 5, "domain": "people", "subject": "Gisela", "predicate": "related_to", "object": "Paul", "label": "picks up from kindergarten every Tuesday" },
+    { "seed": 5, "domain": "people", "subject": "Katrin", "predicate": "sibling_of", "object": "Marco" },
+    { "seed": 5, "domain": "time", "subject": "Marco", "predicate": "lives_in", "object": "Basel" },
+    { "seed": 5, "domain": "money", "subject": "me", "predicate": "contributed_to", "object": "Florian's café", "amount": 2000, "currency": "EUR", "date": "2025-06", "label": "crowdfunding" },
+    { "seed": 5, "domain": "assets", "subject": "Florian's café", "predicate": "located_in", "object": "Hamburg-Altona" },
+    { "seed": 5, "domain": "projects", "subject": "Florian's café", "predicate": "milestone", "label": "opened", "date": "2026-03-01" },
+
+    { "seed": 6, "domain": "people", "subject": "me", "predicate": "friend_of", "object": "Stefan Maier" },
+    { "seed": 6, "domain": "people", "subject": "Stefan Maier", "predicate": "related_to", "object": "me", "label": "best man at our wedding" },
+    { "seed": 6, "domain": "people", "subject": "Stefan Maier", "predicate": "parent_of", "object": "Leon" },
+    { "seed": 6, "domain": "people", "subject": "me", "predicate": "relative_of", "object": "Leon", "label": "godson" },
+    { "seed": 6, "domain": "people", "subject": "me", "predicate": "neighbour_of", "object": "Helmut Wiegand" },
+    { "seed": 6, "domain": "people", "subject": "me", "predicate": "neighbour_of", "object": "Ingrid Wiegand" },
+
+    { "seed": 7, "domain": "work", "subject": "me", "predicate": "works_at", "object": "Schreinerei Kühn", "label": "journeyman", "date": "2009", "until": "2016-03" },
+    { "seed": 7, "domain": "assets", "subject": "Schreinerei Kühn", "predicate": "located_in", "object": "Waldkirch" },
+    { "seed": 7, "domain": "work", "subject": "me", "predicate": "studied_at", "object": "Meisterschule Freiburg", "label": "master craftsman course", "date": "2014", "until": "2015" },
+    { "seed": 7, "domain": "people", "subject": "me", "predicate": "knows", "object": "Jan Albers", "label": "met at the Meisterschule" },
+
+    { "seed": 8, "domain": "work", "subject": "me", "predicate": "business_partner_of", "object": "Jan Albers", "date": "2020-01-01" },
+    { "seed": 8, "domain": "work", "subject": "Jan Albers", "predicate": "owns_share_of", "object": "Brenner Möbelbau", "value": "30" },
+    { "seed": 8, "domain": "work", "subject": "me", "predicate": "owns_share_of", "object": "Brenner Möbelbau", "value": "70" },
+    { "seed": 8, "domain": "work", "subject": "me", "predicate": "director_of", "object": "Brenner Möbelbau", "label": "managing director" },
+
+    { "seed": 9, "domain": "work", "subject": "Ayşe Demir", "predicate": "works_at", "object": "Brenner Möbelbau", "label": "carpenter", "date": "2018-09", "status": "superseded" },
+    { "seed": 9, "domain": "work", "subject": "Niklas Vogt", "predicate": "works_at", "object": "Brenner Möbelbau", "label": "apprentice", "date": "2024-08-01" },
+    { "seed": 9, "domain": "work", "subject": "Ayşe Demir", "predicate": "manages", "object": "Niklas Vogt" },
+
+    { "seed": 10, "domain": "assets", "subject": "me", "predicate": "rents", "object": "workshop", "date": "2016-04" },
+    { "seed": 10, "domain": "assets", "subject": "workshop", "predicate": "located_in", "object": "Gundelfingen" },
+    { "seed": 10, "domain": "money", "subject": "me", "predicate": "paid", "object": "Gewerbehof Gundelfingen GmbH", "amount": 1450, "currency": "EUR", "label": "rent per month", "context": "workshop" },
+    { "seed": 10, "domain": "money", "subject": "me", "predicate": "owes", "object": "Breisgauer Volksbank", "amount": 30000, "currency": "EUR", "date": "2021-05", "until": "2025-12-15", "label": "loan", "context": "edge-banding machine" },
+
+    { "seed": 11, "domain": "work", "subject": "Monika Esser", "predicate": "contractor_for", "object": "Brenner Möbelbau", "label": "tax adviser" },
+    { "seed": 11, "domain": "time", "subject": "tax planning meeting", "predicate": "scheduled", "value": "2026-10-22", "date": "2026-10-22" },
+
+    { "seed": 12, "domain": "money", "subject": "me", "predicate": "paid", "object": "Monika Esser", "amount": 2380, "currency": "EUR", "date": "2026-05-12", "label": "invoice", "context": "2025 annual accounts" },
+    { "seed": 12, "domain": "work", "subject": "me", "predicate": "member_of", "object": "Schreiner-Innung Freiburg", "date": "2016" },
+    { "seed": 12, "domain": "work", "subject": "me", "predicate": "director_of", "object": "Schreiner-Innung Freiburg", "label": "board member", "date": "2025" },
+    { "seed": 12, "domain": "money", "subject": "me", "predicate": "paid", "object": "Schreiner-Innung Freiburg", "amount": 420, "currency": "EUR", "date": "2026-02-15", "label": "membership fee" },
+    { "seed": 12, "domain": "time", "subject": "Q3 VAT return", "predicate": "due_on", "value": "2026-11-10", "date": "2026-11-10" },
+
+    { "seed": 13, "domain": "work", "subject": "Hotel Schwarzwaldblick", "predicate": "client_of", "object": "Brenner Möbelbau" },
+    { "seed": 13, "domain": "assets", "subject": "Hotel Schwarzwaldblick", "predicate": "located_in", "object": "Titisee" },
+    { "seed": 13, "domain": "money", "subject": "me", "predicate": "received_from", "object": "Hotel Schwarzwaldblick", "amount": 48600, "currency": "EUR", "date": "2026-07-28", "label": "invoice" },
+
+    { "seed": 14, "domain": "work", "subject": "Praxis Dr. Roth", "predicate": "client_of", "object": "Brenner Möbelbau" },
+    { "seed": 14, "domain": "assets", "subject": "Praxis Dr. Roth", "predicate": "located_in", "object": "Freiburg" },
+    { "seed": 14, "domain": "assets", "subject": "Brenner Möbelbau", "predicate": "located_in", "object": "Gundelfingen" },
+    { "seed": 14, "domain": "money", "subject": "Praxis Dr. Roth", "predicate": "owes", "object": "Brenner Möbelbau", "amount": 12300, "currency": "EUR", "date": "2026-09-02", "label": "invoice", "context": "reception desk" },
+
+    { "seed": 15, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Wiehre flat", "amount": 385000, "currency": "EUR", "date": "2020-03-15", "context": "Werner Lorenz" },
+    { "seed": 15, "domain": "assets", "subject": "me", "predicate": "owns", "object": "Wiehre flat", "label": "co-owned", "date": "2020-03-15" },
+    { "seed": 15, "domain": "assets", "subject": "Katrin", "predicate": "owns", "object": "Wiehre flat", "label": "co-owned", "date": "2020-03-15" },
+    { "seed": 15, "domain": "assets", "subject": "Wiehre flat", "predicate": "identifier", "value": "Grundbuch von Freiburg, Blatt 20417", "label": "land register number" },
+    { "seed": 15, "domain": "assets", "subject": "Wiehre flat", "predicate": "located_in", "object": "Wiehre" },
+
+    { "seed": 16, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Transit", "amount": 31900, "currency": "EUR", "date": "2025-10-10", "context": "Autohaus Schmieder", "status": "superseded" },
+    { "seed": 16, "domain": "assets", "subject": "Transit", "predicate": "identifier", "value": "FR-BM 412", "label": "plate" },
+    { "seed": 16, "domain": "assets", "subject": "Transit insurance", "predicate": "issued_by", "object": "Badische Gewerbeversicherung" },
+    { "seed": 16, "domain": "assets", "subject": "Transit insurance", "predicate": "identifier", "value": "BGV-7781-23", "label": "policy number" },
+    { "seed": 16, "domain": "assets", "subject": "Transit insurance", "predicate": "renews_on", "value": "2027-01-01", "date": "2027-01-01" },
+    { "seed": 16, "domain": "assets", "subject": "me", "predicate": "sold", "object": "T5", "amount": 9800, "currency": "EUR", "date": "2025-09-02", "context": "Malte Krüger" },
+    { "seed": 16, "domain": "assets", "subject": "me", "predicate": "owns", "object": "T5", "date": "2014", "until": "2025-09-02" },
+    { "seed": 16, "domain": "assets", "subject": "T5", "predicate": "identifier", "value": "FR-TB 77", "label": "plate" },
+
+    { "seed": 17, "domain": "projects", "subject": "renovation", "predicate": "part_of", "object": "Wiehre flat" },
+    { "seed": 17, "domain": "money", "subject": "renovation", "predicate": "costs", "amount": 42000, "currency": "EUR", "label": "budget" },
+    { "seed": 17, "domain": "time", "subject": "renovation", "predicate": "due_on", "value": "2026-07-31", "date": "2026-07-31", "status": "superseded" },
+    { "seed": 17, "domain": "projects", "subject": "me", "predicate": "works_on", "object": "renovation", "label": "kitchen units" },
+    { "seed": 17, "domain": "projects", "subject": "Ayşe Demir", "predicate": "works_on", "object": "renovation", "label": "kitchen units" },
+
+    { "seed": 18, "domain": "projects", "subject": "Ralf Gerber", "predicate": "contractor_for", "object": "renovation", "label": "plumber" },
+    { "seed": 18, "domain": "money", "subject": "renovation", "predicate": "costs", "amount": 18400, "currency": "EUR", "label": "plumbing quote", "context": "Ralf Gerber" },
+
+    { "seed": 19, "domain": "plans", "subject": "me", "predicate": "decided", "value": "accept Ralf Gerber's plumbing quote", "date": "2026-03-20", "context": "renovation" },
+    { "seed": 19, "domain": "projects", "subject": "Dimitri Popescu", "predicate": "contractor_for", "object": "renovation", "label": "tiler" },
+    { "seed": 19, "domain": "money", "subject": "renovation", "predicate": "costs", "amount": 9200, "currency": "EUR", "label": "tiling quote", "context": "Dimitri Popescu" },
+    { "seed": 19, "domain": "plans", "subject": "me", "predicate": "decided", "value": "accept Dimitri Popescu's tiling quote", "date": "2026-03-20", "context": "renovation" },
+
+    { "seed": 20, "domain": "projects", "subject": "renovation", "predicate": "status", "value": "active", "date": "2026-04-13" },
+    { "seed": 20, "domain": "money", "subject": "me", "predicate": "paid", "object": "Ralf Gerber", "amount": 9200, "currency": "EUR", "date": "2026-04-14", "label": "deposit", "context": "renovation" },
+    { "seed": 20, "domain": "projects", "subject": "renovation", "predicate": "milestone", "label": "demolition finished", "date": "2026-04-24" },
+    { "seed": 20, "domain": "money", "subject": "Gisela", "predicate": "contributed_to", "object": "renovation", "amount": 15000, "currency": "EUR", "date": "2026-04" },
+
+    { "seed": 21, "domain": "projects", "subject": "renovation", "predicate": "milestone", "label": "plumbing rough-in done", "date": "2026-06-12" },
+    { "seed": 21, "domain": "time", "subject": "renovation", "predicate": "due_on", "value": "2026-09-30", "date": "2026-09-30", "status": "superseded" },
+
+    { "seed": 22, "domain": "money", "subject": "me", "predicate": "earns", "object": "Brenner Möbelbau", "amount": 5200, "currency": "EUR", "label": "salary per month" },
+    { "seed": 22, "domain": "work", "subject": "Katrin", "predicate": "works_at", "object": "Uniklinik Freiburg", "label": "nurse" },
+    { "seed": 22, "domain": "money", "subject": "Katrin", "predicate": "earns", "object": "Uniklinik Freiburg", "amount": 3400, "currency": "EUR", "label": "net per month" },
+
+    { "seed": 23, "domain": "work", "subject": "Ayşe Demir", "predicate": "works_at", "object": "Brenner Möbelbau", "label": "carpenter", "date": "2017-09" },
+    { "seed": 23, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Transit", "amount": 32400, "currency": "EUR", "date": "2025-10-10", "context": "Autohaus Schmieder" },
+
+    { "seed": 24, "domain": "projects", "subject": "Lara Fink", "predicate": "contractor_for", "object": "website relaunch", "label": "web designer" },
+    { "seed": 24, "domain": "projects", "subject": "website relaunch", "predicate": "status", "value": "active", "date": "2026-09-07" },
+    { "seed": 24, "domain": "money", "subject": "website relaunch", "predicate": "costs", "amount": 3200, "currency": "EUR", "label": "quote" },
+    { "seed": 24, "domain": "time", "subject": "website relaunch", "predicate": "due_on", "value": "2026-12-01", "date": "2026-12-01" },
+
+    { "seed": 25, "domain": "time", "subject": "me", "predicate": "visited", "object": "Lisbon", "date": "2025-08-01", "until": "2025-08-14" },
+    { "seed": 25, "domain": "time", "subject": "Lake Constance trip", "predicate": "scheduled", "value": "2026-10-27", "date": "2026-10-27" },
+    { "seed": 25, "domain": "plans", "subject": "me", "predicate": "plans", "value": "go to Norway", "date": "2027" },
+
+    { "seed": 26, "domain": "assets", "subject": "passport", "predicate": "expires_on", "value": "2027-05-14", "date": "2027-05-14" },
+    { "seed": 26, "domain": "time", "subject": "Transit", "predicate": "due_on", "value": "2027-09", "date": "2027-09", "label": "TÜV" },
+    { "seed": 26, "domain": "time", "subject": "dentist appointment", "predicate": "scheduled", "value": "2026-11-03", "date": "2026-11-03" },
+
+    { "seed": 27, "domain": "money", "subject": "me", "predicate": "received_from", "object": "Sägewerk Faller", "amount": 3600, "currency": "EUR", "date": "2025-05-14", "label": "timber sale", "context": "Elzach forest" },
+    { "seed": 27, "domain": "plans", "subject": "me", "predicate": "decided", "value": "keep the Elzach forest for Paul and Jonas", "context": "Elzach forest" },
+    { "seed": 27, "domain": "assets", "subject": "Wiehre flat", "predicate": "valued_at", "amount": 470000, "currency": "EUR", "date": "2026-10-08" },
+
+    { "seed": 28, "domain": "plans", "subject": "me", "predicate": "decided", "value": "not to bid for the Basel school tender", "date": "2026-09-23" },
+    { "seed": 28, "domain": "plans", "subject": "Jan Albers", "predicate": "decided", "value": "not to bid for the Basel school tender", "date": "2026-09-23" },
+
+    { "seed": 29, "domain": "money", "subject": "me", "predicate": "paid", "object": "Lara Fink", "amount": 1600, "currency": "EUR", "date": "2026-10-05", "label": "first instalment", "context": "website relaunch" },
+    { "seed": 29, "domain": "projects", "subject": "website relaunch", "predicate": "milestone", "label": "design approved", "date": "2026-10-09" },
+
+    { "seed": 30, "domain": "projects", "subject": "renovation", "predicate": "milestone", "label": "tiling started", "date": "2026-09-01" },
+    { "seed": 30, "domain": "money", "subject": "me", "predicate": "paid", "object": "Dimitri Popescu", "amount": 4600, "currency": "EUR", "date": "2026-10-02", "context": "renovation" },
+    { "seed": 30, "domain": "time", "subject": "renovation", "predicate": "due_on", "value": "2026-11-20", "date": "2026-11-20" },
+
+    { "seed": 31, "domain": "plans", "subject": "me", "predicate": "plans", "value": "hire a second carpenter", "date": "2027" },
+    { "seed": 31, "domain": "plans", "subject": "me", "predicate": "plans", "value": "buy a CNC machine", "amount": 60000, "currency": "EUR", "date": "2027" },
+    { "seed": 31, "domain": "plans", "subject": "me", "predicate": "intends", "value": "own showroom in Freiburg's old town" },
+    { "seed": 31, "domain": "plans", "subject": "Katrin", "predicate": "intends", "value": "go down to 75 % part-time", "date": "2027-01" },
+    { "seed": 31, "domain": "plans", "subject": "Jonas", "predicate": "intends", "value": "carpentry apprenticeship at Brenner Möbelbau", "date": "2027" },
+    { "seed": 31, "domain": "time", "subject": "Ursula", "predicate": "born", "value": "1957-03-21", "date": "1957-03-21" },
+    { "seed": 31, "domain": "plans", "subject": "me", "predicate": "plans", "value": "big family party in Kenzingen for Mama's 70th" },
+
+    { "seed": 32, "domain": "assets", "subject": "workshop lease", "predicate": "expires_on", "value": "2027-03-31", "date": "2027-03-31" },
+    { "seed": 32, "domain": "plans", "subject": "me", "predicate": "intends", "value": "extend the workshop lease by five years" },
+    { "seed": 32, "domain": "time", "subject": "Möbelmesse Süd", "predicate": "scheduled", "value": "2027-03-24", "date": "2027-03-24", "context": "Stuttgart" }
+  ]
+}

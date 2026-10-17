@@ -1,0 +1,179 @@
+{
+  "set": "dev2",
+  "claims": [
+    { "seed": 0, "domain": "time", "subject": "me", "predicate": "born", "value": "1986-08-14", "date": "1986-08-14" },
+    { "seed": 0, "domain": "time", "subject": "me", "predicate": "lives_in", "object": "Pune", "date": "2015" },
+    { "seed": 0, "domain": "time", "subject": "me", "predicate": "lives_in", "object": "Bengaluru", "until": "2015" },
+
+    { "seed": 1, "domain": "people", "subject": "me", "predicate": "spouse_of", "object": "Meera", "date": "2012-12-09" },
+    { "seed": 1, "domain": "people", "subject": "me", "predicate": "parent_of", "object": "Ira" },
+    { "seed": 1, "domain": "people", "subject": "Meera", "predicate": "parent_of", "object": "Ira" },
+    { "seed": 1, "domain": "people", "subject": "me", "predicate": "parent_of", "object": "Kabir" },
+    { "seed": 1, "domain": "people", "subject": "Meera", "predicate": "parent_of", "object": "Kabir" },
+    { "seed": 1, "domain": "time", "subject": "Ira", "predicate": "born", "value": "2017-03-03", "date": "2017-03-03" },
+    { "seed": 1, "domain": "time", "subject": "Kabir", "predicate": "born", "value": "2021-06-21", "date": "2021-06-21" },
+
+    { "seed": 2, "domain": "people", "subject": "Vasant", "predicate": "parent_of", "object": "me" },
+    { "seed": 2, "domain": "time", "subject": "Vasant", "predicate": "died", "value": "2019-02-02", "date": "2019-02-02" },
+    { "seed": 2, "domain": "people", "subject": "Vasant", "predicate": "spouse_of", "object": "Lata" },
+    { "seed": 2, "domain": "people", "subject": "Lata", "predicate": "parent_of", "object": "me", "label": "step" },
+    { "seed": 2, "domain": "people", "subject": "Lata", "predicate": "parent_of", "object": "Rohan" },
+    { "seed": 2, "domain": "people", "subject": "Rohan", "predicate": "sibling_of", "object": "me", "label": "half" },
+    { "seed": 2, "domain": "work", "subject": "Rohan", "predicate": "works_at", "object": "Godavari Hospital", "label": "doctor" },
+    { "seed": 2, "domain": "assets", "subject": "Godavari Hospital", "predicate": "located_in", "object": "Nashik" },
+    { "seed": 2, "domain": "people", "subject": "Rohan", "predicate": "spouse_of", "object": "Shruti", "date": "2020-05" },
+
+    { "seed": 3, "domain": "people", "subject": "Anuja", "predicate": "sibling_of", "object": "me" },
+    { "seed": 3, "domain": "people", "subject": "Anuja", "predicate": "spouse_of", "object": "Sachin" },
+    { "seed": 3, "domain": "time", "subject": "Anuja", "predicate": "lives_in", "object": "Thane" },
+    { "seed": 3, "domain": "work", "subject": "Sachin", "predicate": "works_at", "object": "TCS", "label": "project manager" },
+
+    { "seed": 4, "domain": "people", "subject": "Sunanda", "predicate": "parent_of", "object": "Meera" },
+    { "seed": 4, "domain": "time", "subject": "Sunanda", "predicate": "lives_in", "object": "Pune", "date": "2024-01" },
+    { "seed": 4, "domain": "people", "subject": "me", "predicate": "friend_of", "object": "Prakash Deshpande" },
+    { "seed": 4, "domain": "work", "subject": "me", "predicate": "studied_at", "object": "COEP", "label": "engineering", "date": "2004", "until": "2008" },
+
+    { "seed": 5, "domain": "people", "subject": "Anand Joshi", "predicate": "related_to", "object": "me", "label": "family doctor" },
+
+    { "seed": 6, "domain": "work", "subject": "me", "predicate": "works_at", "object": "Infosys", "date": "2009", "until": "2015", "status": "superseded" },
+    { "seed": 6, "domain": "assets", "subject": "Infosys", "predicate": "located_in", "object": "Bengaluru" },
+    { "seed": 6, "domain": "work", "subject": "me", "predicate": "works_at", "object": "Persistent Systems", "label": "tech lead", "date": "2016-07" },
+
+    { "seed": 7, "domain": "work", "subject": "me", "predicate": "works_at", "object": "Persistent Systems", "label": "Senior Engineering Manager", "date": "2023-04-01" },
+    { "seed": 7, "domain": "money", "subject": "me", "predicate": "earns", "object": "Persistent Systems", "amount": 3850000, "currency": "INR", "label": "per year" },
+    { "seed": 7, "domain": "work", "subject": "Neha Bhatia", "predicate": "manages", "object": "me" },
+    { "seed": 7, "domain": "work", "subject": "Neha Bhatia", "predicate": "works_at", "object": "Persistent Systems", "label": "VP Engineering" },
+
+    { "seed": 8, "domain": "work", "subject": "me", "predicate": "colleague_of", "object": "Farhan Shaikh" },
+    { "seed": 8, "domain": "work", "subject": "Farhan Shaikh", "predicate": "works_at", "object": "Persistent Systems" },
+    { "seed": 8, "domain": "work", "subject": "Bajaj Finserv", "predicate": "client_of", "object": "Persistent Systems", "date": "2019" },
+    { "seed": 8, "domain": "work", "subject": "Kavita Rao", "predicate": "works_at", "object": "Bajaj Finserv", "label": "CTO" },
+
+    { "seed": 9, "domain": "work", "subject": "me", "predicate": "founded", "object": "Sahyadri Trails", "date": "2024-11-01" },
+    { "seed": 9, "domain": "work", "subject": "Prakash Deshpande", "predicate": "founded", "object": "Sahyadri Trails", "date": "2024-11-01" },
+    { "seed": 9, "domain": "work", "subject": "me", "predicate": "business_partner_of", "object": "Prakash Deshpande" },
+    { "seed": 9, "domain": "work", "subject": "me", "predicate": "owns_share_of", "object": "Sahyadri Trails", "value": "50" },
+    { "seed": 9, "domain": "work", "subject": "Prakash Deshpande", "predicate": "owns_share_of", "object": "Sahyadri Trails", "value": "50" },
+    { "seed": 9, "domain": "money", "subject": "me", "predicate": "contributed_to", "object": "Sahyadri Trails", "amount": 500000, "currency": "INR", "label": "starting capital" },
+    { "seed": 9, "domain": "money", "subject": "Prakash Deshpande", "predicate": "contributed_to", "object": "Sahyadri Trails", "amount": 500000, "currency": "INR", "label": "starting capital" },
+    { "seed": 9, "domain": "plans", "subject": "me", "predicate": "decided", "value": "keep my Persistent job for now", "context": "Persistent Systems" },
+    { "seed": 9, "domain": "projects", "subject": "Sahyadri Trails launch", "predicate": "status", "value": "planned" },
+    { "seed": 9, "domain": "projects", "subject": "Prakash Deshpande", "predicate": "works_on", "object": "Sahyadri Trails launch", "label": "trek routes" },
+
+    { "seed": 10, "domain": "work", "subject": "me", "predicate": "member_of", "object": "Pune Hikers Club", "date": "2018" },
+    { "seed": 10, "domain": "work", "subject": "me", "predicate": "member_of", "object": "COEP Alumni Association", "label": "life member" },
+    { "seed": 10, "domain": "plans", "subject": "me", "predicate": "intends", "value": "do the Everest Base Camp trek", "date": "2027" },
+    { "seed": 10, "domain": "work", "subject": "me", "predicate": "works_at", "object": "Infosys", "date": "2010", "until": "2015" },
+
+    { "seed": 11, "domain": "work", "subject": "Vivek Pandit", "predicate": "contractor_for", "object": "Sahyadri Trails launch", "label": "website and logo" },
+    { "seed": 11, "domain": "money", "subject": "me", "predicate": "paid", "object": "Vivek Pandit", "amount": 60000, "currency": "INR", "date": "2025-01-20", "label": "website and logo", "context": "Sahyadri Trails launch" },
+    { "seed": 11, "domain": "work", "subject": "Sunil Gokhale", "predicate": "contractor_for", "object": "Sahyadri Trails", "label": "CA" },
+    { "seed": 11, "domain": "money", "subject": "Sahyadri Trails", "predicate": "paid", "object": "Sunil Gokhale", "amount": 8000, "currency": "INR", "label": "per month" },
+    { "seed": 11, "domain": "projects", "subject": "Sahyadri Trails launch", "predicate": "milestone", "value": "first trek to Rajgad", "label": "first trek to Rajgad", "date": "2025-02-15" },
+    { "seed": 11, "domain": "projects", "subject": "Sahyadri Trails launch", "predicate": "status", "value": "done", "date": "2025-02-15" },
+
+    { "seed": 12, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Kothrud flat", "amount": 7200000, "currency": "INR", "date": "2015-05-18", "context": "Rajesh Pawar" },
+    { "seed": 12, "domain": "assets", "subject": "Meera", "predicate": "owns", "object": "Kothrud flat", "label": "co-owned", "date": "2015-05-18" },
+    { "seed": 12, "domain": "assets", "subject": "Kothrud flat", "predicate": "identifier", "value": "B-402", "label": "flat number" },
+    { "seed": 12, "domain": "assets", "subject": "Kothrud flat", "predicate": "located_in", "object": "Kothrud" },
+
+    { "seed": 13, "domain": "assets", "subject": "me", "predicate": "rents", "object": "Karve Nagar flat", "date": "2015-03", "until": "2015-07" },
+    { "seed": 13, "domain": "money", "subject": "me", "predicate": "paid", "object": "Shobha Apte", "amount": 12000, "currency": "INR", "label": "rent per month", "context": "Karve Nagar flat" },
+
+    { "seed": 14, "domain": "assets", "subject": "me", "predicate": "owns", "object": "Sinnar land", "label": "inherited", "date": "2019-08", "context": "Vasant" },
+    { "seed": 14, "domain": "assets", "subject": "Rohan", "predicate": "owns", "object": "Sinnar land", "label": "inherited", "date": "2019-08", "context": "Vasant" },
+    { "seed": 14, "domain": "assets", "subject": "Sinnar land", "predicate": "identifier", "value": "112/2", "label": "survey number" },
+    { "seed": 14, "domain": "assets", "subject": "Sinnar land", "predicate": "located_in", "object": "Sinnar" },
+    { "seed": 14, "domain": "assets", "subject": "Sinnar", "predicate": "located_in", "object": "Nashik" },
+    { "seed": 14, "domain": "people", "subject": "Shrikant", "predicate": "relative_of", "object": "me", "label": "uncle" },
+    { "seed": 14, "domain": "time", "subject": "Shrikant", "predicate": "lives_in", "object": "Sinnar" },
+    { "seed": 14, "domain": "assets", "subject": "Shrikant", "predicate": "related_to", "object": "Sinnar land", "label": "looks after" },
+
+    { "seed": 15, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Bavdhan plot", "amount": 4800000, "currency": "INR", "date": "2022-01-05", "context": "Suresh Jagtap" },
+    { "seed": 15, "domain": "assets", "subject": "Bavdhan plot", "predicate": "identifier", "value": "34/1A", "label": "survey number" },
+    { "seed": 15, "domain": "assets", "subject": "Bavdhan plot", "predicate": "located_in", "object": "Bavdhan" },
+    { "seed": 15, "domain": "money", "subject": "me", "predicate": "owes", "object": "Sachin", "amount": 250000, "currency": "INR", "date": "2022-01", "until": "2024-02-15", "label": "stamp duty loan" },
+
+    { "seed": 16, "domain": "assets", "subject": "me", "predicate": "sold", "object": "Activa", "amount": 28000, "currency": "INR", "date": "2025-09-10", "context": "Farhan Shaikh" },
+
+    { "seed": 17, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Creta", "amount": 1420000, "currency": "INR", "date": "2020-10", "context": "Kothari Hyundai" },
+    { "seed": 17, "domain": "assets", "subject": "Creta", "predicate": "identifier", "value": "MH 12 RT 4471", "label": "registration" },
+    { "seed": 17, "domain": "assets", "subject": "Creta insurance", "predicate": "issued_by", "object": "ICICI Lombard" },
+    { "seed": 17, "domain": "assets", "subject": "Creta insurance", "predicate": "identifier", "value": "3001/58843210/00/000", "label": "policy number" },
+    { "seed": 17, "domain": "assets", "subject": "Creta insurance", "predicate": "renews_on", "value": "2026-10-28", "date": "2026-10-28" },
+    { "seed": 17, "domain": "money", "subject": "me", "predicate": "paid", "object": "ICICI Lombard", "amount": 18450, "currency": "INR", "date": "2025-10", "label": "premium", "context": "Creta insurance" },
+
+    { "seed": 18, "domain": "assets", "subject": "me", "predicate": "owns", "object": "passport" },
+    { "seed": 18, "domain": "assets", "subject": "passport", "predicate": "identifier", "value": "Z4419027", "label": "passport number" },
+    { "seed": 18, "domain": "assets", "subject": "passport", "predicate": "expires_on", "value": "2027-02-22", "date": "2027-02-22" },
+    { "seed": 18, "domain": "plans", "subject": "me", "predicate": "plans", "value": "apply for passport renewal", "date": "2026-11", "context": "passport" },
+    { "seed": 18, "domain": "plans", "subject": "me", "predicate": "plans", "value": "Japan trip", "date": "2027-04", "amount": 600000, "currency": "INR", "label": "budget" },
+
+    { "seed": 19, "domain": "projects", "subject": "Bavdhan house", "predicate": "status", "value": "planned" },
+    { "seed": 19, "domain": "projects", "subject": "Bavdhan house", "predicate": "part_of", "object": "Bavdhan plot" },
+    { "seed": 19, "domain": "money", "subject": "Bavdhan house", "predicate": "costs", "amount": 6500000, "currency": "INR", "label": "budget" },
+    { "seed": 19, "domain": "work", "subject": "Nikhil Bhave", "predicate": "contractor_for", "object": "Bavdhan house", "label": "architect" },
+    { "seed": 19, "domain": "money", "subject": "Bavdhan house", "predicate": "costs", "amount": 350000, "currency": "INR", "label": "architect fee", "context": "Nikhil Bhave" },
+    { "seed": 19, "domain": "projects", "subject": "Meera", "predicate": "works_on", "object": "Bavdhan house", "label": "interiors" },
+
+    { "seed": 20, "domain": "money", "subject": "Bavdhan house", "predicate": "costs", "amount": 6200000, "currency": "INR", "label": "quote", "context": "Shinde Constructions" },
+    { "seed": 20, "domain": "money", "subject": "Bavdhan house", "predicate": "costs", "amount": 5850000, "currency": "INR", "label": "quote", "context": "Patil Builders" },
+    { "seed": 20, "domain": "money", "subject": "Bavdhan house", "predicate": "costs", "amount": 6600000, "currency": "INR", "label": "quote", "context": "Om Sai Developers" },
+    { "seed": 20, "domain": "time", "subject": "Bavdhan house", "predicate": "due_on", "value": "2024-02-10", "date": "2024-02-10", "label": "sign plan drawings" },
+
+    { "seed": 21, "domain": "plans", "subject": "me", "predicate": "decided", "value": "go with Patil Builders", "context": "Bavdhan house" },
+    { "seed": 21, "domain": "work", "subject": "Patil Builders", "predicate": "contractor_for", "object": "Bavdhan house", "label": "civil work" },
+    { "seed": 21, "domain": "work", "subject": "Sanjay Patil", "predicate": "director_of", "object": "Patil Builders", "label": "runs it" },
+    { "seed": 21, "domain": "money", "subject": "Bavdhan house", "predicate": "costs", "amount": 5600000, "currency": "INR", "label": "contract", "context": "Patil Builders" },
+    { "seed": 21, "domain": "projects", "subject": "Bavdhan house", "predicate": "milestone", "value": "bhoomi pujan", "label": "bhoomi pujan", "date": "2024-04-14" },
+    { "seed": 21, "domain": "projects", "subject": "Bavdhan house", "predicate": "status", "value": "active", "date": "2024-04-14" },
+
+    { "seed": 22, "domain": "money", "subject": "me", "predicate": "paid", "object": "Sanjay Patil", "amount": 1400000, "currency": "INR", "date": "2024-04-20", "label": "first instalment", "context": "Bavdhan house" },
+    { "seed": 22, "domain": "projects", "subject": "Bavdhan house", "predicate": "milestone", "value": "plinth done", "label": "plinth done", "date": "2024-07" },
+    { "seed": 22, "domain": "money", "subject": "me", "predicate": "paid", "object": "Sanjay Patil", "amount": 1200000, "currency": "INR", "date": "2024-08-02", "label": "second instalment", "context": "Bavdhan house" },
+
+    { "seed": 23, "domain": "projects", "subject": "Bavdhan house", "predicate": "milestone", "value": "slab cast", "label": "slab cast", "date": "2024-11-12" },
+    { "seed": 23, "domain": "money", "subject": "me", "predicate": "paid", "object": "Sanjay Patil", "amount": 1500000, "currency": "INR", "date": "2024-11", "label": "slab stage", "context": "Bavdhan house", "status": "superseded" },
+
+    { "seed": 24, "domain": "money", "subject": "me", "predicate": "paid", "object": "Sanjay Patil", "amount": 1350000, "currency": "INR", "date": "2024-11", "label": "slab stage", "context": "Bavdhan house" },
+    { "seed": 24, "domain": "work", "subject": "Ganesh More", "predicate": "contractor_for", "object": "Bavdhan house", "label": "electrician" },
+    { "seed": 24, "domain": "money", "subject": "Bavdhan house", "predicate": "costs", "amount": 240000, "currency": "INR", "label": "quote", "context": "Ganesh More" },
+
+    { "seed": 25, "domain": "projects", "subject": "Bavdhan house", "predicate": "status", "value": "paused", "date": "2025-06-15" },
+    { "seed": 25, "domain": "plans", "subject": "me", "predicate": "decided", "value": "drop the terrace garden", "date": "2025-06-15", "context": "Bavdhan house" },
+
+    { "seed": 26, "domain": "projects", "subject": "Bavdhan house", "predicate": "status", "value": "active", "date": "2025-09-01" },
+    { "seed": 26, "domain": "money", "subject": "me", "predicate": "paid", "object": "Ganesh More", "amount": 80000, "currency": "INR", "date": "2025-09-08", "label": "wiring advance", "context": "Bavdhan house" },
+
+    { "seed": 27, "domain": "projects", "subject": "Bavdhan house", "predicate": "status", "value": "done", "date": "2026-08-16" },
+    { "seed": 27, "domain": "projects", "subject": "Bavdhan house", "predicate": "milestone", "value": "keys handed over", "label": "keys handed over", "date": "2026-08-16" },
+    { "seed": 27, "domain": "money", "subject": "me", "predicate": "paid", "object": "Sanjay Patil", "amount": 1650000, "currency": "INR", "date": "2026-08-16", "label": "final payment", "context": "Bavdhan house" },
+    { "seed": 27, "domain": "time", "subject": "griha pravesh", "predicate": "scheduled", "value": "2026-09-06", "date": "2026-09-06" },
+
+    { "seed": 28, "domain": "time", "subject": "me", "predicate": "lives_in", "object": "Kothrud", "until": "2026-09-08" },
+    { "seed": 28, "domain": "time", "subject": "me", "predicate": "lives_in", "object": "Bavdhan", "date": "2026-09-08" },
+    { "seed": 28, "domain": "assets", "subject": "me", "predicate": "sold", "object": "Kothrud flat", "amount": 13500000, "currency": "INR", "date": "2026-10-07", "context": "Hitesh Mehta" },
+    { "seed": 28, "domain": "people", "subject": "me", "predicate": "neighbour_of", "object": "Arvind Thakur" },
+
+    { "seed": 29, "domain": "money", "subject": "me", "predicate": "received_from", "object": "Rohan", "amount": 120000, "currency": "INR", "date": "2026-10-02", "label": "lease money share", "context": "Sinnar land" },
+
+    { "seed": 30, "domain": "time", "subject": "me", "predicate": "visited", "object": "Kerala", "date": "2025-12-22", "until": "2025-12-28" },
+    { "seed": 30, "domain": "people", "subject": "Dattatray Joshi", "predicate": "relative_of", "object": "Meera", "label": "grandfather" },
+    { "seed": 30, "domain": "time", "subject": "Dattatray Joshi", "predicate": "died", "value": "2026-01-11", "date": "2026-01-11" },
+
+    { "seed": 31, "domain": "time", "subject": "dentist appointment", "predicate": "scheduled", "value": "2026-10-24", "date": "2026-10-24", "status": "superseded" },
+    { "seed": 31, "domain": "people", "subject": "Mrs. Gadgil", "predicate": "related_to", "object": "Ira", "label": "class teacher" },
+
+    { "seed": 32, "domain": "time", "subject": "dentist appointment", "predicate": "scheduled", "value": "2026-10-31", "date": "2026-10-31" },
+    { "seed": 32, "domain": "time", "subject": "Sahyadri Trails ITR", "predicate": "due_on", "value": "2026-10-31", "date": "2026-10-31" },
+    { "seed": 32, "domain": "plans", "subject": "me", "predicate": "decided", "value": "switch to quarterly GST filing", "context": "Sahyadri Trails" },
+
+    { "seed": 33, "domain": "plans", "subject": "me", "predicate": "plans", "value": "leave Persistent and run Sahyadri Trails full-time", "date": "2028-03" },
+    { "seed": 33, "domain": "plans", "subject": "Meera", "predicate": "intends", "value": "restart her architecture practice once Kabir is in school" },
+    { "seed": 33, "domain": "plans", "subject": "me", "predicate": "intends", "value": "build a small farm-stay on the Sinnar land", "context": "Sinnar land" },
+    { "seed": 33, "domain": "plans", "subject": "me", "predicate": "plans", "value": "take Lata-aai to Kashi", "date": "2027" },
+
+    { "seed": 34, "domain": "plans", "subject": "me", "predicate": "decided", "value": "put flat sale money into an FD for Ira and Kabir's education", "amount": 5000000, "currency": "INR", "context": "Kothrud flat" },
+    { "seed": 34, "domain": "plans", "subject": "me", "predicate": "plans", "value": "Ira's 10th birthday party", "date": "2027-03", "amount": 40000, "currency": "INR", "label": "budget" }
+  ]
+}

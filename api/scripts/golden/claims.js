@@ -147,7 +147,9 @@ function matches(fact, claim, ids) {
   if (fact.amount != null && !(sameAmount(fact.amount, claim.amount) && sameCurrency(fact.currency || "", claim.currency))) return false;
   // A plan's target date may sit in its words ("move in January 2027") rather than in `date`.
   const dateInValue = FAMILY[fact.predicate] && !claim.date && String(claim.value || "").includes(String(fact.date || "").slice(0, 4));
-  if (fact.date && !sameDate(fact.date, claim.date) && !dateInValue) return false;
+  // For a date-valued predicate (born, expires_on…) a writer's `date` only repeats the value.
+  const dateIsValue = PREDICATES[fact.predicate]?.object === "date" && sameDate(fact.date, claim.value);
+  if (fact.date && !sameDate(fact.date, claim.date) && !dateInValue && !dateIsValue) return false;
   if (fact.until && !sameDate(fact.until, claim.until)) return false;
   // Context ("what for") is not scored: writers name it differently ("launch costs" / the company) and it never
   // changes whether the fact itself was stored.

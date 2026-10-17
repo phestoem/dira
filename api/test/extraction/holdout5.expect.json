@@ -1,0 +1,202 @@
+{
+  "set": "holdout5",
+  "claims": [
+    { "seed": 0, "domain": "time", "subject": "me", "predicate": "born", "value": "1984-11-02", "date": "1984-11-02" },
+    { "seed": 0, "domain": "people", "subject": "me", "predicate": "parent_of", "object": "Gabriel" },
+    { "seed": 0, "domain": "people", "subject": "me", "predicate": "parent_of", "object": "Bea" },
+    { "seed": 0, "domain": "people", "subject": "Liza", "predicate": "parent_of", "object": "Gabriel" },
+    { "seed": 0, "domain": "people", "subject": "Liza", "predicate": "parent_of", "object": "Bea" },
+
+    { "seed": 1, "domain": "people", "subject": "me", "predicate": "spouse_of", "object": "Liza", "date": "2011-04-16" },
+    { "seed": 1, "domain": "people", "subject": "me", "predicate": "friend_of", "object": "Arnel Cruz" },
+    { "seed": 1, "domain": "people", "subject": "Arnel Cruz", "predicate": "related_to", "object": "me", "label": "best man at our wedding" },
+
+    { "seed": 2, "domain": "time", "subject": "Gabriel", "predicate": "born", "value": "2012-09-21", "date": "2012-09-21" },
+    { "seed": 2, "domain": "time", "subject": "Bea", "predicate": "born", "value": "2016-02-08", "date": "2016-02-08" },
+
+    { "seed": 3, "domain": "people", "subject": "Ernesto Villanueva", "predicate": "parent_of", "object": "me" },
+    { "seed": 3, "domain": "time", "subject": "Ernesto Villanueva", "predicate": "died", "value": "2023-06-03", "date": "2023-06-03" },
+    { "seed": 3, "domain": "people", "subject": "Pilar", "predicate": "parent_of", "object": "Ernesto Villanueva" },
+    { "seed": 3, "domain": "time", "subject": "Pilar", "predicate": "died", "value": "2019", "date": "2019" },
+
+    { "seed": 4, "domain": "people", "subject": "me", "predicate": "sibling_of", "object": "Joy" },
+    { "seed": 4, "domain": "time", "subject": "Joy", "predicate": "lives_in", "object": "Riyadh", "until": "2021" },
+    { "seed": 4, "domain": "time", "subject": "Joy", "predicate": "lives_in", "object": "Dubai", "date": "2021" },
+    { "seed": 4, "domain": "people", "subject": "Joy", "predicate": "spouse_of", "object": "Dennis", "date": "2023" },
+    { "seed": 4, "domain": "people", "subject": "me", "predicate": "sibling_of", "object": "Paolo", "label": "half" },
+    { "seed": 4, "domain": "people", "subject": "Ernesto Villanueva", "predicate": "parent_of", "object": "Paolo" },
+    { "seed": 4, "domain": "assets", "subject": "Paolo", "predicate": "owns", "object": "sari-sari store" },
+    { "seed": 4, "domain": "assets", "subject": "sari-sari store", "predicate": "located_in", "object": "Pototan" },
+
+    { "seed": 5, "domain": "time", "subject": "Amara", "predicate": "born", "value": "2026-03-14", "date": "2026-03-14" },
+    { "seed": 5, "domain": "people", "subject": "Joy", "predicate": "parent_of", "object": "Amara" },
+    { "seed": 5, "domain": "people", "subject": "Dennis", "predicate": "parent_of", "object": "Amara" },
+
+    { "seed": 6, "domain": "people", "subject": "Cora", "predicate": "parent_of", "object": "me" },
+    { "seed": 6, "domain": "people", "subject": "Cora", "predicate": "spouse_of", "object": "Rudy Manalo", "date": "2026-01" },
+    { "seed": 6, "domain": "people", "subject": "Rudy Manalo", "predicate": "parent_of", "object": "Trisha" },
+    { "seed": 6, "domain": "people", "subject": "me", "predicate": "sibling_of", "object": "Trisha", "label": "step" },
+    { "seed": 6, "domain": "time", "subject": "Cora", "predicate": "lives_in", "object": "Jaro" },
+    { "seed": 6, "domain": "time", "subject": "Rudy Manalo", "predicate": "lives_in", "object": "Jaro" },
+
+    { "seed": 7, "domain": "people", "subject": "me", "predicate": "relative_of", "object": "Fely", "label": "mother-in-law" },
+    { "seed": 7, "domain": "time", "subject": "Fely", "predicate": "lives_in", "object": "Tanay" },
+    { "seed": 7, "domain": "time", "subject": "Carlo Ocampo", "predicate": "lives_in", "object": "Tanay" },
+    { "seed": 7, "domain": "people", "subject": "Liza", "predicate": "sibling_of", "object": "Carlo Ocampo" },
+    { "seed": 7, "domain": "people", "subject": "Arnel Cruz", "predicate": "parent_of", "object": "Migo" },
+    { "seed": 7, "domain": "people", "subject": "me", "predicate": "relative_of", "object": "Migo", "label": "godson" },
+    { "seed": 7, "domain": "plans", "subject": "me", "predicate": "plans", "value": "buy Migo a bike for Christmas" },
+
+    { "seed": 8, "domain": "people", "subject": "me", "predicate": "neighbour_of", "object": "Nena" },
+    { "seed": 8, "domain": "people", "subject": "me", "predicate": "neighbour_of", "object": "Jerome" },
+
+    { "seed": 9, "domain": "work", "subject": "me", "predicate": "studied_at", "object": "Mapúa", "label": "BS Electrical Engineering", "date": "2001", "until": "2006" },
+    { "seed": 9, "domain": "work", "subject": "me", "predicate": "works_at", "object": "Luzon Power Systems", "label": "junior engineer", "date": "2006", "until": "2014" },
+    { "seed": 9, "domain": "work", "subject": "me", "predicate": "works_at", "object": "Pacific Grid Solutions", "label": "senior electrical engineer", "date": "2014-07", "until": "2024-01" },
+    { "seed": 9, "domain": "work", "subject": "Victor Lim", "predicate": "manages", "object": "me" },
+    { "seed": 9, "domain": "work", "subject": "Victor Lim", "predicate": "works_at", "object": "Pacific Grid Solutions", "label": "VP for operations" },
+    { "seed": 9, "domain": "work", "subject": "me", "predicate": "colleague_of", "object": "Mylene Garcia" },
+    { "seed": 9, "domain": "work", "subject": "Mylene Garcia", "predicate": "works_at", "object": "Pacific Grid Solutions", "label": "head of procurement" },
+
+    { "seed": 10, "domain": "work", "subject": "me", "predicate": "founded", "object": "VoltaPinas", "date": "2024-02-05" },
+    { "seed": 10, "domain": "work", "subject": "Glenn Torres", "predicate": "founded", "object": "VoltaPinas", "date": "2024-02-05" },
+    { "seed": 10, "domain": "work", "subject": "me", "predicate": "business_partner_of", "object": "Glenn Torres" },
+    { "seed": 10, "domain": "work", "subject": "me", "predicate": "owns_share_of", "object": "VoltaPinas", "value": "60" },
+    { "seed": 10, "domain": "work", "subject": "Glenn Torres", "predicate": "owns_share_of", "object": "VoltaPinas", "value": "40" },
+    { "seed": 10, "domain": "work", "subject": "me", "predicate": "director_of", "object": "VoltaPinas", "label": "president" },
+    { "seed": 10, "domain": "money", "subject": "me", "predicate": "owes", "object": "Joy", "amount": 200000, "currency": "PHP", "label": "loan", "date": "2024-02-05", "until": "2025-12-20", "context": "VoltaPinas" },
+
+    { "seed": 11, "domain": "assets", "subject": "VoltaPinas", "predicate": "rents", "object": "Cubao office", "date": "2024-03" },
+    { "seed": 11, "domain": "assets", "subject": "Cubao office", "predicate": "located_in", "object": "Cubao" },
+    { "seed": 11, "domain": "money", "subject": "Cubao office", "predicate": "costs", "amount": 28000, "currency": "PHP", "label": "rent per month" },
+    { "seed": 11, "domain": "work", "subject": "Kat Reyes", "predicate": "works_at", "object": "VoltaPinas", "label": "project engineer", "date": "2025-03" },
+    { "seed": 11, "domain": "work", "subject": "me", "predicate": "manages", "object": "Kat Reyes" },
+
+    { "seed": 12, "domain": "work", "subject": "Rizal Cold Storage", "predicate": "client_of", "object": "VoltaPinas" },
+    { "seed": 12, "domain": "projects", "subject": "warehouse retrofit", "predicate": "milestone", "value": "contract signed", "label": "contract signed", "date": "2026-03-02" },
+    { "seed": 12, "domain": "money", "subject": "warehouse retrofit", "predicate": "costs", "amount": 4200000, "currency": "PHP", "label": "contract" },
+    { "seed": 12, "domain": "time", "subject": "warehouse retrofit", "predicate": "due_on", "value": "2026-09-30", "date": "2026-09-30", "label": "handover" },
+    { "seed": 12, "domain": "work", "subject": "Dong Abad", "predicate": "contractor_for", "object": "VoltaPinas", "label": "cable pulling" },
+
+    { "seed": 13, "domain": "money", "subject": "VoltaPinas", "predicate": "received_from", "object": "Rizal Cold Storage", "amount": 1260000, "currency": "PHP", "label": "second tranche", "date": "2026-08-12", "context": "warehouse retrofit" },
+    { "seed": 13, "domain": "projects", "subject": "warehouse retrofit", "predicate": "status", "value": "active", "date": "2026-04" },
+    { "seed": 13, "domain": "projects", "subject": "warehouse retrofit", "predicate": "milestone", "value": "panel boards energized", "label": "panel boards energized", "date": "2026-07-20" },
+
+    { "seed": 14, "domain": "work", "subject": "me", "predicate": "member_of", "object": "IIEE", "date": "2007" },
+    { "seed": 14, "domain": "work", "subject": "me", "predicate": "member_of", "object": "paluwagan" },
+    { "seed": 14, "domain": "money", "subject": "me", "predicate": "contributed_to", "object": "paluwagan", "amount": 5000, "currency": "PHP", "label": "per month" },
+    { "seed": 14, "domain": "assets", "subject": "me", "predicate": "owns", "object": "PRC license" },
+    { "seed": 14, "domain": "assets", "subject": "PRC license", "predicate": "expires_on", "value": "2027-11-02", "date": "2027-11-02" },
+    { "seed": 14, "domain": "money", "subject": "me", "predicate": "earns", "object": "VoltaPinas", "amount": 140000, "currency": "PHP", "label": "per month" },
+    { "seed": 14, "domain": "work", "subject": "Liza", "predicate": "works_at", "object": "Antipolo National High School", "label": "science teacher" },
+    { "seed": 14, "domain": "money", "subject": "Liza", "predicate": "earns", "object": "Antipolo National High School", "amount": 42000, "currency": "PHP", "label": "per month" },
+
+    { "seed": 15, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Antipolo house", "amount": 3850000, "currency": "PHP", "date": "2015-10-20", "context": "Teresita Gomez" },
+    { "seed": 15, "domain": "assets", "subject": "me", "predicate": "owns", "object": "Antipolo house", "label": "co-owned", "date": "2015-10-20" },
+    { "seed": 15, "domain": "assets", "subject": "Liza", "predicate": "owns", "object": "Antipolo house", "label": "co-owned", "date": "2015-10-20" },
+    { "seed": 15, "domain": "assets", "subject": "Antipolo house", "predicate": "identifier", "value": "045-2015009871", "label": "title number" },
+    { "seed": 15, "domain": "assets", "subject": "Antipolo house", "predicate": "identifier", "value": "Blk 7 Lot 22", "label": "lot number" },
+    { "seed": 15, "domain": "assets", "subject": "Antipolo house", "predicate": "located_in", "object": "Antipolo" },
+
+    { "seed": 16, "domain": "time", "subject": "me", "predicate": "lives_in", "object": "Mandaluyong", "until": "2015-11" },
+    { "seed": 16, "domain": "time", "subject": "me", "predicate": "lives_in", "object": "Antipolo", "date": "2015-11" },
+    { "seed": 16, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Mandaluyong condo", "amount": 1600000, "currency": "PHP", "date": "2010" },
+    { "seed": 16, "domain": "assets", "subject": "me", "predicate": "sold", "object": "Mandaluyong condo", "amount": 2900000, "currency": "PHP", "date": "2026-05-09", "context": "Henry Chua" },
+    { "seed": 16, "domain": "assets", "subject": "me", "predicate": "owns", "object": "Mandaluyong condo", "date": "2010", "until": "2026-05-09" },
+    { "seed": 16, "domain": "assets", "subject": "Mandaluyong condo", "predicate": "located_in", "object": "Mandaluyong" },
+
+    { "seed": 17, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Innova", "amount": 1450000, "currency": "PHP", "date": "2019-08", "context": "Toyota Marikina", "status": "superseded" },
+    { "seed": 17, "domain": "assets", "subject": "Innova", "predicate": "identifier", "value": "NDA 4127", "label": "plate" },
+
+    { "seed": 18, "domain": "assets", "subject": "Innova insurance policy", "predicate": "renews_on", "value": "2026-09-30", "date": "2026-09-30" },
+    { "seed": 18, "domain": "assets", "subject": "Innova insurance policy", "predicate": "identifier", "value": "BGI-MV-0098812", "label": "policy number" },
+    { "seed": 18, "domain": "assets", "subject": "Innova insurance policy", "predicate": "issued_by", "object": "Bayanihan General Insurance" },
+    { "seed": 18, "domain": "money", "subject": "Innova insurance policy", "predicate": "costs", "amount": 32480, "currency": "PHP", "label": "renewal premium" },
+
+    { "seed": 19, "domain": "assets", "subject": "passport", "predicate": "expires_on", "value": "2027-03-09", "date": "2027-03-09" },
+    { "seed": 19, "domain": "assets", "subject": "driver's license", "predicate": "expires_on", "value": "2028-11-02", "date": "2028-11-02" },
+    { "seed": 19, "domain": "plans", "subject": "me", "predicate": "plans", "value": "renew passport before the Dubai trip" },
+    { "seed": 19, "domain": "plans", "subject": "me", "predicate": "plans", "value": "visit Joy and Amara in Dubai", "date": "2027-04" },
+
+    { "seed": 20, "domain": "assets", "subject": "me", "predicate": "owns", "object": "Pototan riceland", "label": "inherited" },
+    { "seed": 20, "domain": "assets", "subject": "Joy", "predicate": "owns", "object": "Pototan riceland", "label": "inherited" },
+    { "seed": 20, "domain": "assets", "subject": "Pototan riceland", "predicate": "identifier", "value": "Lot 4471", "label": "lot number" },
+    { "seed": 20, "domain": "assets", "subject": "Pototan riceland", "predicate": "located_in", "object": "Pototan" },
+    { "seed": 20, "domain": "people", "subject": "Celso", "predicate": "related_to", "object": "Pototan riceland", "label": "tenant farmer" },
+    { "seed": 20, "domain": "projects", "subject": "solar pump", "predicate": "status", "value": "planned", "date": "2026-04" },
+    { "seed": 20, "domain": "projects", "subject": "solar pump", "predicate": "part_of", "object": "Pototan riceland" },
+
+    { "seed": 21, "domain": "assets", "subject": "VoltaPinas", "predicate": "bought", "object": "L300", "amount": 1100000, "currency": "PHP", "date": "2024-10" },
+    { "seed": 21, "domain": "assets", "subject": "L300", "predicate": "identifier", "value": "CAB 9183", "label": "plate" },
+    { "seed": 21, "domain": "assets", "subject": "Antipolo house", "predicate": "valued_at", "amount": 6500000, "currency": "PHP", "date": "2026-02" },
+
+    { "seed": 22, "domain": "money", "subject": "me", "predicate": "paid", "object": "Joy", "amount": 50000, "currency": "PHP", "date": "2025-12-20", "label": "loan repayment" },
+    { "seed": 22, "domain": "money", "subject": "Joy", "predicate": "paid", "object": "Cora", "amount": 15000, "currency": "PHP", "label": "per month" },
+    { "seed": 22, "domain": "money", "subject": "me", "predicate": "received_from", "object": "Pacific Grid Solutions", "amount": 310000, "currency": "PHP", "date": "2024-02", "label": "final pay" },
+
+    { "seed": 23, "domain": "money", "subject": "me", "predicate": "paid", "object": "Abby", "amount": 6000, "currency": "PHP", "date": "2026-08", "label": "math tutoring" },
+    { "seed": 23, "domain": "money", "subject": "me", "predicate": "paid", "object": "Lorna Santos", "amount": 3500, "currency": "PHP", "date": "2026-08", "label": "braces" },
+    { "seed": 23, "domain": "money", "subject": "me", "predicate": "contributed_to", "object": "Kristine's wedding", "amount": 20000, "currency": "PHP", "date": "2026-08", "label": "gift" },
+    { "seed": 23, "domain": "people", "subject": "me", "predicate": "relative_of", "object": "Kristine", "label": "cousin" },
+    { "seed": 23, "domain": "time", "subject": "Kristine's wedding", "predicate": "happened", "value": "2026-08-08", "date": "2026-08-08" },
+
+    { "seed": 24, "domain": "projects", "subject": "extension", "predicate": "part_of", "object": "Antipolo house" },
+    { "seed": 24, "domain": "projects", "subject": "extension", "predicate": "status", "value": "planned", "date": "2025-10" },
+    { "seed": 24, "domain": "work", "subject": "Rhea Mendoza", "predicate": "contractor_for", "object": "extension", "label": "architect" },
+    { "seed": 24, "domain": "money", "subject": "me", "predicate": "paid", "object": "Rhea Mendoza", "amount": 45000, "currency": "PHP", "date": "2025-11-10", "label": "design fee", "context": "extension" },
+
+    { "seed": 25, "domain": "work", "subject": "Antonio Dela Paz", "predicate": "contractor_for", "object": "extension", "label": "foreman" },
+    { "seed": 25, "domain": "money", "subject": "extension", "predicate": "costs", "amount": 1350000, "currency": "PHP", "label": "quote", "context": "Antonio Dela Paz" },
+    { "seed": 25, "domain": "money", "subject": "extension", "predicate": "costs", "amount": 1500000, "currency": "PHP", "label": "budget", "status": "superseded" },
+
+    { "seed": 26, "domain": "projects", "subject": "extension", "predicate": "milestone", "value": "building permit released", "label": "building permit released", "date": "2025-12-18" },
+    { "seed": 26, "domain": "projects", "subject": "extension", "predicate": "status", "value": "active", "date": "2026-01-12" },
+    { "seed": 26, "domain": "money", "subject": "me", "predicate": "paid", "object": "Antonio Dela Paz", "amount": 400000, "currency": "PHP", "date": "2026-01-12", "label": "downpayment", "context": "extension" },
+    { "seed": 26, "domain": "money", "subject": "Joy", "predicate": "contributed_to", "object": "extension", "amount": 100000, "currency": "PHP", "date": "2026-02" },
+
+    { "seed": 27, "domain": "projects", "subject": "extension", "predicate": "milestone", "value": "second-floor slab poured", "label": "second-floor slab poured", "date": "2026-03-28" },
+    { "seed": 27, "domain": "money", "subject": "me", "predicate": "paid", "object": "Antonio Dela Paz", "amount": 350000, "currency": "PHP", "date": "2026-03-28", "label": "second tranche", "context": "extension" },
+    { "seed": 27, "domain": "projects", "subject": "Gabriel", "predicate": "works_on", "object": "extension", "label": "carried hollow blocks" },
+
+    { "seed": 28, "domain": "projects", "subject": "extension", "predicate": "status", "value": "paused", "date": "2026-05-04" },
+    { "seed": 28, "domain": "money", "subject": "extension", "predicate": "costs", "amount": 1800000, "currency": "PHP", "label": "budget" },
+    { "seed": 28, "domain": "projects", "subject": "Liza", "predicate": "works_on", "object": "extension", "label": "choosing tiles and fixtures" },
+
+    { "seed": 29, "domain": "projects", "subject": "extension", "predicate": "status", "value": "active", "date": "2026-06-15" },
+    { "seed": 29, "domain": "money", "subject": "me", "predicate": "paid", "object": "Antonio Dela Paz", "amount": 300000, "currency": "PHP", "date": "2026-06-30", "context": "extension" },
+    { "seed": 29, "domain": "money", "subject": "me", "predicate": "paid", "object": "Boyet", "amount": 38500, "currency": "PHP", "date": "2026-07-22", "label": "bathroom rough-in", "context": "extension" },
+    { "seed": 29, "domain": "work", "subject": "Boyet", "predicate": "contractor_for", "object": "extension", "label": "plumber" },
+    { "seed": 29, "domain": "projects", "subject": "extension", "predicate": "milestone", "value": "roofing finished", "label": "roofing finished", "date": "2026-07-31" },
+    { "seed": 29, "domain": "time", "subject": "extension", "predicate": "due_on", "value": "2026-11-30", "date": "2026-11-30", "label": "turnover" },
+
+    { "seed": 30, "domain": "plans", "subject": "me", "predicate": "decided", "value": "go ahead with the solar water pump", "date": "2026-08", "context": "solar pump" },
+    { "seed": 30, "domain": "money", "subject": "solar pump", "predicate": "costs", "amount": 185000, "currency": "PHP", "label": "quote", "context": "SunHarvest Solar" },
+    { "seed": 30, "domain": "money", "subject": "me", "predicate": "paid", "object": "SunHarvest Solar", "amount": 50000, "currency": "PHP", "date": "2026-08-10", "label": "downpayment", "context": "solar pump" },
+    { "seed": 30, "domain": "work", "subject": "SunHarvest Solar", "predicate": "contractor_for", "object": "solar pump" },
+    { "seed": 30, "domain": "time", "subject": "solar pump", "predicate": "scheduled", "value": "2026-09-15", "date": "2026-09-15", "label": "installation" },
+
+    { "seed": 31, "domain": "time", "subject": "me", "predicate": "visited", "object": "Hong Kong", "date": "2025-12-26", "until": "2025-12-30" },
+    { "seed": 31, "domain": "time", "subject": "me", "predicate": "visited", "object": "Iloilo", "date": "2026-01" },
+
+    { "seed": 32, "domain": "time", "subject": "orthodontist appointment", "predicate": "scheduled", "value": "2026-08-28", "date": "2026-08-28", "status": "superseded" },
+
+    { "seed": 33, "domain": "time", "subject": "orthodontist appointment", "predicate": "scheduled", "value": "2026-09-04", "date": "2026-09-04" },
+
+    { "seed": 34, "domain": "time", "subject": "annual physical", "predicate": "happened", "value": "2026-07-10", "date": "2026-07-10", "context": "St. Luke's" },
+
+    { "seed": 35, "domain": "assets", "subject": "me", "predicate": "bought", "object": "Innova", "amount": 1450000, "currency": "PHP", "date": "2019-07", "context": "Toyota Marikina" },
+
+    { "seed": 36, "domain": "plans", "subject": "me", "predicate": "intends", "value": "VoltaPinas becomes the go-to solar installer in Western Visayas" },
+    { "seed": 36, "domain": "plans", "subject": "me", "predicate": "plans", "value": "hire five more engineers", "date": "2026" },
+    { "seed": 36, "domain": "plans", "subject": "me", "predicate": "plans", "value": "open an Iloilo branch", "date": "2028" },
+    { "seed": 36, "domain": "plans", "subject": "me", "predicate": "plans", "value": "move Nanay into the new room once the extension is done" },
+    { "seed": 36, "domain": "plans", "subject": "me", "predicate": "intends", "value": "retire to the Pototan riceland" },
+    { "seed": 36, "domain": "plans", "subject": "me", "predicate": "intends", "value": "build a small bahay kubo on the Pototan riceland" },
+
+    { "seed": 37, "domain": "plans", "subject": "me", "predicate": "decided", "value": "not sell the Pototan riceland despite a developer's offer", "amount": 4000000, "currency": "PHP", "context": "Pototan riceland" },
+    { "seed": 37, "domain": "plans", "subject": "me", "predicate": "decided", "value": "start a college fund for the kids", "amount": 10000, "currency": "PHP", "label": "per month", "date": "2026-09" },
+    { "seed": 37, "domain": "plans", "subject": "me", "predicate": "decided", "value": "VoltaPinas will bid for the Iloilo Business Park maintenance contract", "context": "VoltaPinas" },
+    { "seed": 37, "domain": "plans", "subject": "me", "predicate": "intends", "value": "buy a second car, probably a Vios", "date": "2027" },
+    { "seed": 37, "domain": "plans", "subject": "Liza", "predicate": "plans", "value": "start her master's at PNU", "date": "2027" }
+  ]
+}

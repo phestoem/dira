@@ -387,9 +387,19 @@ of this file (`7240988`).
   plans 87). Fixes: scorer families + sharing (docs/knowledge-layer.md),
   extractor v6, and a "Conventions" section in the design doc that every
   writer and the extractor follow.
-- Running: v6 (tmux `phase2`, logs/phase2/v6/): life, hold-out 4 ×2 (dev),
-  hold-outs 1–3. Subagents writing: hold-out 5 (sealed, culture not used
-  before), dev2 (India), dev3 (Germany), from the design doc only.
+- v6 (logs/phase2/v6/): life 85%; hold-out 4 (now dev, fixes came from
+  it) 88% / 85%, every domain ≥ 72%; hold-outs 1–3 94 / 92 / 72%.
+- New sets from fresh subagents (design doc only), shape checks clean:
+  dev2 (India, 35 seeds, 140 claims, Marathi + Hindi), dev3 (Germany,
+  self-employed joiner, 33 seeds, 138 claims, German), hold-out 5
+  (sealed; 38 seeds, 160 claims, 39 questions, every domain ≥ 15 claims).
+  Note: the hold-out 5 writer's hand-back mentioned its culture and a few
+  names/amounts; nothing else of it was read. Not used for tuning.
+- Scorer: for date-valued predicates a `date` equal to the value is the
+  value (writers put dates in both). Contamination test: newer sets'
+  personal words come from their expected entity names (German nouns are
+  capitalised, so the capital-letter rule flagged ordinary words); a hit
+  says which unsealed set it comes from, hold-out 5 words stay masked.
 - DECIDED 2026-10-17 (Phesto): option 1. Hold-out 4 is now a diagnostic
   set (may be read); hold-out 5 + 2 dev sets by fresh subagents after the
   diagnosis and any design-doc clarification.

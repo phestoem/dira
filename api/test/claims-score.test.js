@@ -129,3 +129,9 @@ test("one stored fact can meet two writers' shapes of it: contractor and works_o
   ];
   assert.equal(scoreClaims({ expect, entities, claims, selfId: "self" }).total.tp, 5);
 });
+
+test("a date-valued claim's date may just repeat its value", () => {
+  const expect = { claims: [{ seed: 0, subject: "Rui", predicate: "born", value: "1990-05-04", date: "1990-05-04" }] };
+  const claims = [{ id: 1, subjectId: "rui", predicate: "born", value: "1990-05-04" }];
+  assert.equal(scoreClaims({ expect, entities, claims, selfId: "self" }).total.tp, 1);
+});

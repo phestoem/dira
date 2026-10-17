@@ -246,6 +246,7 @@ Expected-claims file (`{ set, claims: [...] }`), one per stated fact:
   contractor_for claim; relative_of and related_to match either way; a
   value beside an amount is description only, and a value may match the
   stored label; a plan's expected date may appear in its stored words;
-  context is not scored. Names may also match when ≥ 70% of three or more
+  context is not scored; for date-valued predicates a `date` equal to the
+  value is the value. Names may also match when ≥ 70% of three or more
   expected words are in the entity name.
 - Claim domains: people, work, money, projects, assets, time, plans.
