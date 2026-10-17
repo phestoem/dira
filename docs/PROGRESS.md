@@ -84,7 +84,8 @@ needs a re-extraction of dira_dev. Not re-run since `7d26524`.
 
 ## Hybrid plan (Phesto, 2026-10-17)
 Long jobs run in tmux with logs in logs/.
-- [ ] d. Write hold-out 3 first (a different culture again, before any
+- [x] d. (2026-10-17, Korean family, api/test/holdout/holdout3.json, 13
+  questions; `--set holdout3`) Write hold-out 3 first (a different culture again, before any
   engine changes), score-only.
 - [ ] a. Post-check audit (synthetic only, never the hold-outs): sample 30
   removed claims, classify each as a true invention or a wrongly removed

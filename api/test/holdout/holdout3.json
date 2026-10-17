@@ -1,0 +1,31 @@
+{
+  "name": "holdout3",
+  "selfName": "Kim Min-jun",
+  "seeds": [
+    "I'm Kim Min-jun. My father Kim Sang-ho runs a pharmacy in Daegu. My mother, Lee Hye-jin, passed away on 2019-11-03.",
+    "I have two siblings: my older sister Kim Ji-woo, born 21 April 1982, and my younger brother Kim Tae-yang, born on 1990-07-30.",
+    "My wife is Park Seo-yeon; we married on 11 October 2014. Her father, Park Jong-su, lives with us in Seoul.",
+    "우리 딸 Kim Ha-eun은 2016년 3월 2일에 태어났습니다.",
+    "Our son Kim Do-yun arrived on March 9, 2019.",
+    "Tae-yang's wife, Choi Yu-na, is expecting their first baby in spring.",
+    "Kim Ji-ho is my business partner at the café. We are not related.",
+    "My cousin Lee Joon-ho, my mother's nephew, lives in Busan.",
+    "I bought the café building in Mapo-gu on 5 January 2017. My father gave me a plot of farmland near Andong in 2021.",
+    "We sold our old apartment in Suwon in 2020 and now rent a flat in Seoul."
+  ],
+  "questions": [
+    { "id": "wife", "turns": ["who is my wife?"], "expect": { "has": ["Park Seo-yeon"] } },
+    { "id": "parents", "turns": ["who are my parents?"], "expect": { "has": ["Kim Sang-ho", "Lee Hye-jin"] } },
+    { "id": "mother-died", "turns": ["when did my mother pass away?"], "expect": { "dates": ["2019-11-03"] } },
+    { "id": "siblings", "turns": ["list my siblings"], "expect": { "has": ["Ji-woo", "Tae-yang"], "lacks": ["Ji-ho", "Yu-na"] } },
+    { "id": "younger-brother-born", "turns": ["when was my younger brother born?"], "expect": { "has": ["Tae-yang"], "dates": ["1990-07-30"] } },
+    { "id": "children-count", "turns": ["how many children do I have?"], "expect": { "count": 2 } },
+    { "id": "daughter-born", "turns": ["when was my daughter born?"], "expect": { "has": ["Ha-eun"], "dates": ["2016-03-02"] } },
+    { "id": "father-in-law", "turns": ["who is my father-in-law?"], "expect": { "has": ["Park Jong-su"] } },
+    { "id": "married-on", "turns": ["when did I get married?"], "expect": { "dates": ["2014-10-11"] } },
+    { "id": "not-kin", "turns": ["who is Kim Ji-ho?"], "expect": { "has": ["partner"], "lacks": ["brother", "cousin"] } },
+    { "id": "connection", "turns": ["how is Choi Yu-na connected to me?"], "expect": { "has": ["Tae-yang"] } },
+    { "id": "family-tree", "turns": ["show my family tree"], "expect": { "has": ["Sang-ho", "Hye-jin", "Ji-woo", "Tae-yang", "Seo-yeon", "Ha-eun", "Do-yun"], "lacks": ["Ji-ho"] } },
+    { "id": "owned-now", "turns": ["what property do I own now?"], "expect": { "has": ["Mapo-gu", "Andong"], "lacks": ["Suwon"] } }
+  ]
+}

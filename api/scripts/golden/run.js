@@ -22,7 +22,7 @@ const DELETE_ORDER = ["relationship", "lifeEvent", "inputQueue", "diaryEntry", "
 // Every question turn's server measurements, summarised once per run.
 const answerMetrics = [];
 // Other families as JSON: --set synthetic, or --set holdout (test/holdout/, run with --score-only and never tuned for).
-const SETS = { synthetic: new URL("./sets/synthetic.json", import.meta.url), holdout: new URL("../../test/holdout/holdout.json", import.meta.url), holdout2: new URL("../../test/holdout/holdout2.json", import.meta.url) };
+const SETS = { synthetic: new URL("./sets/synthetic.json", import.meta.url), holdout: new URL("../../test/holdout/holdout.json", import.meta.url), holdout2: new URL("../../test/holdout/holdout2.json", import.meta.url), holdout3: new URL("../../test/holdout/holdout3.json", import.meta.url) };
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
 const args = parseArgs(process.argv.slice(2));
