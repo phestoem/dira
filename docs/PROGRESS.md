@@ -372,6 +372,9 @@ of this file (`7240988`).
    versions), then the gate on hold-out 4.
 
 ## Open questions for Phesto
+- Extraction model: gpt-5.4 / gpt-5.5 lift fresh-author sets from ~75%
+  to ~85–90% (gpt-4.1 was the plan). Switch the default? Then gate on
+  hold-out 5 (3 runs, mean) now, or after one more round on assets?
 - Hold-out 4 diagnosis (2026-10-17, one inspectable run, logs/phase2/diag4/):
   58 misses. Scorer bug: an expected owns used up the sold claim in the
   direct pass (2 sales lost). Two-writer conventions: contractor_for vs
@@ -408,9 +411,16 @@ of this file (`7240988`).
   | v7 | 88 | 84 | 55 | 76 | lakh/crore + Indian grouping in the amount check (27 dev2 claims had been dropped), single-valued supersession, English names, nested places |
   | v9 | 90 | 86 | 68 | 76 | corrections replace one claim and inherit fields; building project named like the building; payees; seasons = year; parents for every child |
   | v10 | 94 | 86 | 70 / 73 | 82 / 77 | narrator as default holder ("bought the plot"), "<place> flat" resolves to the flat located there |
-  Fresh-author sets still sit at 72–80%. Next: try newer models (the key
-  has gpt-5.4-mini, gpt-5.4, gpt-5.5; model is a setting) before more
-  prompt rules. Running: tmux `phase2`, logs/phase2/m-<model>/.
+  Fresh-author sets still sat at 72–80%, so newer models were tried
+  (claims-v10 prompt, reasoning effort low, logs/phase2/m-<model>/):
+  | model | dev2 | dev3 | tokens per save in / out |
+  |---|---|---|---|
+  | gpt-4.1 (v10) | 70 / 73 | 82 / 77 | ~2.3k / 270 (v1 measure; v10 prompt is longer) |
+  | gpt-5.4-mini | 71 | 78 | 4.2k / 710 |
+  | gpt-5.4 | 84 | 91 | 4.2k / 810 |
+  | gpt-5.5 | 85 | 88 | 4.2k / 390 |
+  Weakest domains with gpt-5.5: dev2 assets 69%, dev3 money 75%,
+  projects 70–73%. Switching the default model is Phesto's call (cost).
 - DECIDED 2026-10-17 (Phesto): option 1. Hold-out 4 is now a diagnostic
   set (may be read); hold-out 5 + 2 dev sets by fresh subagents after the
   diagnosis and any design-doc clarification.
