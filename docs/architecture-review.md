@@ -103,24 +103,49 @@ assets. Paths are under api/src/. "Dup" = does the same job as another path.
 - Date precision is lost at storage (a year becomes 1 January) except spouse
   end dates.
 
-## 8. What the measurements say (interim, 2026-10-17)
+## 8. What the measurements say (final, 2026-10-17)
 
-Extraction harness, rules extractor, totals only for hold-outs:
+Extraction harness: 2 extractors × 3 models × 4 sets × 3 runs. Recall of
+expected facts stored, mean (min); hold-outs are totals only. Raw output
+in logs/extraction/ (summary: `node api/scripts/golden/extraction-summary.mjs`).
 
-| | gpt-4o-mini | gpt-4o |
-|---|---|---|
-| synthetic recall | 83% | 90% |
-| hold-out 1 | 65% | 68% |
-| hold-out 2 | 69% | 62% |
-| hold-out 3 | 21% | 21% |
+| Recall | rules mini | rules 4o | rules 4.1 | schema mini | schema 4o | schema 4.1 |
+|---|---|---|---|---|---|---|
+| synthetic (30 facts) | 83% (80) | 90% (90) | 90% (90) | 73% (67) | 84% (80) | **99% (97)** |
+| hold-out 1 | 65% (65) | 67% (65) | 71% (71) | 63% (59) | 73% (71) | **88% (88)** |
+| hold-out 2 | 69% (69) | 62% (62) | 64% (62) | 26% (23) | 69% (69) | **77% (77)** |
+| hold-out 3 (19 facts) | 21% (21) | 21% (21) | 21% (21) | 16% (16) | 21% (21) | 18% (16) |
 
-- Hold-out 3: ~9 of 19 expected facts are lost at routing (≈3 seeds not
-  saved, 1 routed as a question) before any extractor sees them. That is
-  an architecture loss, not a model loss.
-- Elsewhere the losses are mostly the model not stating a fact (wrong
-  person, one relation per person, roster echo), then validation.
-- A stronger extraction model gives no consistent gain so far (gpt-4.1 and
-  the schema extractor are still running).
+Precision is 81–100% everywhere except hold-out 3 (53–71%).
+
+- **Hold-out 3 is capped by routing, not by the model.** Every combination
+  loses 8.7–9 of its 19 facts at routing (about 3 seeds dropped, 1 taken
+  as a question), so no extractor can exceed ~53% there. The rest is lost
+  as "kept but not stored" (2–4 facts: the extractor stated and validation
+  kept them, but the graph doesn't hold them: resolution or saving) and
+  "not extracted" (2–4).
+- **The rules extractor doesn't improve with a stronger model** (90% on
+  synthetic with 4o and 4.1; flat on hold-outs). Its prompt/validator
+  shape caps it: one relation per person, roster echo dropped as
+  name-not-in-text (72 drops per synthetic run with mini, 2–5 with 4o/4.1).
+- **The schema extractor scales with the model**: with gpt-4.1 it is best on
+  every set except hold-out 3 (+17 points on hold-out 1, +13 on hold-out 2
+  vs the default rules/mini). With gpt-4o-mini it is worst, and on hold-out
+  2 it also changes routing (3.3 seeds dropped per run vs 0 elsewhere), so
+  extraction and routing are coupled today.
+- **Some relation types are never stored by any combination**: colleague,
+  niece_nephew, parent_in_law (0% recall in all six); sibling_in_law at
+  most 33%; pair:spouse (spouse between two other people) 0–50%. These are
+  structural gaps (vocabulary/storage/resolution), not model misses.
+- Dates: born 44–67%, died 75–100%, married/divorced mostly 75–100%;
+  child links 44–67%.
+
+What this means for the options: the best model change (schema + gpt-4.1)
+moves hold-out 1–2 recall up a lot but leaves hold-out 3 where it was,
+because the loss is in routing and storage, not extraction. Under (a) that
+is three more places to patch; under (b) it is exactly what "one ingestion
+path, every statement reaches the extractor" removes. (b) phase 2 should
+start from the schema extractor with gpt-4.1.
 
 ## 9. Options
 

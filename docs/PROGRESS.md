@@ -54,31 +54,33 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
-- Extraction measurement, restarted 2026-10-17 17:55 UTC in tmux session
-  `extraction`: `api/scripts/golden/extraction.sh 3` = extractors rules
-  and schema × models gpt-4o-mini, gpt-4o, gpt-4.1 × synthetic and
-  hold-outs 1–3 × 3 runs (72 fixture seedings, expect ~2.5 h). Progress:
-  logs/extraction/summary.txt, one line per run; finished when it ends
-  with "== ... done". Driver log: logs/extraction.log. Per-run files:
-  logs/extraction/<extractor>-<model>-<set>-<run>.txt (hold-outs: score
-  and totals JSON only). Traces logs/extraction/trace-*.jsonl contain
-  hold-out items: never read them; aggregate from the per-run files.
+- Nothing running. Extraction measurement finished 2026-10-17 19:29 UTC
+  (tmux `extraction`, 72 seedings). Output: logs/extraction/ (per-run
+  files; summary.txt; never read trace-*.jsonl or hold-out dumps).
+  Summary: `node api/scripts/golden/extraction-summary.mjs`.
 - Harness: `npm run golden -- --set <set> --extraction --trace <file>`
   scores the stored graph against api/test/extraction/<set>.expect.json
-  (expected facts written 2026-10-17 from seed sentences only; Phesto OK'd
-  reading hold-out 1–2 seeds for this). The API must run with
-  DIRA_EXTRACT_TRACE=<file>. Each miss gets a stage: routing,
+  (API must run with DIRA_EXTRACT_TRACE=<file>). Miss stages: routing,
   no-extraction, not-extracted:person|fact, validation:person|fact,
-  kept-not-stored. Each run also dumps what it scored to
-  logs/extraction/dumps/ (for re-scoring; hold-out dumps never read).
-  First attempt (17:47) stopped after 3 runs: its attribution counted a
-  person kept without their relation as kept-not-stored; output in
-  logs/extraction-aborted-1/.
-- New switches: PEOPLE_EXTRACTOR=rules|schema (independent of
-  PEOPLE_ENGINE), GRAPH_EXTRACT_MODEL (extraction only).
+  kept-not-stored. Switches: PEOPLE_EXTRACTOR=rules|schema,
+  GRAPH_EXTRACT_MODEL (extraction only).
 
 ## Latest scores
-2026-10-17, step e, at `15dc8b1`, 3 runs per engine per set, mean (min).
+2026-10-17, extraction recall (facts stored / expected), 3 runs, mean
+(min), at `40231d3`. Full table in docs/architecture-review.md §8.
+
+| Set | rules mini (default) | rules 4.1 | schema 4o | schema 4.1 |
+|---|---|---|---|---|
+| Synthetic | 83% (80) | 90% (90) | 84% (80) | **99% (97)** |
+| Hold-out 1 | 65% (65) | 71% (71) | 73% (71) | **88% (88)** |
+| Hold-out 2 | 69% (69) | 64% (62) | 69% (69) | **77% (77)** |
+| Hold-out 3 | 21% (21) | 21% (21) | 21% (21) | 18% (16) |
+
+Hold-out 3 loses ~9 of 19 facts at routing in every combination (cap
+~53%). Rules extractor is flat across models; schema scales with the
+model. colleague, niece_nephew, parent_in_law: 0% everywhere.
+
+Answer scores: 2026-10-17, step e, at `15dc8b1`, 3 runs per engine per set, mean (min).
 dira_dev rebuilt with the rules extractor just before. Raw output:
 logs/compare/ (summary.txt). Hold-outs are scores only.
 
@@ -194,7 +196,8 @@ Long jobs run in tmux with logs in logs/.
 4. Later: timezone and default currency become user settings.
 
 ## Open questions for Phesto
-- Architecture review delivered 2026-10-17 (docs/architecture-review.md):
+- Architecture review delivered 2026-10-17 (docs/architecture-review.md,
+  §8 now has the final extraction results):
   (a) keep patching vs (b) replace the knowledge layer with one ingestion
   path, one claim store and tool answers. Recommendation (b), staged.
   Which one? No fixes until decided.
