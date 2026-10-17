@@ -194,4 +194,7 @@ Long jobs run in tmux with logs in logs/.
 4. Later: timezone and default currency become user settings.
 
 ## Open questions for Phesto
-- None yet.
+- Architecture review delivered 2026-10-17 (docs/architecture-review.md):
+  (a) keep patching vs (b) replace the knowledge layer with one ingestion
+  path, one claim store and tool answers. Recommendation (b), staged.
+  Which one? No fixes until decided.
