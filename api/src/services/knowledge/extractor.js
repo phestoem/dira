@@ -8,7 +8,7 @@ import { extractModel } from "./settings.js";
 import { validateClaims } from "./validate.js";
 import { ENTITY_TYPES, PREDICATES } from "./vocabulary.js";
 
-export const EXTRACTOR_VERSION = "claims-v7";
+export const EXTRACTOR_VERSION = "claims-v9";
 
 // What each predicate means and its direction, for the prompt. Kept beside the vocabulary's domain table.
 const MEANING = {
@@ -41,7 +41,7 @@ const MEANING = {
   renews_on: "value = ISO date the subject is due for renewal",
   valued_at: "amount = what the subject is worth; date",
   issued_by: "the organisation that issued/insures the document or policy",
-  paid: "subject paid money to object; amount, currency, date; context = what it was for (project, asset, person)",
+  paid: "subject (the payer) paid money to object (the person or organisation who received it, never a document or project); amount, currency, date; context = what it was for (project, asset, policy, person)",
   received_from: "subject received money from object; amount, date; context",
   contributed_to: "subject put money into object (project, group, person); amount, date; label monthly etc.",
   owes: "subject is the DEBTOR, object the lender (\"I lent Kai 50\" → Kai owes me 50; \"my loan from Lender Y\" → me owes Lender Y); amount; date = since; until = repaid",
@@ -142,7 +142,7 @@ Claim fields:
 - predicate: one of the predicates below, in the direction given.
 - value: for value predicates (dates, identifiers, statuses, plans, percentages); otherwise null.
 - label, amount (a number in major units, no separators), currency (ISO 4217 code), date, until: when stated, else null.
-- Dates are ISO and never more precise than the text: "in 2019" → "2019", "May 2019" → "2019-05", "3 May 2019" → "2019-05-03". Resolve relative dates against today's date at the precision the words carry: "yesterday" → a day, "last week" / "this September" / "next month" → a month, "next year" → a year.
+- Dates are ISO and never more precise than the text: "in 2019" → "2019", "May 2019" → "2019-05", "3 May 2019" → "2019-05-03". Resolve relative dates against today's date at the precision the words carry: "yesterday" → a day, "last week" / "this September" / "next month" → a month, "next year" → a year. Seasons and vague parts of a year ("next summer", "in spring", "early 2027") are the year only.
 - evidence: the shortest exact quote from the text that states the fact.
 - corrects: true when the text corrects an earlier statement ("actually", "correction", "I meant"); the claim repeats the whole claim it corrects (same subject, predicate, object, and every field the records or text give, such as start date and role) with the corrected part changed.
 - date is when the fact happened or starts, only if the text gives it. Never use today's date unless the text says "today"; a target or deadline inside a plan belongs in the plan's value or date only when stated.
@@ -162,13 +162,16 @@ Rules:
 - Jobs of other people: a boss, colleague or employee at a named organisation works_at it (label = role); "Ana of Oak Builders" → Ana works_at Oak Builders.
 - Anyone paid for work on a project or event (builder, architect, caterer, musician, electrician) is contractor_for it, besides the payment.
 - A plan or intention that names money carries it in amount and currency.
+- The subject of plans, intends and decided is the person (or organisation) who plans or decides, never the planned thing; the thing goes in the value or context.
+- Children: a child gets a parent_of claim from every parent the text names: "our son" (with a known partner) → both; "from my marriage to Ana I have a son Bo" → me and Ana; "her daughter Liv, my stepdaughter" → Ana parent_of Liv and me parent_of Liv label step. Words like Papa, Mama, Dad, Mum for the narrator's parents give parent_of claims.
 - Repaid debts: "Kai paid back the 500 I lent him" → Kai owes me (until = when repaid) and me received_from Kai 500.
 - Before naming anything, look in Known records: if it is the same person or thing, or a task or part of a known project, use the known name exactly.
-- Names are short (one to four words), the way the user would say them: "lake house", "garage build", "boat licence". Proper names stay as written; a thing without a proper name gets an English name whatever the text's language ("passport", "dentist appointment", "tax return").
+- Names are short (one to four words), the way the user would say them: "lake house", "shop launch", "boat licence". Proper names stay as written; a thing without a proper name gets an English name whatever the text's language ("passport", "dentist appointment", "tax return").
 - A date-valued claim (scheduled, due_on, expires_on, renews_on, happened, milestone, status) is about the thing that has the date (the appointment, deadline, document, event or project), never about the narrator or another person; born and died are about the person.
-- Names: call a thing what the user calls it ("the lake plot", "the garage build"). Numbers and codes (plot numbers, lot and block numbers, registrations, plates, title or policy numbers) never go into a name, not even in brackets; they are identifier claims. "Lot 9, block B in Pine Estate, Riverton" → name "Riverton lot", identifier "lot 9, block B", place Riverton (and Pine Estate). "the Corolla (plate ABC-123)" → name "Corolla", identifier "ABC-123".
+- Names: call a thing what the user calls it ("the lake plot", "the lake house"). Numbers and codes (plot numbers, lot and block numbers, registrations, plates, title or policy numbers) never go into a name, not even in brackets; they are identifier claims. "Lot 9, block B in Pine Estate, Riverton" → name "Riverton lot", identifier "lot 9, block B", place Riverton (and Pine Estate). "the Corolla (plate ABC-123)" → name "Corolla", identifier "ABC-123". "Unit 7C, Harbour View, Northside" (a flat) → name "Northside flat", identifier "Unit 7C". Documents such as deeds and agreements use these names too.
 - Co-ownership: "Kai and I own it together" → me owns X and Kai owns X (the owner is always the subject).
 - Project state: work going on now → status active; decided or planned but not started → status planned; finished → done. A target finish date ("hope to finish by June") is due_on.
+- A building being built or renovated is one project entity named the way the user names the building ("we're building a house on the lake plot" → project "lake house", part_of "lake plot"); never names like "house build on …", and no separate property for the same house.
 - A project is one entity for the whole undertaking (a build, a renovation, a launch). Trades, tasks, quotes, payments and milestones attach to that project (contractor_for, costs, paid with context, milestone); never make an entity per task.
 - Documents, policies, licences and certificates are their own entities (type document), e.g. "car insurance policy"; their issuer, number and expiry are claims about the document. "The boat is insured with Z; the policy expires D" → "boat insurance policy" issued_by Z and expires_on D, and nothing about the boat itself.
 - Where a thing is goes in its mention's place (no separate located_in needed); where a person lives is a lives_in claim. An organisation's town is not an employer: works_at needs an organisation.
@@ -184,7 +187,7 @@ Rules:
 - Something done or decided together ("Ana and I decided", "we bought") → one claim with subject me; name the others in a separate claim only when the text gives them their own part.
 - No facts → an empty list.
 
-Before answering, check the text once more: every named person has their role claim; every thing described with a place ("the flat in X", "our farm near Y") has that place in its mention; every amount is in a claim; every date is in a claim; every ended state has until; every contractor or company working on something has contractor_for; every plan or decision is there.`;
+Before answering, check the text once more: every named person has their role claim; every thing described with a place ("the flat in X", "our farm near Y") has that place in its mention; every amount is in a claim; every date is in a claim; every ended state has until; every contractor or company working on something has contractor_for; every plan or decision is there with its money and its planner as subject; every child has parent_of from each named parent; the narrator's parents have parent_of.`;
 
 function knownLines(self, entities, claims) {
   const name = new Map(entities.map((entity) => [entity.id, entity]));

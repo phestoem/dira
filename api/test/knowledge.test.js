@@ -182,3 +182,19 @@ test("a newer deadline replaces the older one; places inside places are kept", a
     await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
   }
 });
+
+test("a correction replaces the one payment it is about and keeps its date", async () => {
+  const stamp = Date.now();
+  const user = await prisma.user.create({ data: { email: `fix-${stamp}@example.com`, handle: `fix${stamp}`, name: "Ada Lindqvist" } });
+  try {
+    const { writeClaims } = await import("../src/services/knowledge/store.js");
+    const pay = (amount, date, extra = {}) => ({ subject: "me", predicate: "paid", object: { name: "Nils Berg", type: "person" }, amount, currency: "EUR", date, evidence: "paid", ...extra });
+    await writeClaims(user.id, [pay(1400, "2024-04-20"), pay(1200, "2024-08-02"), pay(1500, "2024-11", { label: "slab stage" })]);
+    await writeClaims(user.id, [pay(1350, null, { label: "slab stage", corrects: true })]);
+    const rows = await prisma.claim.findMany({ where: { userId: user.id }, orderBy: { createdAt: "asc" } });
+    assert.deepEqual(rows.map((row) => [Number(row.amount), row.status]), [[1400, "stated"], [1200, "stated"], [1500, "superseded"], [1350, "stated"]]);
+    assert.equal(rows[3].datePrecision, "month", "the correction keeps the corrected payment's date");
+  } finally {
+    await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
+  }
+});

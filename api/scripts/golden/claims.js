@@ -160,9 +160,19 @@ function matches(fact, claim, ids) {
 
 // expect: { claims }; entities: [{ id, name, aliases }]; claims: stored rows; selfId: the narrator's entity.
 // Returns per-domain tp/fn/fp, recall and precision, plus the misses and extras for sets that may be inspected.
+// A debt is settled when the debtor paid the lender that amount: the repayment's date is the debt's until (derived,
+// as the answer tools will do), so an expected owes-with-until is met by owes + the repayment.
+function settleDebts(stored) {
+  return stored.map((claim) => {
+    if (claim.predicate !== "owes" || claim.until || claim.amount == null) return claim;
+    const repaid = stored.find((other) => other.predicate === "paid" && other.subjectId === claim.subjectId && other.objectId === claim.objectId && other.amount === claim.amount && other.date);
+    return repaid ? { ...claim, until: repaid.date } : claim;
+  });
+}
+
 export function scoreClaims({ expect, entities, claims, selfId }) {
   const ids = resolver(entities, selfId);
-  const stored = claims.map(canonical);
+  const stored = settleDebts(claims.map(canonical));
   const used = new Set();
   const byDomain = Object.fromEntries(DOMAINS.map((domain) => [domain, { tp: 0, fn: 0, fp: 0 }]));
   const missed = [];

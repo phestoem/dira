@@ -41,6 +41,13 @@ export function shapeProblem(item) {
   return null;
 }
 
+const INHERITED = ["value", "label", "amount", "currency", "contextId", "date", "datePrecision", "until", "untilPrecision"];
+const sameTime = (a, b) => Boolean(a && b) && new Date(a).getTime() === new Date(b).getTime();
+// How surely an older claim is the one a correction is about.
+function fitOf(old, row) {
+  return (sameTime(old.date, row.date) ? 2 : 0) + (old.label && row.label && old.label.toLowerCase() === row.label.toLowerCase() ? 1 : 0);
+}
+
 // items: [{ subject, predicate, object?, value?, label?, amount?, currency?, context?, date?, until?, evidence?,
 // corrects? }] where subject/object/context are { name, type } (or "me"). meta: { eventId, source, sourceRef,
 // extractor, model }.
@@ -80,12 +87,18 @@ export async function writeClaims(userId, items, meta = {}) {
     if (row.subjectId && row.subjectId === row.objectId) { skipped.push({ item, reason: "self-loop" }); continue; }
     if (seen.has(key(row))) { skipped.push({ item, reason: "duplicate" }); continue; }
     if (item.corrects || SINGLE_VALUED.has(row.predicate)) {
-      // The claims this one corrects: same subject and predicate (and same object, when the object is an entity).
-      const replaced = existing.filter((old) => old.subjectId === row.subjectId && old.predicate === row.predicate && old.status !== "superseded" && (PREDICATES[row.predicate].object !== "entity" || old.objectId === row.objectId) && (item.corrects || old.value !== row.value));
+      // Candidates: same subject and predicate (and same object, when the object is an entity).
+      const candidates = existing.filter((old) => old.subjectId === row.subjectId && old.predicate === row.predicate && old.status !== "superseded" && (PREDICATES[row.predicate].object !== "entity" || old.objectId === row.objectId) && (item.corrects || old.value !== row.value));
+      // A one-value predicate replaces every older value; a correction replaces the one claim it is about (same date or
+      // label when given, else the latest), so correcting one payment leaves the other payments alone.
+      const replaced = item.corrects ? [...candidates].sort((a, b) => fitOf(b, row) - fitOf(a, row) || b.createdAt - a.createdAt).slice(0, 1) : candidates;
       if (replaced.length) {
         await prisma.claim.updateMany({ where: { id: { in: replaced.map((old) => old.id) } }, data: { status: "superseded" } });
         replaced.forEach((old) => { old.status = "superseded"; });
-        row.supersedesId = replaced.at(-1).id;
+        const old = replaced.at(-1);
+        row.supersedesId = old.id;
+        // A correction keeps what it did not restate (the date, role, what for) from the claim it corrects.
+        if (item.corrects) for (const field of INHERITED) if (row[field] == null && old[field] != null) row[field] = old[field];
         superseded += replaced.length;
       }
     }
