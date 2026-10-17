@@ -27,7 +27,7 @@ const DELETE_ORDER = ["claim", "relationship", "lifeEvent", "inputQueue", "diary
 // Every question turn's server measurements, summarised once per run.
 const answerMetrics = [];
 // Other families as JSON: --set synthetic, or --set holdout (test/holdout/, run with --score-only and never tuned for).
-const SETS = { synthetic: new URL("./sets/synthetic.json", import.meta.url), holdout: new URL("../../test/holdout/holdout.json", import.meta.url), holdout2: new URL("../../test/holdout/holdout2.json", import.meta.url), holdout3: new URL("../../test/holdout/holdout3.json", import.meta.url), life: new URL("./sets/life.json", import.meta.url), holdout4: new URL("../../test/holdout/holdout4.json", import.meta.url) };
+const SETS = { synthetic: new URL("./sets/synthetic.json", import.meta.url), holdout: new URL("../../test/holdout/holdout.json", import.meta.url), holdout2: new URL("../../test/holdout/holdout2.json", import.meta.url), holdout3: new URL("../../test/holdout/holdout3.json", import.meta.url), life: new URL("./sets/life.json", import.meta.url), holdout4: new URL("../../test/holdout/holdout4.json", import.meta.url), holdout5: new URL("../../test/holdout/holdout5.json", import.meta.url), dev2: new URL("./sets/dev2.json", import.meta.url), dev3: new URL("./sets/dev3.json", import.meta.url) };
 const NUMBER_WORDS = ["zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine", "ten"];
 
 const args = parseArgs(process.argv.slice(2));

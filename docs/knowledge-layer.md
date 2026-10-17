@@ -163,6 +163,34 @@ domain column is the scoring bucket.
 Nothing stated is dropped for lack of a predicate: it becomes
 `related_to`.
 
+## Conventions (shared by the extractor and every expectation writer)
+
+Added 2026-10-17 after hold-out 4 showed two writers recording the same
+fact in different shapes. One fact, one shape:
+- Names are short, the way the user says them ("Riverton lot", "garage
+  build", "Corolla"). Codes never go into names: plot/lot/block numbers,
+  plates, registrations, title and policy numbers are `identifier` claims.
+- Kin words with a core predicate use it, also between other people:
+  mother/father/son/daughter → parent_of, brother/sister → sibling_of,
+  wife/husband/partner → spouse_of. `relative_of` (label = the word) only
+  for kin without a core predicate; its label carries the direction.
+- A birth is a `born` claim on the child. A move is `lives_in` (old place
+  with until, new place with date).
+- The owner is always the subject of `owns`; co-owners get one claim each.
+  A purchase is `bought` (seller in context); ownership follows from it.
+- Paid work on a project or event (builder, architect, caterer,
+  electrician) is `contractor_for`; `works_on` is unpaid participation.
+  A person's employer is `works_at` (also a boss's or colleague's).
+- Money facts carry `amount` + `currency`; `label` says what kind (budget,
+  quote, fee, rent, per month). `value` is for non-money values only.
+  A plan that names money carries the amount too.
+- Milestones: `label` = what happened, `date` = when.
+- A document's coming date is `expires_on` (or `renews_on`); an event's
+  date is `happened` (past) or `scheduled` (future).
+- A correction repeats the whole claim it corrects with the changed part,
+  and the old claim is marked superseded.
+- `context` (what a payment or decision was for) is useful but optional.
+
 ## Derived in code, never extracted
 
 - child_of, grandparents, grandchildren, aunts/uncles, nieces/nephews,
@@ -213,7 +241,11 @@ Expected-claims file (`{ set, claims: [...] }`), one per stated fact:
   superseded. Equivalences: plans / intends / decided are one family; an
   expected owns is met by a bought (same date if given) and an owns with
   until by a sold on that date, sharing that claim with the bought/sold
-  expectation; a plan's expected date may appear in its stored words; a
-  stored claim without context is not wrong when the expected one has a
-  context (a different context is).
+  expectation; contractor_for / works_on, expires_on / renews_on and
+  happened / scheduled are families, and a works_on may share the
+  contractor_for claim; relative_of and related_to match either way; a
+  value beside an amount is description only, and a value may match the
+  stored label; a plan's expected date may appear in its stored words;
+  context is not scored. Names may also match when ≥ 70% of three or more
+  expected words are in the entity name.
 - Claim domains: people, work, money, projects, assets, time, plans.

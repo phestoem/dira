@@ -8,7 +8,7 @@ import { extractModel } from "./settings.js";
 import { validateClaims } from "./validate.js";
 import { ENTITY_TYPES, PREDICATES } from "./vocabulary.js";
 
-export const EXTRACTOR_VERSION = "claims-v5";
+export const EXTRACTOR_VERSION = "claims-v6";
 
 // What each predicate means and its direction, for the prompt. Kept beside the vocabulary's domain table.
 const MEANING = {
@@ -67,6 +67,8 @@ const MEANING = {
 // Predicates the model may use in their natural direction, turned into the stored one: "Shop Z has_client Hotel X"
 // is stored as "Hotel X client_of Shop Z" (models reliably reverse client_of when asked for it directly).
 const EXTRACTION_ALIASES = { has_client: "client_of" };
+// What the model may write: the vocabulary with each aliased predicate replaced by its natural-direction alias.
+const MODEL_PREDICATES = [...Object.keys(PREDICATES).filter((name) => !Object.values(EXTRACTION_ALIASES).includes(name)), ...Object.keys(EXTRACTION_ALIASES)];
 // A mention's place becomes its own located_in claim (once per thing and place), with the same evidence.
 export function withPlaces(claims) {
   const out = [];
@@ -115,7 +117,7 @@ export const CLAIMS_SCHEMA = {
         required: ["subject", "predicate", "object", "value", "label", "amount", "currency", "context", "date", "until", "evidence", "corrects"],
         properties: {
           subject: { ...mention, type: "object" },
-          predicate: { type: "string", enum: [...Object.keys(PREDICATES), ...Object.keys(EXTRACTION_ALIASES)] },
+          predicate: { type: "string", enum: MODEL_PREDICATES },
           object: mention,
           value: nullable("string"),
           label: nullable("string"),
@@ -141,20 +143,29 @@ Claim fields:
 - label, amount (a number in major units, no separators), currency (ISO 4217 code), date, until: when stated, else null.
 - Dates are ISO and never more precise than the text: "in 2019" → "2019", "May 2019" → "2019-05", "3 May 2019" → "2019-05-03". Resolve relative dates against today's date at the precision the words carry: "yesterday" → a day, "last week" / "this September" / "next month" → a month, "next year" → a year.
 - evidence: the shortest exact quote from the text that states the fact.
-- corrects: true when the text corrects an earlier statement ("actually", "correction", "I meant"); the claim uses the same subject, predicate and object as the claim it corrects and carries the corrected value.
+- corrects: true when the text corrects an earlier statement ("actually", "correction", "I meant"); the claim repeats the whole claim it corrects (same subject, predicate, object, and every field the records or text give, such as start date and role) with the corrected part changed.
 - date is when the fact happened or starts, only if the text gives it. Never use today's date unless the text says "today"; a target or deadline inside a plan belongs in the plan's value or date only when stated.
 
 Predicates:
-${[...Object.keys(PREDICATES), ...Object.keys(EXTRACTION_ALIASES)].map((name) => `- ${name}: ${MEANING[name]}`).join("\n")}
+${MODEL_PREDICATES.map((name) => `- ${name}: ${MEANING[name]}`).join("\n")}
 
 Rules:
 - Only facts the text states. Never add what follows from other facts: no child/grandchild/in-law claims worked out from chains, no sums, no ages, and never compute a date or amount from an age, a duration or other numbers (only relative dates are resolved, see above).
 - Every person the text names with a role gets that role claim, even when the same sentence says more about them.
 - "X's <role> Y" is a claim between Y and X in the role's direction: "Arni's sister Sola" → Sola sibling_of Arni; "Arni's son Bo" → Arni parent_of Bo.
 - Kin and role words in any language count like the English ones.
+- Kin words that have a core predicate always use it, also for other people's relatives: mother/father/son/daughter → parent_of, brother/sister → sibling_of, wife/husband/partner → spouse_of. "Mum's mother Ana" → Ana parent_of Mum; "Kai's daughter Mia" → Kai parent_of Mia. relative_of is only for kin words without a core predicate.
+- A half-sibling "from Dad's second marriage" or "my mother's son" also gives that parent's parent_of claim.
+- A birth is a born claim on the child (value = the date), never a date on a parent claim.
+- Moves: "grew up in X and moved to Y in 2008" → lives_in X until 2008 and lives_in Y date 2008; "Kai just moved to Z" → Kai lives_in Z.
+- Jobs of other people: a boss, colleague or employee at a named organisation works_at it (label = role); "Ana of Oak Builders" → Ana works_at Oak Builders.
+- Anyone paid for work on a project or event (builder, architect, caterer, musician, electrician) is contractor_for it, besides the payment.
+- A plan or intention that names money carries it in amount and currency.
+- Repaid debts: "Kai paid back the 500 I lent him" → Kai owes me (until = when repaid) and me received_from Kai 500.
 - Before naming anything, look in Known records: if it is the same person or thing, or a task or part of a known project, use the known name exactly.
 - Names are short (one to four words), the way the user would say them: "lake house", "garage build", "boat licence".
-- Names: call a thing what the user calls it ("the lake plot", "the garage build"). Numbers and codes (plot numbers, registrations, title or policy numbers) never go into a name; they are identifier claims.
+- Names: call a thing what the user calls it ("the lake plot", "the garage build"). Numbers and codes (plot numbers, lot and block numbers, registrations, plates, title or policy numbers) never go into a name, not even in brackets; they are identifier claims. "Lot 9, block B in Pine Estate, Riverton" → name "Riverton lot", identifier "lot 9, block B", place Riverton (and Pine Estate). "the Corolla (plate ABC-123)" → name "Corolla", identifier "ABC-123".
+- Co-ownership: "Kai and I own it together" → me owns X and Kai owns X (the owner is always the subject).
 - Project state: work going on now → status active; decided or planned but not started → status planned; finished → done. A target finish date ("hope to finish by June") is due_on.
 - A project is one entity for the whole undertaking (a build, a renovation, a launch). Trades, tasks, quotes, payments and milestones attach to that project (contractor_for, costs, paid with context, milestone); never make an entity per task.
 - Documents, policies, licences and certificates are their own entities (type document), e.g. "car insurance policy"; their issuer, number and expiry are claims about the document. "The boat is insured with Z; the policy expires D" → "boat insurance policy" issued_by Z and expires_on D, and nothing about the boat itself.

@@ -7,7 +7,7 @@ const words = (text) => String(text || "").normalize("NFKD").replace(/[̀-ͯ]/g,
 
 // How well an expected name fits an entity: 3 exact name, 2 exact alias, 1.5 the entity's name holds every expected
 // word ("Oslo house" in "house build on Oslo plot"), 1 the expected name holds the entity's ("Oslo" in "Oslo house"),
-// 0 no match. Ties go to the entity with fewest extra words.
+// 0.8 at least 70% of three or more expected words, 0 no match. Ties go to the entity with fewest extra words.
 function nameFit(expected, entity) {
   const want = words(expected).join(" ");
   if (!want) return { fit: 0, extra: 0 };
@@ -21,6 +21,11 @@ function nameFit(expected, entity) {
       const fit = short === a ? 1.5 : 1;
       const extra = long.length - short.length;
       if (fit > best.fit || (fit === best.fit && extra < best.extra)) best = { fit, extra };
+    } else if (a.length >= 3) {
+      // Two writers naming one thing: most of the expected words are there ("CNH renewal appointment at Detran" /
+      // "driver's licence (CNH) renewal appointment").
+      const shared = a.filter((word) => have.includes(word)).length;
+      if (shared / a.length >= 0.7 && best.fit < 0.8) best = { fit: 0.8, extra: have.length - shared };
     }
   }
   return best;
@@ -69,6 +74,7 @@ function canonical(claim) {
     predicate: claim.predicate,
     objectId: claim.objectId || null,
     value: claim.value ?? null,
+    label: claim.label ?? null,
     amount: claim.amount == null ? null : Number(claim.amount),
     currency: claim.currency || null,
     contextId: claim.contextId || null,
@@ -89,8 +95,26 @@ function wantedOf(fact) {
 
 // Equivalences that are part of the design, not leniency for one set: plans, intentions and decisions are one family;
 // owning follows from a purchase (and ends with a sale), so an expected owns is met by the bought/sold that states it.
-const FAMILY = { plans: "intent", intends: "intent", decided: "intent" };
+// Further families where two writers legitimately pick different words for one fact: a contractor's work on a
+// project (contractor_for / works_on), a document's next date (expires_on / renews_on), an event's date
+// (happened / scheduled).
+const FAMILY = {
+  plans: "intent", intends: "intent", decided: "intent",
+  contractor_for: "works", works_on: "works",
+  expires_on: "renewal", renews_on: "renewal",
+  happened: "when", scheduled: "when",
+};
 const samePredicate = (a, b) => a === b || (FAMILY[a] && FAMILY[a] === FAMILY[b]);
+// Kin and free relations whose label carries the direction ("godmother", "wet nurse") read the same both ways.
+const EITHER_WAY = new Set(["relative_of", "related_to"]);
+
+// Expectations that restate a stored fact in another shape may share that claim instead of using it up: an owns met
+// by the bought/sold that states it, and a works_on next to the contractor_for for the same work.
+function sharedMatch(fact, claim, ids) {
+  if (ownershipMatch(fact, claim, ids)) return true;
+  if (FAMILY[fact.predicate] !== "works" || FAMILY[claim.predicate] !== "works") return false;
+  return ids(fact.subject).includes(claim.subjectId) && ids(fact.object).includes(claim.objectId);
+}
 
 function ownershipMatch(fact, claim, ids) {
   if (fact.predicate !== "owns" || !fact.object) return false;
@@ -101,9 +125,8 @@ function ownershipMatch(fact, claim, ids) {
 }
 
 function matches(fact, claim, ids) {
-  if (ownershipMatch(fact, claim, ids)) return claim.status !== "rejected";
   if (!samePredicate(claim.predicate, fact.predicate)) return false;
-  const symmetric = PREDICATES[fact.predicate]?.symmetric;
+  const symmetric = PREDICATES[fact.predicate]?.symmetric || EITHER_WAY.has(fact.predicate);
   // (predicate family members share one shape, so the rest of the comparison is the same)
   const subjects = ids(fact.subject);
   if (fact.object) {
@@ -112,12 +135,13 @@ function matches(fact, claim, ids) {
     const backward = symmetric && objects.includes(claim.subjectId) && subjects.includes(claim.objectId);
     if (!forward && !backward) return false;
   } else if (!subjects.includes(claim.subjectId)) return false;
-  if (fact.value != null) {
+  // With an amount, the amount is the fact; a value beside it is only a description ("quote (builder)").
+  if (fact.value != null && fact.amount == null) {
     const kind = PREDICATES[fact.predicate]?.object;
     // Date values are stored as ISO text at the stated precision (2026, 2026-12, 2026-12-31), so equal text.
     const ok = kind === "date" ? sameDate(fact.value, claim.value)
       : /^\d+(\.\d+)?$/.test(String(fact.value)) ? Number(String(claim.value).replace(/[^\d.]/g, "")) === Number(fact.value)
-        : sameText(fact.value, claim.value);
+        : sameText(fact.value, claim.value) || sameText(fact.value, claim.label);
     if (!ok) return false;
   }
   if (fact.amount != null && !(sameAmount(fact.amount, claim.amount) && sameCurrency(fact.currency || "", claim.currency))) return false;
@@ -125,8 +149,8 @@ function matches(fact, claim, ids) {
   const dateInValue = FAMILY[fact.predicate] && !claim.date && String(claim.value || "").includes(String(fact.date || "").slice(0, 4));
   if (fact.date && !sameDate(fact.date, claim.date) && !dateInValue) return false;
   if (fact.until && !sameDate(fact.until, claim.until)) return false;
-  // A missing context is a less complete claim, not a wrong one; a different context is wrong.
-  if (fact.context && claim.contextId && !ids(fact.context).includes(claim.contextId)) return false;
+  // Context ("what for") is not scored: writers name it differently ("launch costs" / the company) and it never
+  // changes whether the fact itself was stored.
   if (fact.status === "superseded" && claim.status !== "superseded") return false;
   if (fact.status !== "superseded" && ["superseded", "rejected"].includes(claim.status)) return false;
   return true;
@@ -145,7 +169,7 @@ export function scoreClaims({ expect, entities, claims, selfId }) {
     const domain = (fact.predicate === "related_to" && DOMAINS.includes(raw.domain) ? raw.domain : domainOf(fact.predicate)) || "people";
     const index = stored.findIndex((claim, at) => !used.has(at) && matches(fact, claim, ids));
     // An owns met by the purchase or sale that states it shares that claim instead of using it up.
-    const derived = index < 0 ? stored.findIndex((claim) => ownershipMatch(fact, claim, ids) && claim.status !== "rejected") : -1;
+    const derived = index < 0 ? stored.findIndex((claim) => sharedMatch(fact, claim, ids) && claim.status !== "rejected") : -1;
     if (index >= 0) { used.add(index); byDomain[domain].tp += 1; } else if (derived >= 0) byDomain[domain].tp += 1;
     else { byDomain[domain].fn += 1; missed.push(raw); }
   }

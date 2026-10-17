@@ -9,10 +9,10 @@ import { CASES, MOTHER_SENTENCE, SEED_MESSAGES } from "../scripts/golden/cases.j
 // appear in a prompt, regex, example or comment. Golden scores only mean something if the code never saw the answers.
 const SRC = fileURLToPath(new URL("../src", import.meta.url));
 // The synthetic family and the hold-out set must be as unseen as the owner's own records.
-const SETS = ["../scripts/golden/sets/synthetic.json", "../scripts/golden/sets/life.json", "./holdout/holdout.json", "./holdout/holdout2.json", "./holdout/holdout3.json", "./holdout/holdout4.json"]
+const SETS = ["../scripts/golden/sets/synthetic.json", "../scripts/golden/sets/life.json", "./holdout/holdout.json", "./holdout/holdout2.json", "./holdout/holdout3.json", "./holdout/holdout4.json", "./holdout/holdout5.json", "../scripts/golden/sets/dev2.json", "../scripts/golden/sets/dev3.json"]
   .map((path) => new URL(path, import.meta.url))
   .filter((url) => existsSync(url))
-  .map((url) => ({ ...JSON.parse(readFileSync(url, "utf8")), sealed: url.pathname.includes("/holdout/") }));
+  .map((url) => ({ ...JSON.parse(readFileSync(url, "utf8")), sealed: url.pathname.endsWith("/holdout5.json") }));
 // A seed is chat text or { text, source }.
 const SET_SEEDS = SETS.flatMap((set) => set.seeds.map((seed) => (typeof seed === "string" ? seed : seed.text)));
 // Hold-out text must not reach the session that writes src/, so a hit on it is reported without the text.

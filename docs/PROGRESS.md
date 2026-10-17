@@ -372,7 +372,10 @@ of this file (`7240988`).
    versions), then the gate on hold-out 4.
 
 ## Open questions for Phesto
-- Phase 2 gate failed (62% vs 85%). Process says stop. Options:
+- DECIDED 2026-10-17 (Phesto): option 1. Hold-out 4 is now a diagnostic
+  set (may be read); hold-out 5 + 2 dev sets by fresh subagents after the
+  diagnosis and any design-doc clarification.
+- (was) Phase 2 gate failed (62% vs 85%). Process says stop. Options:
   (1) hold-out 4 is now spent as a gate: use it as a diagnostic set
   (read its misses to separate convention mismatches from real
   extraction failures), have a fresh subagent write hold-out 5 for the

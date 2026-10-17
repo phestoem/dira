@@ -40,6 +40,7 @@
     {"seed": 9, "subject": "Faith Achieng", "predicate": "manages", "object": "me"},
     {"seed": 9, "subject": "Faith Achieng", "predicate": "works_at", "object": "Pwani Logistics Ltd", "label": "CFO"},
     {"seed": 9, "subject": "Brian Kiptoo", "predicate": "colleague_of", "object": "me"},
+    {"seed": 9, "subject": "Brian Kiptoo", "predicate": "works_at", "object": "Pwani Logistics Ltd"},
     {"seed": 10, "subject": "me", "predicate": "lives_in", "object": "Nairobi", "until": "2016-04"},
     {"seed": 10, "subject": "me", "predicate": "lives_in", "object": "Mombasa", "date": "2016-04"},
     {"seed": 10, "subject": "me", "predicate": "owns", "object": "Kilimani flat", "until": "2023-09"},

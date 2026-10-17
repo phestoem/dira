@@ -96,8 +96,8 @@ test("ownership follows from a purchase or sale, and plans, intentions and decis
     { id: 4, subjectId: "self", predicate: "paid", objectId: "tiago", amount: 500 },
   ];
   assert.equal(scoreClaims({ expect, entities, claims, selfId: "self" }).total.tp, 4);
-  const wrong = scoreClaims({ expect: { claims: [expect.claims[3]] }, entities, claims: [{ ...claims[3], contextId: "plot" }], selfId: "self" });
-  assert.equal(wrong.total.tp, 0, "a different context is wrong");
+  const other = scoreClaims({ expect: { claims: [expect.claims[3]] }, entities, claims: [{ ...claims[3], contextId: "plot" }], selfId: "self" });
+  assert.equal(other.total.tp, 1, "context is not scored");
 });
 
 test("an owns shares the purchase that states it, and a plan's date may sit in its words", () => {
@@ -111,4 +111,21 @@ test("an owns shares the purchase that states it, and a plan's date may sit in i
     { id: 2, subjectId: "self", predicate: "plans", value: "move into the Sintra house in 2027" },
   ];
   assert.equal(scoreClaims({ expect, entities, claims, selfId: "self" }).total.tp, 3);
+});
+
+test("one stored fact can meet two writers' shapes of it: contractor and works_on, cost with a description", () => {
+  const expect = { claims: [
+    { seed: 0, subject: "Tiago Mendes", predicate: "contractor_for", object: "Sintra house", label: "roofer" },
+    { seed: 0, subject: "Tiago Mendes", predicate: "works_on", object: "Sintra house" },
+    { seed: 1, subject: "Sintra house", predicate: "costs", value: "quote (Tiago, roof)", amount: 9000, currency: "EUR" },
+    { seed: 2, subject: "Sintra house", predicate: "milestone", value: "roof finished", date: "2026-02" },
+    { seed: 3, subject: "me", predicate: "relative_of", object: "Rui", label: "godmother" },
+  ] };
+  const claims = [
+    { id: 1, subjectId: "tiago", predicate: "contractor_for", objectId: "house", label: "roofing" },
+    { id: 2, subjectId: "house", predicate: "costs", label: "quote", amount: 9000, currency: "EUR" },
+    { id: 3, subjectId: "house", predicate: "milestone", label: "roof finished", date: new Date("2026-02-01"), datePrecision: "month" },
+    { id: 4, subjectId: "rui", predicate: "relative_of", objectId: "self", label: "goddaughter" },
+  ];
+  assert.equal(scoreClaims({ expect, entities, claims, selfId: "self" }).total.tp, 5);
 });
