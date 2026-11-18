@@ -193,8 +193,9 @@ model Vision {
 }
 
 /// The personal, sensitive inner-life layer.
-/// Sealed from operations. Altimetrix may read a row only when
-/// sharedWithAltimetrix is true. rawContent is stored encrypted.
+/// Sealed by default. An entry goes to Altimetrix only when the user turns on
+/// sharedWithAltimetrix for it (and DIRA_BRIDGE + DIRA_BRIDGE_JOURNAL are on);
+/// sentToAltimetrixAt is set once Altimetrix has it.
 model DiaryEntry {
   id                   String   @id @default(uuid())
   userId               String
@@ -207,6 +208,7 @@ model DiaryEntry {
   emotionalTone        String?
   isPrivate            Boolean  @default(true)
   sharedWithAltimetrix Boolean  @default(false)
+  sentToAltimetrixAt   DateTime?
   occurredAt           DateTime  @default(now())
   graphExtractedAt     DateTime?
   createdAt            DateTime  @default(now())

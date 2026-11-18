@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { getAltimetrixNudge, getVisions, listJournal, saveJournal, type JournalEntry } from "@/lib/api";
+import { getAltimetrixNudge, getVisions, listJournal, saveJournal, setJournalSharing, type JournalEntry } from "@/lib/api";
 
 export default function JournalPage() {
   const composer = useRef<HTMLTextAreaElement>(null);
@@ -36,6 +36,16 @@ export default function JournalPage() {
       cancelled = true;
     };
   }, []);
+
+  async function toggleShare(entry: JournalEntry) {
+    setError(null);
+    try {
+      const updated = await setJournalSharing(entry.id, !entry.sharedWithAltimetrix);
+      setEntries((current) => current.map((item) => (item.id === updated.id ? updated : item)));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not change sharing.");
+    }
+  }
 
   async function save() {
     const text = content.trim();
@@ -136,7 +146,26 @@ export default function JournalPage() {
               <p className="whitespace-pre-wrap text-[15px] leading-relaxed text-[#F5F3EE]/90">
                 {entry.content}
               </p>
-              <p className="mt-3 text-xs text-[#6B6963]">{formatWhen(entry.occurredAt)}</p>
+              <div className="mt-3 flex items-center justify-between gap-4 text-xs text-[#6B6963]">
+                <span>{formatWhen(entry.occurredAt)}</span>
+                <label className="flex cursor-pointer items-center gap-2">
+                  <input
+                    type="checkbox"
+                    role="switch"
+                    checked={entry.sharedWithAltimetrix}
+                    onChange={() => void toggleShare(entry)}
+                    className="accent-[#7F77DD]"
+                  />
+                  <span>Share with Altimetrix</span>
+                </label>
+              </div>
+              {entry.sentToAltimetrixAt ? (
+                <p className="mt-1 text-right text-[11px] text-[#6B6963]">
+                  {entry.sharedWithAltimetrix
+                    ? "Sent to Altimetrix"
+                    : "Sent earlier; Altimetrix keeps that copy"}
+                </p>
+              ) : null}
             </li>
           ))}
         </ul>

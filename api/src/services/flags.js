@@ -3,6 +3,7 @@
 
 const DEFAULTS = {
   DIRA_BRIDGE: true, // Altimetrix bridge: events out, read-only context in
+  DIRA_BRIDGE_JOURNAL: true, // journal entries the user marked "Share with Altimetrix" (each entry defaults off)
   DIRA_AUTO_EXTRACT: false, // automatic graph extraction after saves and conversations, for every user
   DIRA_GRAPH_REBUILD: false, // /graph/rebuild and the hourly catch-up
   DIRA_FACT_CHIPS: false, // fact chips under answers (home) and on the advisor page

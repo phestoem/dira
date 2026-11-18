@@ -87,6 +87,44 @@ export async function sendLifeEvent(event, userId, diraUser) {
   }
 }
 
+// Journal entries are sealed: one leaves DIRA only when the user turned on "Share with Altimetrix" for it, and only
+// while DIRA_BRIDGE and DIRA_BRIDGE_JOURNAL are on. Names of unconfirmed people are replaced by "someone". Altimetrix
+// keeps what it received (it has no delete), so turning sharing off later only stops sends that have not happened.
+export async function sendJournalEntry(entry, diraUser) {
+  try {
+    if (!entry?.sharedWithAltimetrix || entry.sentToAltimetrixAt) return { sent: false };
+    if (!flagOn("DIRA_BRIDGE_JOURNAL") || !bridgeConfig() || !diraUser?.altimetrixUserId) return { sent: false };
+    const known = await knownPeople(entry.userId);
+    const { withheld } = splitPeople(Array.isArray(entry.people) ? entry.people : [], known);
+    const hide = [...withheld, ...known.unconfirmed];
+    const text = maskNames(String(entry.rawContent || "").trim(), hide);
+    if (!text) return { sent: false };
+    const firstLine = text.split(/\r?\n/).find((line) => line.trim()) || text;
+    const result = await postLifeEvent(diraUser, {
+      eventType: "journal",
+      title: firstLine.trim().slice(0, 80),
+      context: text.slice(0, 2000),
+      space: "personal",
+      people: [],
+      financials: null,
+      occurredAt: entry.occurredAt || entry.createdAt,
+      reflectionHint: "A journal entry the user chose to share.",
+      sourceSystem: "dira",
+      sourceEventId: `journal:${entry.id}`,
+    });
+    if (!result.sent) return result;
+    // Only mark it if sharing is still on; the user may have turned it off while the send was in flight.
+    await prisma.diaryEntry.updateMany({
+      where: { id: entry.id, userId: entry.userId, sharedWithAltimetrix: true },
+      data: { sentToAltimetrixAt: new Date() },
+    });
+    return result;
+  } catch (err) {
+    console.error("[bridge] journal send failed:", err.message);
+    return { sent: false };
+  }
+}
+
 async function postLifeEvent(diraUser, payload, markEventId) {
   try {
     const config = bridgeConfig();
@@ -303,6 +341,17 @@ export async function syncPendingEvents(userId, diraUser) {
     if (!isSignificantEvent(event)) continue;
     const result = await sendLifeEvent(event, userId, diraUser);
     if (result.sent) sent += 1;
+  }
+  if (flagOn("DIRA_BRIDGE_JOURNAL")) {
+    const entries = await prisma.diaryEntry.findMany({
+      where: { userId, sharedWithAltimetrix: true, sentToAltimetrixAt: null },
+      orderBy: { createdAt: "asc" },
+      take: 100,
+    });
+    for (const entry of entries) {
+      const result = await sendJournalEntry(entry, diraUser);
+      if (result.sent) sent += 1;
+    }
   }
   return { sent };
 }

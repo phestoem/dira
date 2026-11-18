@@ -751,11 +751,14 @@ export async function detectVisionInJournalEntry(entry, userId) {
       console.error("[graph] vision anchor failed:", err.message);
     }
   });
-  setImmediate(() => {
-    enrichVision(vision, userId, result.location).catch((err) => {
-      console.error("[bridge] vision enrichment failed:", err.message);
+  // A vision found in a sealed journal entry asks Altimetrix nothing: its tags and place come from the entry.
+  if (entry.sharedWithAltimetrix) {
+    setImmediate(() => {
+      enrichVision(vision, userId, result.location).catch((err) => {
+        console.error("[bridge] vision enrichment failed:", err.message);
+      });
     });
-  });
+  }
   return result;
 }
 

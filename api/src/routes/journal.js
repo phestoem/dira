@@ -1,6 +1,19 @@
 import { prisma } from "../prisma.js";
 import { detectVisionInJournalEntry } from "../services/contextEngine.js";
 import { scheduleExtraction } from "../services/graph/relationshipExtractor.js";
+import { sendJournalEntry } from "../services/altimetrixBridge.js";
+
+// Entries are sealed by default; "Share with Altimetrix" is per entry and starts off.
+function view(entry) {
+  return {
+    id: entry.id,
+    content: entry.rawContent,
+    occurredAt: entry.occurredAt,
+    createdAt: entry.createdAt,
+    sharedWithAltimetrix: entry.sharedWithAltimetrix,
+    sentToAltimetrixAt: entry.sentToAltimetrixAt,
+  };
+}
 
 export default async function journalRoutes(fastify) {
   fastify.get("/journal", { preHandler: [fastify.authenticate] }, async (request) => {
@@ -9,14 +22,7 @@ export default async function journalRoutes(fastify) {
       orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
       take: 100,
     });
-    return {
-      entries: entries.map((entry) => ({
-        id: entry.id,
-        content: entry.rawContent,
-        occurredAt: entry.occurredAt,
-        createdAt: entry.createdAt,
-      })),
-    };
+    return { entries: entries.map(view) };
   });
 
   fastify.post("/journal", { preHandler: [fastify.authenticate] }, async (request, reply) => {
@@ -54,11 +60,25 @@ export default async function journalRoutes(fastify) {
     });
     scheduleExtraction(userId, content, { source: "journal", forceStatus: "suggested", diaryEntryId: entry.id });
 
-    return {
-      id: entry.id,
-      content: entry.rawContent,
-      occurredAt: entry.occurredAt,
-      createdAt: entry.createdAt,
-    };
+    return view(entry);
+  });
+
+  fastify.patch("/journal/:id", { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    const share = request.body?.sharedWithAltimetrix;
+    if (typeof share !== "boolean") {
+      return reply.code(400).send({ error: "sharedWithAltimetrix must be true or false" });
+    }
+    const userId = request.userId;
+    const found = await prisma.diaryEntry.findFirst({ where: { id: request.params.id, userId } });
+    if (!found) return reply.code(404).send({ error: "Entry not found" });
+    const entry = await prisma.diaryEntry.update({ where: { id: found.id }, data: { sharedWithAltimetrix: share } });
+    if (share && !entry.sentToAltimetrixAt) {
+      // After the answer, like every bridge send; a failure stays unsent for the next sync.
+      setImmediate(async () => {
+        const user = await prisma.user.findUnique({ where: { id: userId } }).catch(() => null);
+        if (user) await sendJournalEntry(entry, user);
+      });
+    }
+    return view(entry);
   });
 }

@@ -7,7 +7,7 @@ import { flagOn, flagStatus } from "../src/services/flags.js";
 // Paused features (docs/PERSONAL_SCOPE.md section 4) and the simplified Altimetrix bridge. No real model or
 // Altimetrix is called: a local server plays both and counts the calls.
 
-const FLAGS = ["DIRA_BRIDGE", "DIRA_AUTO_EXTRACT", "DIRA_GRAPH_REBUILD", "DIRA_FACT_CHIPS"];
+const FLAGS = ["DIRA_BRIDGE", "DIRA_BRIDGE_JOURNAL", "DIRA_AUTO_EXTRACT", "DIRA_GRAPH_REBUILD", "DIRA_FACT_CHIPS"];
 
 function withEnv(t, values) {
   const saved = Object.fromEntries(Object.keys(values).map((name) => [name, process.env[name]]));
@@ -21,7 +21,7 @@ function withEnv(t, values) {
 }
 
 test("flags: the bridge defaults on, the paused features default off, and on/off words are read", () => {
-  assert.deepEqual(flagStatus({}), { DIRA_BRIDGE: "on", DIRA_AUTO_EXTRACT: "off", DIRA_GRAPH_REBUILD: "off", DIRA_FACT_CHIPS: "off" });
+  assert.deepEqual(flagStatus({}), { DIRA_BRIDGE: "on", DIRA_BRIDGE_JOURNAL: "on", DIRA_AUTO_EXTRACT: "off", DIRA_GRAPH_REBUILD: "off", DIRA_FACT_CHIPS: "off" });
   assert.equal(flagOn("DIRA_BRIDGE", { DIRA_BRIDGE: "off" }), false);
   assert.equal(flagOn("DIRA_BRIDGE", { DIRA_BRIDGE: "maybe" }), true, "an unknown value keeps the default");
   for (const word of ["on", "TRUE", "1", "yes"]) assert.equal(flagOn("DIRA_FACT_CHIPS", { DIRA_FACT_CHIPS: word }), true);

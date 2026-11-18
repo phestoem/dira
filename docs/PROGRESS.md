@@ -1,6 +1,6 @@
 # personal — progress
 
-Last updated: 2026-11-18
+Last updated: 2026-11-18 (evening)
 
 ## Current goal
 DIRA for Phesto only: stability and low cost (docs/PERSONAL_SCOPE.md).
@@ -9,6 +9,30 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-18: journal sealed by default, per-entry "Share with Altimetrix"
+  (Phesto: default off; only toggled entries go through the bridge;
+  confirmed-people rule applies).
+  - PATCH /journal/:id { sharedWithAltimetrix }; GET/POST return
+    sharedWithAltimetrix + sentToAltimetrixAt. Journal page: a switch under
+    each entry, "Sent to Altimetrix" once sent.
+  - Migration 20261118210000_journal_share_sent adds
+    diary_entries.sentToAltimetrixAt (applied to dira_dev; prod needs
+    `prisma migrate deploy` on deploy).
+  - sendJournalEntry: eventType "journal", sourceEventId journal:<id>
+    (Altimetrix dedupes on it), title = first line (80), context = text
+    (2000), unconfirmed people → "someone", people []. Sent after the
+    answer with the bridge retries; a failure stays unsent and
+    syncPendingEvents sends it later.
+  - New flag DIRA_BRIDGE_JOURNAL (default on) is the global switch; off
+    keeps the toggles but sends nothing.
+  - Leak closed: a vision detected in a sealed journal entry used to ask
+    Altimetrix for context with its tags and place (enrichVision). It now
+    does that only for a shared entry, i.e. never at creation.
+  - test/journal-share.test.js (stub Altimetrix + model), 7 checks; the
+    vision check fails on the old code. npm test 38/38; golden fixture
+    12/12 + reset gate (logs/golden-journal-fixture.log); live readonly
+    11/12 twice, `properties` (known flake, answer path untouched)
+    (logs/golden-journal-live*.log); zero 5xx.
 - 2026-11-18: api/test fixtures synthetic (Phesto: golden cases stay real).
   - contamination test now scans api/src, api/test and web/; golden
     (api/scripts/golden) is exempt. The identifier list moved to
@@ -121,13 +145,19 @@ plan. One item per commit, family golden test before each commit.
   (dira-b4), `f341992` PERSONAL_SCOPE.md + decisions.
 
 ## In progress
+- Nothing running. Web deps installed in dev (web/node_modules, for tsc).
 - Backup proposal written (ops/backup/), waiting for Phesto to apply it on
   the host: scripts to /opt/qusaz/shared/backup/dira/, /etc/qusaz/dira-backup.env,
   NUC ssh key, R2 bucket + token, restic install + init, two cron lines
   (02:30 daily, 04:00 on the 1st). Steps in ops/backup/README.md.
 
 ## Latest scores
-2026-11-18, `personal` at 570df39 (= main = prod code), dev API on 4801:
+2026-11-18 evening, `personal` + journal sharing, dev API on 4801:
+- npm test: 38/38.
+- Family golden fixture: 12/12 + reset gate (logs/golden-journal-fixture.log).
+- Live readonly on dira_dev: 11/12 twice, `properties` (known flake).
+
+Baseline: 2026-11-18, `personal` at 570df39 (= main = prod code), dev API on 4801:
 - npm test: 17/17.
 - Family golden fixture: 12/12 + reset gate (logs/golden-personal-baseline.log).
 - Live readonly on dira_dev: 11/12, `properties` fails
@@ -144,7 +174,16 @@ missing after the introduction), the same without its last change.
 
 ## Next steps
 Phesto (2026-11-18): before token logging, the backup + restore test and
-the dev/prod key split must be done. Checked 2026-11-18 (read-only):
+the dev/prod key split must be done. Re-checked 2026-11-18 evening after
+Phesto said both were applied: still not on this host, token logging held.
+- Backup: no /opt/qusaz/shared/backup/dira/, no /etc/qusaz/, no restic, no
+  dira cron line. The only backup cron is the old
+  /opt/qusaz/shared/postgres/backup.sh (02:00), and its dumps in
+  /opt/qusaz/backups/ contain no dira database. No restore-test result.
+- Keys: dira-dev/api/.env and dira/api/.env (prod EnvironmentFile) still
+  share the OpenAI and the Groq fingerprints; both files unchanged since
+  Oct 15/16; dira-api running since Nov 14.
+Checked 2026-11-18 (read-only, earlier):
 - Backup: NOT installed. No /opt/qusaz/shared/backup/dira/, no
   /etc/qusaz/dira-backup.env, no cron line, no restic. Needs Phesto
   (host, NUC ssh key, R2 bucket + token): ops/backup/README.md.
@@ -152,20 +191,21 @@ the dev/prod key split must be done. Checked 2026-11-18 (read-only):
   so do the Groq keys. Needs Phesto to create the keys (dev $25/month hard
   limit; prod $20/month, alerts at 50%/80%); then I put the dev key in dev
   .env only.
-1. Journal → Altimetrix behind DIRA_BRIDGE_JOURNAL (default on), never the
-   sealed diary, confirmed-people rule. Waiting on the open question
-   below.
-2. Once backup + keys are done: the rest of the plan, in its order (docs/PERSONAL_SCOPE.md section 7):
+1. Once backup + keys are done: the rest of the plan, in its order (docs/PERSONAL_SCOPE.md section 7):
    token/latency logging, cherry-pick beb392c, code answers
    for people questions + date precision, My people page, open-question
    path, deploy script.
 
 ## Open questions for Phesto
-- Journal (answer: yes, DIRA_BRIDGE_JOURNAL, never the sealed diary): the
-  code has one journal table, DiaryEntry, and the schema calls it sealed
-  ("Altimetrix may read a row only when sharedWithAltimetrix is true").
-  Every entry is saved isPrivate=true, sharedWithAltimetrix=false, and no
-  screen changes that. So there is no "general journal" vs "sealed diary"
-  split today. Which entries count as general?
+- Backup + keys: were they applied on another host, or to other paths?
+  Nothing on this host (see Next steps).
+- Journal sharing masks only names that are person records and not
+  confirmed. A name with no record at all goes out as written. Mask all
+  capitalised names that are not confirmed people too (safer, mangles
+  places)?
+- Altimetrix has no delete: turning sharing off after a send stops
+  nothing already sent. Want a delete endpoint on the Altimetrix side?
+- The schema said diary rawContent "is stored encrypted"; it is plain
+  text (decrypt() is a no-op). Comment corrected; encrypt at rest?
 - When deploying: set DIGEST_FROM in prod .env (the digest sender was your
   own address in code; the default is now dira@qusaz.com).

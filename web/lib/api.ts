@@ -331,6 +331,8 @@ export type JournalEntry = {
   content: string;
   occurredAt: string;
   createdAt: string;
+  sharedWithAltimetrix: boolean;
+  sentToAltimetrixAt: string | null;
 };
 
 export async function listJournal(): Promise<{ entries: JournalEntry[] }> {
@@ -919,6 +921,15 @@ export async function patchGraphEntity(id: string, body: Record<string, unknown>
   const res = await apiFetch(`/graph/entities/${id}`, { method: "PATCH", body: JSON.stringify(body) });
   if (!res.ok) throw new Error(await parseError(res));
   return res.json();
+}
+
+export async function setJournalSharing(id: string, sharedWithAltimetrix: boolean): Promise<JournalEntry> {
+  const res = await apiFetch(`/journal/${encodeURIComponent(id)}`, {
+    method: "PATCH",
+    body: JSON.stringify({ sharedWithAltimetrix }),
+  });
+  if (!res.ok) throw new Error(await parseError(res));
+  return res.json() as Promise<JournalEntry>;
 }
 
 export async function saveJournal(content: string, occurredAt?: string): Promise<JournalEntry> {
