@@ -181,6 +181,12 @@ For comparison, `fix/people-answers` today: fixture 10/13 (children
 missing after the introduction), the same without its last change.
 
 ## Decisions made and why
+- 2026-11-18 (Phesto): off-site backup parked: no NUC mirror, no R2 for
+  now. The local nightly backup + monthly SOURCE=local restore test stay.
+  The unused key ~/.ssh/dira_backup_ed25519 is kept. To resume: NUC host +
+  backup user with that public key; R2 bucket dira-backups + token in the
+  env file; then restic (static binary), restic init, an R2 restore test,
+  cron SOURCE=r2.
 - 2026-11-18 (Phesto): "for the backup and restore test, you may read the
   dira database and create/drop dira_restore_test". Not yet in CLAUDE.md
   (my edit was blocked by the permission check; Phesto to add it).
@@ -195,7 +201,7 @@ Phesto (2026-11-18): before token logging, the backup + restore test and
 the dev/prod key split must be done. Re-checked 2026-11-18 evening after
 Phesto said both were applied: still not on this host, token logging held.
 - Backup (later the same evening: installed, local only, see Done; NUC +
-  R2 still missing). At the check: no /opt/qusaz/shared/backup/dira/, no
+  R2 parked by Phesto). At the check: no /opt/qusaz/shared/backup/dira/, no
   /etc/qusaz/, no restic, no dira cron line. The only backup cron is the old
   /opt/qusaz/shared/postgres/backup.sh (02:00), and its dumps in
   /opt/qusaz/backups/ contain no dira database. No restore-test result.
@@ -216,10 +222,6 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- Backup off-site: NUC hostname + backup user with the public key from
-  ~/.ssh/dira_backup_ed25519.pub; R2 bucket dira-backups + token (put the
-  values in the env file yourself); then I install restic (static binary,
-  no sudo), restic init, an R2 restore test, and cron SOURCE=r2.
 - Keys: still not split (same fingerprints dev/prod). Token logging waits.
 - CLAUDE.md: add the backup exception for the dira database.
 - Journal sharing masks only names that are person records and not
