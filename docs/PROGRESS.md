@@ -9,7 +9,7 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
-- 2026-11-18: token + latency logging (Phesto: start before the key split).
+- 2026-11-18 `660973b`: token + latency logging (Phesto: start before the key split).
   - api/src/metrics.js, measured at fetch (the OpenAI SDK v7 reads
     globalThis.fetch per client; Groq/file/extractor calls use fetch), so
     no call site changed. A model call = default provider host or under
