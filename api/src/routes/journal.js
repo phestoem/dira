@@ -1,4 +1,5 @@
 import { prisma } from "../prisma.js";
+import { linkConfirmedPeople } from "../services/peopleLinks.js";
 import { detectVisionInJournalEntry } from "../services/contextEngine.js";
 import { scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { sendJournalEntry } from "../services/altimetrixBridge.js";
@@ -45,6 +46,7 @@ export default async function journalRoutes(fastify) {
       data: {
         userId,
         rawContent: content,
+        people: await linkConfirmedPeople(userId, [], content),
         occurredAt,
         isPrivate: true,
         sharedWithAltimetrix: false,

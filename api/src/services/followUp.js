@@ -1,4 +1,5 @@
 import { prisma } from "../prisma.js";
+import { linkConfirmedPeople } from "./peopleLinks.js";
 
 // Follow-up messages that continue the save just made. After a save, a message that reads like more of the same
 // ("also…", "we come back on…", or one that shares a word with the saved title) is offered to that event first:
@@ -67,16 +68,23 @@ export async function attachToEvent(userId, eventId, understood, rawText, queueI
   const summary = String(understood?.summary || "").trim();
   if (summary) data.understoodMeaning = event.understoodMeaning ? `${event.understoodMeaning} ${summary}` : summary;
 
-  const people = Array.isArray(event.people) ? [...event.people] : [];
-  const known = new Set(people.map((person) => String(person?.name || "").toLowerCase()).filter(Boolean));
-  for (const name of understood?.people || []) {
-    const key = String(name).trim().toLowerCase();
-    if (!key || known.has(key)) continue;
-    known.add(key);
-    people.push({ name: String(name).trim(), role: "mentioned" });
-    added.push(`with ${String(name).trim()}`);
+  // People: the event's, then the follow-up's, with confirmed people linked to their records; each person once.
+  const lower = (value) => String(value || "").trim().toLowerCase();
+  const before = Array.isArray(event.people) ? event.people : [];
+  const proposed = [...before, ...(understood?.people || []).map((name) => ({ name: String(name).trim(), role: "mentioned" }))];
+  const people = [];
+  const seen = new Set();
+  for (const person of await linkConfirmedPeople(userId, proposed, [text, summary].join("\n"))) {
+    const key = person?.entityId || lower(person?.name);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    people.push(person);
   }
-  if (people.length !== (Array.isArray(event.people) ? event.people.length : 0)) data.people = people;
+  const had = new Set(before.flatMap((person) => [person?.entityId, lower(person?.name)]).filter(Boolean));
+  for (const person of people) {
+    if (!had.has(person.entityId) && !had.has(lower(person.name))) added.push(`with ${person.name}`);
+  }
+  if (JSON.stringify(people) !== JSON.stringify(before)) data.people = people;
 
   const places = Array.isArray(event.places) ? event.places : [];
   if (understood?.location && !places.length) {

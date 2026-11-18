@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { linkConfirmedPeople } from "../services/peopleLinks.js";
 import { extname } from "path";
 import { writeFile } from "fs/promises";
 import { prisma } from "../prisma.js";
@@ -623,6 +624,7 @@ async function saveJournal(userId, content) {
     data: {
       userId,
       rawContent: content,
+      people: await linkConfirmedPeople(userId, [], content),
       occurredAt: new Date(),
       isPrivate: true,
       sharedWithAltimetrix: false,

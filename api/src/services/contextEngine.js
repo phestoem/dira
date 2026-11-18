@@ -4,6 +4,7 @@ import { extname } from "path";
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { getAltimetrixContext } from "./altimetrixBridge.js";
+import { linkConfirmedPeople } from "./peopleLinks.js";
 import { expandGraphNames } from "./graph/entityResolver.js";
 import { autoExtractOn } from "./graph/autoExtract.js";
 import { anchorVision, markGraphExtracted } from "./graph/relationshipExtractor.js";
@@ -270,10 +271,12 @@ export async function createEventFromUnderstanding(userId, understoodInput, enti
   const queue = queueId ? await loadOwnQueue(userId, queueId) : null;
   const entity = entityId ? await loadOwnEntity(userId, entityId) : null;
 
-  const people = (understood.people || []).map((name) => ({
-    name,
-    role: "mentioned",
-  }));
+  // Confirmed people are linked to their records by name (no model call); other names stay plain.
+  const people = await linkConfirmedPeople(
+    userId,
+    (understood.people || []).map((name) => ({ name, role: "mentioned" })),
+    [understood.title, understood.summary, queue?.rawContent].filter(Boolean).join("\n"),
+  );
   const places = [];
   if (entity?.entityType === "place") {
     places.push({ entityId: entity.id, role: "location" });

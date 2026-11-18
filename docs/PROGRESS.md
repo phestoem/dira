@@ -14,7 +14,23 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
-- 2026-11-18: real-use 2/4, save confirmations show key fields.
+- 2026-11-18: real-use 3/4, confirmed people linked by name, no model.
+  - services/peopleLinks.js: confirmed = person record (not self, not
+    archived/merged) with a confirmed entity–entity relationship (the
+    bridge's rule). Keys: full name, aliases, first name (3+ letters) when
+    no other confirmed person shares it; whole words, case/accents folded.
+  - Applied at createEventFromUnderstanding (home, /intake, /queue, email
+    saves), the follow-up attach, and both journal saves (DiaryEntry.people).
+    A plain name that is a confirmed person gets its entityId; people the
+    text mentions are added; unknown names stay plain; no record is ever
+    created. Linked events show on the person's page (entities.js).
+  - dira_dev check (read-only, counts only): 11 confirmed people, 17 keys;
+    13 of 44 existing events would link (27 links). Existing events are
+    not backfilled.
+  - test/people-links.test.js. npm test 52/52; golden fixture 12/12 +
+    reset gate; live 11/12 twice, `properties` (model list left out one
+    property; answer path untouched) (logs/golden-links-*.log).
+- 2026-11-18 `973dc34`: real-use 2/4, save confirmations show key fields.
   - services/savedSummary.js reads the stored event back: "Saved: <title>,
     10 Dec 2026 → 17 Jan 2027, with A and B, 1,200 EUR." People = names +
     linked person records (projects/vehicles left out). Used by home
@@ -307,6 +323,10 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
+- Backfill: link confirmed people in the 44 existing dira_dev events
+  (13 would get links) and in prod? A one-off script, dry run first.
+- Two-letter first names ("Bo") do not link alone (false-match guard);
+  add them as aliases if wanted.
 - Keys: still not split (same fingerprints dev/prod). Token logging waits.
 - Journal sharing masks only names that are person records and not
   confirmed. A name with no record at all goes out as written. Mask all
