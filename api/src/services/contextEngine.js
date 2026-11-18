@@ -66,6 +66,9 @@ Extract the following and return as JSON:
   // For a certificate: the issue date
   // For a CV: null (it's a profile, not a dated event)
   // Format: YYYY-MM-DD if found, null if not clear
+  endDate: string | null,
+  // The last day, when it spans days (a trip, a stay, a course): YYYY-MM-DD.
+  // null for a single day or when no end is stated.
   summary: string,           // 2-3 sentence plain summary
   confidence: number,        // 0-1 how sure you are
   needsClarification: string | null  // ONE question if needed
@@ -77,6 +80,11 @@ Rules:
 - People are proper nouns that look like names
 - occurredAt is the date the event happened, never the date the file was read
 - Use YYYY-MM-DD only when the document states that date. If only a month or year is clear, or the document is a profile, return null
+- Dates written without a year ("10 Dec", "3 November") are real dates: give them as YYYY-MM-DD, choosing the year
+  from today's date (below): the next such date for plans, the most recent one for things that already happened
+- Something that spans days ("10 Dec to 17 Jan", "from Monday until Friday"): occurredAt is the first day, endDate the
+  last day
+- endDate only when an end is stated, and never before occurredAt
 - Keep needsClarification null if you understand enough
 - Only ask ONE thing if you must ask anything`;
 
@@ -305,6 +313,7 @@ export async function createEventFromUnderstanding(userId, understoodInput, enti
             ]
           : [],
         occurredAt: document.occurredAt !== undefined ? document.occurredAt : parseTimeframe(understood.occurredAt) || parseTimeframe(understood.timeframe),
+        endsAt: understood.endDate ? new Date(`${understood.endDate}T00:00:00.000Z`) : null,
         notes: understood.timeframe || null,
         fullText: textOrNull(document.fullText),
         sourceFile: textOrNull(document.sourceFile) || queue?.filePath || null,
@@ -359,7 +368,7 @@ async function interpretContent(rawText) {
       temperature: 0.1,
       response_format: { type: "json_object" },
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: `${SYSTEM_PROMPT}\n\nToday is ${todayIso()}.` },
         { role: "user", content },
       ],
     });
@@ -367,7 +376,7 @@ async function interpretContent(rawText) {
     const parsed = parseJsonContent(text);
     if (!parsed || typeof parsed !== "object") throw new Error("The model did not return an understanding");
     recordModelOk("openai");
-    return normalizeUnderstood(parsed);
+    return snapYearless(normalizeUnderstood(parsed), rawText);
   } catch (err) {
     // A save never depends on the model: without one, the text is kept as a plain note for the user to confirm.
     const kind = recordModelError("openai", err, "intake");
@@ -439,6 +448,43 @@ function suggestEventType(understood) {
   if (understood.contentType === "contact_list") return "social";
   if (understood.contentType === "inventory" || understood.project) return "project_update";
   return "personal";
+}
+
+// Today in DIRA's time zone, for dates the user gives without a year.
+function todayIso() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: process.env.DIRA_TIME_ZONE || "Europe/Helsinki", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
+}
+
+// When the text names no year at all ("10 Dec", "4 March"), the model's year is a guess: the start becomes the
+// occurrence of that day nearest today, the end the first occurrence on or after the start. Text with a year is
+// left as the model read it.
+export function snapYearless(understood, rawText, today = todayIso()) {
+  if (!understood || /\b(19|20)\d{2}\b/.test(String(rawText || ""))) return understood;
+  const year = Number(today.slice(0, 4));
+  const at = (y, monthDay) => {
+    const value = `${y}-${monthDay}`;
+    return isoDay(value) ? value : null;
+  };
+  const days = (a, b) => Math.abs(Date.parse(`${a}T00:00:00Z`) - Date.parse(`${b}T00:00:00Z`)) / 86400000;
+  let start = understood.occurredAt;
+  if (start) {
+    const candidates = [year - 1, year, year + 1].map((y) => at(y, start.slice(5))).filter(Boolean);
+    start = candidates.sort((a, b) => days(a, today) - days(b, today))[0] || start;
+  }
+  let end = understood.endDate;
+  if (end) {
+    const from = start || today;
+    const candidates = [year - 1, year, year + 1, year + 2].map((y) => at(y, end.slice(5))).filter((value) => value && value >= from);
+    end = start ? candidates[0] || null : candidates.sort((a, b) => days(a, today) - days(b, today))[0] || end;
+  }
+  return { ...understood, occurredAt: start, endDate: endAfter(end, start) };
+}
+
+// An end date counts only when it is after the start (or there is no start).
+function endAfter(end, start) {
+  if (!end) return null;
+  if (start && end <= start) return null;
+  return end;
 }
 
 function buildFinancials(financial) {
@@ -513,6 +559,7 @@ function normalizeUnderstood(value) {
     },
     timeframe: textOrNull(source.timeframe),
     occurredAt: isoDay(source.occurredAt),
+    endDate: endAfter(isoDay(source.endDate), isoDay(source.occurredAt)),
     summary: textOr(source.summary, ""),
     confidence: clampConfidence(source.confidence),
     needsClarification: clarification,

@@ -5,6 +5,7 @@ import { prisma } from "../prisma.js";
 import { isReadonly, runReadonly, wantsReadonly } from "../readonly.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
 import { attachToEvent, lastSavedFor, looksLikeContinuation, noteSaved } from "../services/followUp.js";
+import { savedSummary, summaryLine } from "../services/savedSummary.js";
 import { confirmCommand, interpretCommand } from "../services/commandInterpreter.js";
 import {
   applyCorrections,
@@ -330,8 +331,8 @@ async function confirmAttach(userId, entry, body) {
   const stored = parseJsonObject(queue?.understoodAs);
   const { event, added } = await attachToEvent(userId, entry.eventId, stored?.understood || {}, queue?.rawContent || "", entry.queueId);
   noteSaved(userId, event);
-  const detail = added.length ? `: ${added.join(", ")}` : "";
-  return doneResponse(entry.routing, "saved", { message: `Added to ${event.title}${detail}.`, eventId: event.id, queueId: entry.queueId }, null);
+  const detail = added.length ? ` (${added.join(", ")})` : "";
+  return doneResponse(entry.routing, "saved", { message: `Added to ${event.title}${detail}. Now: ${await savedSummary(userId, event)}.`, eventId: event.id, queueId: entry.queueId }, null);
 }
 
 async function runQuestion(userId, routing, payload) {
@@ -583,7 +584,7 @@ async function confirmIntake(request, entry, body) {
       console.error("[bridge] error:", err.message);
     }
   });
-  return doneResponse(entry.routing, "saved", { message: `Saved as ${event.title}.`, eventId: event.id, queueId: queue.id }, null);
+  return doneResponse(entry.routing, "saved", { message: `Saved: ${await savedSummary(userId, event)}.`, eventId: event.id, queueId: queue.id }, null);
 }
 
 async function confirmJournal(userId, entry) {
@@ -914,6 +915,7 @@ function publicUnderstanding(result) {
       project: result.understood.project,
       location: result.understood.location,
       occurredAt: result.understood.occurredAt || null,
+      endDate: result.understood.endDate || null,
       people: result.understood.people,
       financial: result.understood.financial,
       confidence: result.understood.confidence,
@@ -953,22 +955,15 @@ function intakeLine(understood) {
   if (understood.understood?.contentType === "other" && understood.understood?.confidence <= 0.2 && understood.understood?.needsClarification) {
     return `${understood.understood.needsClarification} Save it?`;
   }
-  const financial = understood.understood?.financial;
-  const money = financial?.hasFinancials && financial.totalAmount != null
-    ? `${Number(financial.totalAmount).toLocaleString("en-US")} ${financial.currency || ""}`.trim()
-    : "";
-  const when = monthPhrase(understood.understood?.occurredAt);
-  const detail = [money, when].filter(Boolean).join(" in ");
-  return detail
-    ? `This looks like ${title} — ${detail}. Save it?`
-    : `This looks like ${title}. Save it?`;
-}
-
-function monthPhrase(value) {
-  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return "";
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return "";
-  return date.toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const fields = understood.understood || {};
+  const financial = fields.financial;
+  return `This looks like ${summaryLine({
+    title,
+    start: fields.occurredAt,
+    end: fields.endDate,
+    people: fields.people || [],
+    financials: financial?.hasFinancials ? { amount: financial.totalAmount, currency: financial.currency } : null,
+  })}. Save it?`;
 }
 
 function optionsFrom(routing) {

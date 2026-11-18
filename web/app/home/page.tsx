@@ -244,7 +244,7 @@ export default function HomePage() {
         action: "proceed",
         result: {
           type: "saved",
-          content: { message: `Saved as ${event.title || title}.`, eventId: event.id || "", queueId },
+          content: { message: event.savedMessage || `Saved as ${event.title || title}.`, eventId: event.id || "", queueId },
           confirmationRequired: false,
           confirmationText: null,
         },

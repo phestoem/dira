@@ -14,7 +14,24 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
-- 2026-11-18: real-use 1/4, follow-ups attach to the last save.
+- 2026-11-18: real-use 2/4, save confirmations show key fields.
+  - services/savedSummary.js reads the stored event back: "Saved: <title>,
+    10 Dec 2026 → 17 Jan 2027, with A and B, 1,200 EUR." People = names +
+    linked person records (projects/vehicles left out). Used by home
+    confirm, the follow-up attach ("Added to <title> (…). Now: …"), the
+    preview line ("This looks like …. Save it?") and /queue/:id/confirm
+    (`savedMessage`, used by the web restore path).
+  - Events get endsAt (migration 20261118233000_event_ends_at, applied to
+    dira_dev; prod gets it on deploy). Understanding gains endDate; the
+    model now gets today's date and rules for yearless dates and spans.
+  - snapYearless (code): text without any year → start = occurrence
+    nearest today, end = first on/after start. Real model before: "3
+    November" → 2023, "4 March" appointment → past; after: all 5 checks
+    right (trip 10 Dec → 17 Jan, roof 3 Nov 2026, dentist 4 Mar 2027,
+    visit 2–5 Oct 2026, a stated 2019 kept).
+  - npm test 49/49; golden fixture 12/12 + reset gate; live 11/12
+    (`properties` flake) then 12/12 (logs/golden-summary-*.log).
+- 2026-11-18 `c7d4a9a`: real-use 1/4, follow-ups attach to the last save.
   - services/followUp.js: the last saved event per user (30 min, memory);
     looksLikeContinuation (opener word such as also/and/we'll/returning/
     it's, or a shared word of 4+ letters with the title; no model).

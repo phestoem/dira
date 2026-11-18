@@ -1,5 +1,6 @@
 import { prisma } from "../prisma.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
+import { savedSummary } from "../services/savedSummary.js";
 import { applyCorrections, createEventFromUnderstanding } from "../services/contextEngine.js";
 import { extractAndLinkEntities } from "./entities.js";
 
@@ -98,7 +99,7 @@ export default async function queueRoutes(fastify) {
           console.error("[bridge] error:", err.message);
         }
       });
-      return event;
+      return { ...event, savedMessage: `Saved: ${await savedSummary(userId, event)}.` };
     } catch (error) {
       request.log.error(error);
       const statusCode = error.statusCode || 500;

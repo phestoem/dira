@@ -89,6 +89,14 @@ export async function attachToEvent(userId, eventId, understood, rawText, queueI
     added.push(`on ${understood.occurredAt}`);
   }
 
+  const end = understood?.endDate;
+  const start = data.occurredAt || event.occurredAt;
+  const endIsLater = !start || end > start.toISOString().slice(0, 10);
+  if (!event.endsAt && end && /^\d{4}-\d{2}-\d{2}$/.test(end) && endIsLater) {
+    data.endsAt = new Date(`${end}T00:00:00.000Z`);
+    added.push(`until ${end}`);
+  }
+
   const financial = understood?.financial;
   const hasAmount = Number(event.financials?.amount) > 0;
   if (!hasAmount && financial?.hasFinancials && Number(financial.totalAmount) > 0) {

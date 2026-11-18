@@ -18,7 +18,7 @@ test("looksLikeContinuation: openers and shared title words, not unrelated saves
 });
 
 const UNDERSTOOD = [
-  [/^Trip to Lakeview/, { title: "Trip to Lakeview", contentType: "schedule", people: ["Bo Linden"], location: "Lakeview", occurredAt: "2027-03-10", summary: "A trip to Lakeview with Bo Linden.", confidence: 0.9, financial: { hasFinancials: false } }],
+  [/^Trip to Lakeview/, { title: "Trip to Lakeview", contentType: "schedule", people: ["Bo Linden"], location: "Lakeview", occurredAt: "2027-03-10", endDate: "2027-03-17", summary: "A trip to Lakeview with Bo Linden.", confidence: 0.9, financial: { hasFinancials: false } }],
   [/^We'll also take Cy Marsh/, { title: "Flights for the trip", contentType: "notes", people: ["Bo Linden", "Cy Marsh"], summary: "Cy Marsh joins; flights cost 1200 EUR.", confidence: 0.9, financial: { hasFinancials: true, totalAmount: 1200, currency: "EUR", direction: "expense", items: [] } }],
   [/^Paid the electricity bill/, { title: "Electricity bill", contentType: "notes", people: [], summary: "Paid the electricity bill.", confidence: 0.9, financial: { hasFinancials: false } }],
   [/^Also renewed the car insurance/, { title: "Car insurance", contentType: "notes", people: [], summary: "Renewed the car insurance.", confidence: 0.9, financial: { hasFinancials: false } }],
@@ -74,8 +74,11 @@ test("follow-ups attach to the event just saved", async (t) => {
 
   const first = await input("Trip to Lakeview with Bo Linden from 10 March 2027.");
   assert.equal(first.result.type, "understanding");
+  assert.equal(first.result.content.understood.endDate, "2027-03-17");
+  assert.match(first.result.confirmationText, /^(This looks like Trip to Lakeview, 10 Mar 2027 → 17 Mar 2027, with Bo Linden\. Save it\?|I think you want to save this as an event\. Confirm\?)$/);
   const done = await confirm(first.sessionId);
   assert.equal(done.result.type, "saved");
+  assert.equal(done.result.content.message, "Saved: Trip to Lakeview, 10 Mar 2027 → 17 Mar 2027, with Bo Linden.");
   const eventId = done.result.content.eventId;
 
   let after = savedAction(done);
@@ -87,13 +90,14 @@ test("follow-ups attach to the event just saved", async (t) => {
     const added = await confirm(offer.sessionId, { selectedOption: "attach" });
     assert.equal(added.result.type, "saved");
     assert.equal(added.result.content.eventId, eventId);
-    assert.equal(added.result.content.message, "Added to Trip to Lakeview: with Cy Marsh, 1,200 EUR.");
+    assert.equal(added.result.content.message, "Added to Trip to Lakeview (with Cy Marsh, 1,200 EUR). Now: Trip to Lakeview, 10 Mar 2027 → 17 Mar 2027, with Bo Linden and Cy Marsh, 1,200 EUR.");
     after = savedAction(added);
 
     const event = await prisma.event.findUnique({ where: { id: eventId } });
     assert.deepEqual(event.people.map((person) => person.name), ["Bo Linden", "Cy Marsh"], "Bo Linden is not added twice");
     assert.equal(event.financials.amount, 1200);
     assert.equal(event.occurredAt.toISOString().slice(0, 10), "2027-03-10", "the date it had is kept");
+    assert.equal(event.endsAt.toISOString().slice(0, 10), "2027-03-17");
     assert.match(event.rawInput, /Trip to Lakeview[\s\S]*\n\nWe'll also take Cy Marsh/);
     assert.equal(await prisma.event.count({ where: { userId: user.id } }), 1, "no second event");
   });

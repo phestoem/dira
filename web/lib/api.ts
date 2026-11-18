@@ -966,7 +966,7 @@ export async function confirmQueueItem(
   id: string,
   space?: IntakeSpace,
   occurredAt?: string | null,
-): Promise<{ id?: string; title?: string }> {
+): Promise<{ id?: string; title?: string; savedMessage?: string }> {
   const res = await apiFetch(`/queue/${id}/confirm`, {
     method: "POST",
     body: JSON.stringify({
