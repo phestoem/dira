@@ -1,13 +1,18 @@
 # fix/people-answers — progress
 
-Last updated: 2026-10-17
+Last updated: 2026-11-18
 
 ## Current goal
-2026-10-17 (Phesto): option (b), staged: rebuild DIRA's WHOLE knowledge
-layer (not just family) as one ingestion path → one claim store → one
-answer path. Design: docs/knowledge-layer.md. Phases 0 and 1 done.
-Phase 2 gate FAILED on 2026-10-17 (hold-out 4 mean recall 62%); stopped,
-waiting for Phesto's decision (see open questions).
+2026-11-18 (Phesto): change of direction. DIRA serves only Phesto; the goal
+is stability and low cost, not general extraction. Plan:
+docs/PERSONAL_SCOPE.md. The personal version is built on `main` in branch
+`personal`; this branch (`fix/people-answers`, the general knowledge layer)
+is to be parked as `park/knowledge-layer` with a LESSONS.md.
+Order: backup → keys → graceful model failure → personal data out of
+main's source into the DB → the rest of the plan. One item per commit,
+family golden test before each commit.
+
+(Everything below "Rebuild plan" is the parked general knowledge layer.)
 
 ## Rebuild plan (Phesto, 2026-10-17)
 
@@ -337,6 +342,14 @@ tokens per source ≈ $0.007 per save with gpt-4.1; the account re-ingest
 estimate drops to about $0.40.
 
 ## Decisions made and why
+- 2026-11-18 (Phesto): personal scope, base on `main` (docs/PERSONAL_SCOPE.md).
+  Bridge stays on, simplified (DIRA → Altimetrix events/journal/documents;
+  Altimetrix → DIRA read-only context, never writes people; only confirmed
+  people shared; async with retries; DIRA_BRIDGE default on). Digest and
+  nudges stay; nothing removed. Backups: nightly pg_dump of `dira` to the
+  other NUC + nightly restic copy to Cloudflare R2, 7 daily + 4 weekly,
+  monthly restore test (proposal; Phesto applies it). Keys: dev $25/month
+  hard, prod $20/month with alerts at 50% and 80% (Phesto creates them).
 - 2026-10-17 (Phesto): extraction default model gpt-5.5 (was gpt-4.1):
   fresh-author dev sets 85 / 88% vs ~75%. One more tuning round on the
   dev sets' weakest domains, then the hold-out 5 gate (3 runs, mean).
@@ -380,14 +393,18 @@ re-score (rules 3.3, tools 3.0, hybrid 2.7 /13). Details in git history
 of this file (`7240988`).
 
 ## Next steps
-1. When credits are back: re-run the family golden fixture (prompt
-   example renames) and the phase 1 routing check on all sets.
-2. Phase 2: the claims extractor (schema, gpt-4.1, whole vocabulary,
-   related_to escape hatch), validation invariants, corrections; score
-   on the life set and hold-outs 1–3 (old expectations need claims
-   versions), then the gate on hold-out 4.
+1. Create `personal` from `main`; family golden baseline on it.
+2. Backup proposal (script change + restore test) for Phesto to apply.
+3. Then keys, graceful model failure, personal data out of source.
 
 ## Open questions for Phesto
+- 2026-11-18: family golden fixture on this branch is 10/13 (children
+  Patrick, Presley, Prisha not saved from the introduction; reset gate
+  9/12 edges), twice, and the same on fbc2490 without the token logging.
+  It passed in October, so the old extractor's behaviour has drifted.
+  Not fixed here (branch is being parked); `personal` gets its own baseline.
+
+(Older questions below are about the parked knowledge layer.)
 - OpenAI credits ran out again (gpt-5.x runs use more tokens: ~4.2k in +
   400–800 out per save; a 4-set run ≈ 140 saves). Add credits to finish
   the readiness check and the hold-out 5 gate.
