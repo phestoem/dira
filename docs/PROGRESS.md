@@ -9,6 +9,21 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-18 22:07: dira backup installed on this host (local copy only).
+  - Scripts in /opt/qusaz/shared/backup/dira/; settings in
+    /opt/qusaz/shared/backup/dira/dira-backup.env (600), not /etc/qusaz:
+    no sudo. Cron passes DIRA_BACKUP_ENV. NUC_TARGET and
+    RESTIC_REPOSITORY empty → skipped.
+  - First backup: dira_20261118_220743.dump, 81741 bytes, 10 tables with
+    data, ok (/opt/qusaz/backups/dira/last_status.json, backup.log).
+  - Restore test SOURCE=local: PASS, every table's row count equal to
+    live, 7 migrations, scratch db dropped (last_restore_test.json,
+    restore-test.log).
+  - Cron (qusaz): 02:30 daily backup; 04:00 on the 1st restore test with
+    SOURCE=local (switch to r2 once R2 exists). Old crontab saved in the
+    session scratchpad.
+  - NUC key generated: ~/.ssh/dira_backup_ed25519 (public key to go on
+    the NUC).
 - 2026-11-18 `4fe1792`: journal sealed by default, per-entry "Share with Altimetrix"
   (Phesto: default off; only toggled entries go through the bridge;
   confirmed-people rule applies).
@@ -166,6 +181,9 @@ For comparison, `fix/people-answers` today: fixture 10/13 (children
 missing after the introduction), the same without its last change.
 
 ## Decisions made and why
+- 2026-11-18 (Phesto): "for the backup and restore test, you may read the
+  dira database and create/drop dira_restore_test". Not yet in CLAUDE.md
+  (my edit was blocked by the permission check; Phesto to add it).
 - 2026-11-18 (Phesto): base on `main`; bridge stays on, simplified;
   digest and nudges stay; nothing removed; backups to the other NUC +
   restic to Cloudflare R2 (7 daily + 4 weekly, monthly restore test);
@@ -176,8 +194,9 @@ missing after the introduction), the same without its last change.
 Phesto (2026-11-18): before token logging, the backup + restore test and
 the dev/prod key split must be done. Re-checked 2026-11-18 evening after
 Phesto said both were applied: still not on this host, token logging held.
-- Backup: no /opt/qusaz/shared/backup/dira/, no /etc/qusaz/, no restic, no
-  dira cron line. The only backup cron is the old
+- Backup (later the same evening: installed, local only, see Done; NUC +
+  R2 still missing). At the check: no /opt/qusaz/shared/backup/dira/, no
+  /etc/qusaz/, no restic, no dira cron line. The only backup cron is the old
   /opt/qusaz/shared/postgres/backup.sh (02:00), and its dumps in
   /opt/qusaz/backups/ contain no dira database. No restore-test result.
 - Keys: dira-dev/api/.env and dira/api/.env (prod EnvironmentFile) still
@@ -197,8 +216,12 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- Backup + keys: were they applied on another host, or to other paths?
-  Nothing on this host (see Next steps).
+- Backup off-site: NUC hostname + backup user with the public key from
+  ~/.ssh/dira_backup_ed25519.pub; R2 bucket dira-backups + token (put the
+  values in the env file yourself); then I install restic (static binary,
+  no sudo), restic init, an R2 restore test, and cron SOURCE=r2.
+- Keys: still not split (same fingerprints dev/prod). Token logging waits.
+- CLAUDE.md: add the backup exception for the dira database.
 - Journal sharing masks only names that are person records and not
   confirmed. A name with no record at all goes out as written. Mask all
   capitalised names that are not confirmed people too (safer, mangles
