@@ -9,6 +9,20 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-18 23:04: deployed to prod. personal fast-forwarded into main
+  (570df39..8698d0e, Phesto's go), pushed; prod merged it as 8a8eaf2.
+  - First run stopped at `git pull` (prod main had 25 local merge commits,
+    lockfile-only, and no pull strategy); nothing changed. Phesto chose
+    `git -C /opt/qusaz/dira config pull.rebase false` (how earlier pulls
+    merged). logs/deploy-20261118.log.
+  - Backup before: dira_20261118_230316.dump. Second run: merge, migration
+    20261118210000_journal_share_sent applied, web build OK, dira-api and
+    dira-web active (logs/deploy-20261118-2.log).
+  - Prod DIGEST_FROM set by Phesto (a @qusaz.com address).
+  - After: /health on 4800 ok, readonly-header, flags as defaults, tokens
+    counting. Readonly golden against prod 12/12
+    (logs/golden-prod-readonly.log), `properties` passed this time. Prod log
+    since restart: zero 5xx, zero errors; 16 model calls, 0 failed.
 - 2026-11-18 `660973b`: token + latency logging (Phesto: start before the key split).
   - api/src/metrics.js, measured at fetch (the OpenAI SDK v7 reads
     globalThis.fetch per client; Groq/file/extractor calls use fetch), so
@@ -188,6 +202,8 @@ plan. One item per commit, family golden test before each commit.
   (02:30 daily, 04:00 on the 1st). Steps in ops/backup/README.md.
 
 ## Latest scores
+Prod 2026-11-18 23:07 (main 8698d0e): readonly golden 12/12.
+
 First measurement (2026-11-18, dev, both golden runs = 37 /home/input
 requests): 55 calls, all gpt-4o-mini, 89,404 input (49,024 cached, 55%),
 7,745 output; about 2.4k input per request. Router call 1.8–1.9k input
@@ -255,7 +271,6 @@ Checked 2026-11-18 (read-only, earlier):
 
 ## Open questions for Phesto
 - Keys: still not split (same fingerprints dev/prod). Token logging waits.
-- Merge personal → main to deploy (sudoers rule in place, see Decisions).
 - Journal sharing masks only names that are person records and not
   confirmed. A name with no record at all goes out as written. Mask all
   capitalised names that are not confirmed people too (safer, mangles
