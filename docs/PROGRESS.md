@@ -9,6 +9,27 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-18: token + latency logging (Phesto: start before the key split).
+  - api/src/metrics.js, measured at fetch (the OpenAI SDK v7 reads
+    globalThis.fetch per client; Groq/file/extractor calls use fetch), so
+    no call site changed. A model call = default provider host or under
+    OPENAI_BASE_URL / GROQ_BASE_URL.
+  - One `[tokens]` line per request that used a model: route pattern,
+    status, ms, calls, input/cached/output/reasoning totals, then per call
+    provider/model, calling function (async stack), tokens, ms, status.
+    Calls after the answer (background work) get a `background after
+    <route>` line. Requests without a model call are not logged (Fastify
+    already logs every request with its time).
+  - DIRA_TOKEN_LOG=<file>: the same as JSON lines. Daily totals
+    (DIRA_TIME_ZONE, default Europe/Helsinki) logged at the day change and
+    in /health `tokens` (today, yesterday, per model; since process start).
+  - No content: no prompt, answer, ids in paths (route patterns only).
+  - test/metrics.test.js (stub OpenAI/Groq): SDK + direct fetch, background
+    line, failed call, Altimetrix on the same host not counted, JSONL,
+    daily totals, no content. npm test 39/39; golden fixture 12/12 + reset
+    gate (logs/golden-tokens-fixture.log); live readonly 11/12,
+    `properties` (known flake) (logs/golden-tokens-live.log); zero 5xx.
+  - Dev API now runs with DIRA_TOKEN_LOG=logs/tokens.jsonl.
 - 2026-11-18 22:07: dira backup installed on this host (local copy only).
   - Scripts in /opt/qusaz/shared/backup/dira/; settings in
     /opt/qusaz/shared/backup/dira/dira-backup.env (600), not /etc/qusaz:
@@ -167,6 +188,11 @@ plan. One item per commit, family golden test before each commit.
   (02:30 daily, 04:00 on the 1st). Steps in ops/backup/README.md.
 
 ## Latest scores
+First measurement (2026-11-18, dev, both golden runs = 37 /home/input
+requests): 55 calls, all gpt-4o-mini, 89,404 input (49,024 cached, 55%),
+7,745 output; about 2.4k input per request. Router call 1.8–1.9k input
+each (37 of 55 calls), matching the plan's 1.7k estimate.
+
 2026-11-18 evening, `personal` + journal sharing, dev API on 4801:
 - npm test: 38/38.
 - Family golden fixture: 12/12 + reset gate (logs/golden-journal-fixture.log).
@@ -217,7 +243,7 @@ Checked 2026-11-18 (read-only, earlier):
   limit; prod $20/month, alerts at 50%/80%); then I put the dev key in dev
   .env only.
 1. Once backup + keys are done: the rest of the plan, in its order (docs/PERSONAL_SCOPE.md section 7):
-   token/latency logging, cherry-pick beb392c, code answers
+   (token/latency logging done) cherry-pick beb392c, code answers
    for people questions + date precision, My people page, open-question
    path, deploy script.
 

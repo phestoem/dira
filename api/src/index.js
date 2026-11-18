@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { finishRequest, startRequest, tokenTotals } from "./metrics.js";
 import { mkdirSync } from "fs";
 import Fastify from "fastify";
 import multipart from "@fastify/multipart";
@@ -32,6 +33,9 @@ mkdirSync("/tmp/dira-uploads", { recursive: true });
 const port = Number(process.env.PORT) || 4800;
 
 const app = Fastify({ logger: true });
+// Token and latency logging per request (src/metrics.js).
+app.addHook("onRequest", (request, reply, done) => startRequest(request, done));
+app.addHook("onResponse", async (request, reply) => finishRequest(request, reply));
 
 await app.register(corsPlugin);
 await app.register(authPlugin);
@@ -79,6 +83,8 @@ app.get("/health", async () => ({
   // Last success and failure per model provider (no secrets), so a dead key or empty credit shows here first.
   models: modelStatus(),
   flags: flagStatus(),
+  // Model calls and tokens today and yesterday, since this process started (no content).
+  tokens: tokenTotals(),
 }));
 
 app.setErrorHandler((error, request, reply) => {
