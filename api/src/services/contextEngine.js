@@ -1,3 +1,4 @@
+import { modelErrorMessage, recordModelError, recordModelOk } from "./modelStatus.js";
 import { extname } from "path";
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
@@ -347,29 +348,45 @@ async function extractContent(filePath, mimeType) {
 }
 
 async function interpretContent(rawText) {
-  const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) {
-    throw new Error("OPENAI_API_KEY is required");
-  }
-
   const content = clip(rawText);
-  const client = new OpenAI({ apiKey });
-  const response = await client.chat.completions.create({
-    model: MODEL,
-    temperature: 0.1,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: SYSTEM_PROMPT },
-      { role: "user", content },
-    ],
-  });
-
-  const text = response.choices?.[0]?.message?.content || "";
-  const parsed = parseJsonContent(text);
-  if (!parsed || typeof parsed !== "object") {
-    throw new Error("The model did not return an understanding");
+  try {
+    const apiKey = process.env.OPENAI_API_KEY;
+    if (!apiKey) throw new Error("OPENAI_API_KEY is not set");
+    const client = new OpenAI({ apiKey });
+    const response = await client.chat.completions.create({
+      model: MODEL,
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content },
+      ],
+    });
+    const text = response.choices?.[0]?.message?.content || "";
+    const parsed = parseJsonContent(text);
+    if (!parsed || typeof parsed !== "object") throw new Error("The model did not return an understanding");
+    recordModelOk("openai");
+    return normalizeUnderstood(parsed);
+  } catch (err) {
+    // A save never depends on the model: without one, the text is kept as a plain note for Phesto to confirm.
+    const kind = recordModelError("openai", err, "intake");
+    console.error(`[intake] understanding failed (${kind}), saving as a plain note:`, err.message);
+    return plainNote(rawText, kind);
   }
-  return normalizeUnderstood(parsed);
+}
+
+// The understanding of a text when no model is available: its first line as the title, the text as the summary,
+// nothing guessed.
+export function plainNote(rawText, kind = "unavailable") {
+  const text = String(rawText || "").trim();
+  const first = text.split("\n").map((line) => line.trim()).find(Boolean) || "Note";
+  return normalizeUnderstood({
+    title: first.length > 80 ? `${first.slice(0, 77)}…` : first,
+    summary: text.slice(0, 1000),
+    contentType: "other",
+    confidence: 0.2,
+    needsClarification: `${modelErrorMessage(kind)} I'll keep it as a plain note; you can edit the title or details later.`,
+  });
 }
 
 async function findMatchingEntities(userId, understood) {

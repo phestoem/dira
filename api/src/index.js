@@ -24,6 +24,7 @@ import { bridgeConfig } from "./services/altimetrixBridge.js";
 import { graphAutoExtractEnabled } from "./services/graph/autoExtract.js";
 import { runScheduledDigests } from "./services/digestService.js";
 import { catchUpGraphExtractions } from "./services/graph/rebuild.js";
+import { modelStatus } from "./services/modelStatus.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
 
@@ -73,6 +74,8 @@ app.get("/health", async () => ({
   service: "dira-api",
   // The golden runner refuses a live run against a server that doesn't list this.
   capabilities: ["readonly-header"],
+  // Last success and failure per model provider (no secrets), so a dead key or empty credit shows here first.
+  models: modelStatus(),
 }));
 
 app.setErrorHandler((error, request, reply) => {

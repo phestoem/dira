@@ -4,10 +4,10 @@ import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 import { isNoiseReply } from "./intentRouter.js";
 import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts, usesRecordedAnswer } from "./graph/peopleGrounding.js";
+import { groqChatUrl, modelErrorKind, modelErrorMessage, modelUnavailable, recordModelError, recordModelOk } from "./modelStatus.js";
 
 const GROQ_MODEL = "qwen/qwen3.8-27b";
 const FACT_MODEL = "gpt-4o-mini";
-const BUSY = "DIRA is busy right now. Send that again.";
 const FACT_TYPES = new Set(["financial", "person", "place", "decision", "date", "asset", "other"]);
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -126,7 +126,14 @@ export async function chat(messages, userId) {
   context.familyLines = graph.family;
   context.holdingLines = HOLDINGS_QUESTION.test(latest) ? await holdingLines(userId) : [];
   const system = buildSystemPrompt(context);
-  const reply = await completeChat(history, system);
+  let reply;
+  try {
+    reply = await completeChat(history, system);
+  } catch (err) {
+    // No model could answer: say why, and give what the records hold for the question instead of an error.
+    if (!err.modelUnavailable) throw err;
+    reply = recordsReply(err.modelKind, latest, context);
+  }
   console.log(
     "[advisor] chat",
     context.events.length,
@@ -183,15 +190,24 @@ export async function detectSignificantFacts(userMessage, userId) {
   if (!apiKey || apiKey.startsWith("your_")) return [];
 
   const client = new OpenAI({ apiKey, timeout: 12000 });
-  const response = await client.chat.completions.create({
-    model: FACT_MODEL,
-    temperature: 0,
-    max_tokens: 400,
+  let response;
+  try {
+    response = await client.chat.completions.create({
+      model: FACT_MODEL,
+      temperature: 0,
+      max_tokens: 400,
     messages: [
-      { role: "system", content: FACT_PROMPT },
-      { role: "user", content: text.slice(0, 4000) },
-    ],
-  });
+        { role: "system", content: FACT_PROMPT },
+        { role: "user", content: text.slice(0, 4000) },
+      ],
+    });
+    recordModelOk("openai");
+  } catch (err) {
+    // Fact chips are optional: without a model there are none.
+    console.error("[advisor] fact detection failed:", modelErrorKind(err), err.message);
+    recordModelError("openai", err, "fact-chips");
+    return [];
+  }
   const facts = parseFacts(response.choices?.[0]?.message?.content || "")
     .filter((fact) => fact.confidence >= 0.7)
     .sort((left, right) => right.confidence - left.confidence)
@@ -568,19 +584,27 @@ async function completeChat(messages, systemPrompt, options = {}) {
     const text = provider === "groq"
       ? await completeWithGroq(messages, systemPrompt, temperature)
       : await completeWithOpenAI(messages, systemPrompt, temperature);
-    if (text) return text;
-    throw new Error("empty advisor reply");
+    if (!text) throw new Error("empty advisor reply");
+    recordModelOk(provider);
+    return text;
   } catch (err) {
-    if (provider === "openai" && !isRateLimitError(err)) {
+    const kind = recordModelError(provider, err, "advisor");
+    // Any OpenAI failure, also no credit or a rate limit, tries Groq: it is a separate account.
+    if (provider === "openai") {
       try {
-        console.error("[advisor] openai failed, trying groq:", err.message);
+        console.error(`[advisor] openai failed (${kind}), trying groq:`, err.message);
         const text = await completeWithGroq(messages, systemPrompt, temperature);
-        if (text) return text;
+        if (text) {
+          recordModelOk("groq");
+          return text;
+        }
+        throw new Error("empty advisor reply");
       } catch (fallbackErr) {
+        recordModelError("groq", fallbackErr, "advisor");
         console.error("[advisor] groq fallback failed:", fallbackErr.message);
       }
     }
-    throw httpError(BUSY, 503);
+    throw modelUnavailable(kind, err);
   }
 }
 
@@ -600,7 +624,7 @@ async function completeWithOpenAI(messages, systemPrompt, temperature) {
 async function completeWithGroq(messages, systemPrompt, temperature) {
   const key = usableKey(process.env.GROQ_API_KEY);
   if (!key) throw new Error("GROQ_API_KEY is not set");
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const response = await fetch(groqChatUrl(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
@@ -630,10 +654,20 @@ function usableKey(value) {
   return key;
 }
 
-function isRateLimitError(err) {
-  const status = err?.status || err?.statusCode || err?.response?.status;
-  if (status === 429) return true;
-  return /\b429\b|rate limit/i.test(String(err?.message || ""));
+// The reply when no model can answer an open question: why, then the saved records that share words with it.
+const QUIET = new Set(["what", "when", "where", "which", "about", "with", "from", "have", "does", "that", "this", "there", "their", "them", "they", "your", "mine", "much", "many", "tell", "show", "give", "list", "know", "nini", "gani", "lini", "wapi"]);
+export function recordsReply(kind, question, context = {}) {
+  const words = [...new Set(String(question || "").toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").match(/[\p{L}\p{N}]{4,}/gu) || [])].filter((word) => !QUIET.has(word));
+  const lines = [];
+  for (const event of context.events || []) {
+    const day = event.occurredAt ? new Date(event.occurredAt).toISOString().slice(0, 10) : null;
+    lines.push(`${event.title}${day ? ` (${day})` : ""}${event.understoodMeaning ? `: ${String(event.understoodMeaning).slice(0, 140)}` : ""}`);
+  }
+  for (const line of [...(context.familyLines || []), ...(context.graphLines || []), ...(context.holdingLines || [])]) lines.push(String(line));
+  const hits = words.length ? lines.filter((line) => words.some((word) => line.toLowerCase().normalize("NFKD").replace(/[\u0300-\u036f]/g, "").includes(word))).slice(0, 5) : [];
+  const message = modelErrorMessage(kind);
+  if (!hits.length) return `${message}\n\nQuestions about your people (who, when born, children, family tree) are answered from your records without the AI.`;
+  return `${message}\n\nWhat your records say:\n${hits.map((line) => `- ${line}`).join("\n")}`;
 }
 
 function normalizeMessages(messages) {

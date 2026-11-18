@@ -20,6 +20,7 @@ import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
 import { commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
 import { findPaths, getFamilyTree, getMoneyFlows, getNeighbors, serializeForPrompt, getSubgraph } from "../services/graph/graphQuery.js";
+import { modelErrorKind } from "../services/modelStatus.js";
 const UPLOAD_DIR = "/tmp/dira-uploads";
 const PENDING_TTL_MS = 5 * 60 * 1000;
 const pending = new Map();
@@ -610,8 +611,9 @@ async function runRelationshipAdd(userId, routing, payload) {
       triples = extracted.triples;
       entityFacts = extracted.entityFacts;
     } catch (err) {
-      console.error("[graph] relationship extract failed:", err.message);
-      return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
+      // Without a model the statement is still kept: as a plain note to confirm, not a connection.
+      console.error("[graph] relationship extract failed:", modelErrorKind(err), err.message);
+      return runIntakeText(userId, { ...routing, intent: "intake_text", interpretation: "Save this as a note." }, payload);
     }
   }
   // "My sisters' birthdays: Jeni was born on 4 December 1980 …" names no new connection but records dates.
@@ -639,8 +641,8 @@ async function runRelationshipChange(userId, routing, payload) {
   try {
     extracted = await extractTriples(payload.message, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
   } catch (err) {
-    console.error("[graph] relationship extract failed:", err.message);
-    return answerResponse(routing, err.status === 429 ? "DIRA is busy right now. Send that again." : "I couldn't read that connection just now.", false);
+    console.error("[graph] relationship extract failed:", modelErrorKind(err), err.message);
+    return runIntakeText(userId, { ...routing, intent: "intake_text", interpretation: "Save this as a note." }, payload);
   }
   const proposals = [];
   for (const triple of isReadonly() ? [] : extracted.triples) {
@@ -906,6 +908,10 @@ function commandConfirmation(command) {
 
 function intakeLine(understood) {
   const title = understood.understood?.title || "this";
+  // A plain note (no model was available) says so instead of guessing what it is.
+  if (understood.understood?.contentType === "other" && understood.understood?.confidence <= 0.2 && understood.understood?.needsClarification) {
+    return `${understood.understood.needsClarification} Save it?`;
+  }
   const financial = understood.understood?.financial;
   const money = financial?.hasFinancials && financial.totalAmount != null
     ? `${Number(financial.totalAmount).toLocaleString("en-US")} ${financial.currency || ""}`.trim()

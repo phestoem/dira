@@ -1,3 +1,4 @@
+import { openaiChatUrl } from "./modelStatus.js";
 import { readFile } from "fs/promises";
 import { extname } from "path";
 import XLSX from "xlsx";
@@ -115,7 +116,7 @@ async function extractPdfWithVision(buffer, pageCount) {
   }
 
   const base64 = buffer.toString("base64");
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(openaiChatUrl(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,
@@ -186,7 +187,7 @@ export async function extractFromImage(filePath) {
   const base64Image = buffer.toString("base64");
   const mimeType = mimeFromImagePath(filePath);
 
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(openaiChatUrl(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${apiKey}`,

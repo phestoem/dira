@@ -1,3 +1,4 @@
+import { openaiChatUrl, groqChatUrl } from "../modelStatus.js";
 import { prisma } from "../../prisma.js";
 import { isReadonly } from "../../readonly.js";
 import { autoExtractOn } from "./autoExtract.js";
@@ -762,7 +763,7 @@ async function completeJson(system, user) {
 async function completeWithOpenAI(system, user) {
   const key = usableKey(process.env.OPENAI_API_KEY);
   if (!key) throw new Error("OpenAI key is not configured");
-  const response = await fetch("https://api.openai.com/v1/chat/completions", {
+  const response = await fetch(openaiChatUrl(), {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -785,7 +786,7 @@ async function completeWithOpenAI(system, user) {
 async function completeWithGroq(system, user) {
   const key = usableKey(process.env.GROQ_API_KEY);
   if (!key) throw new Error("Groq key is not configured");
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const response = await fetch(groqChatUrl(), {
     method: "POST",
     headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
     body: JSON.stringify({

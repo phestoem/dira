@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { isRelationshipStatement, namesPersonWithRole } from "./graph/familyStatement.js";
 import { isPeopleQuestion } from "./graph/peopleGrounding.js";
+import { groqChatUrl, modelErrorKind, recordModelError, recordModelOk } from "./modelStatus.js";
 
 const OPENAI_MODEL = "gpt-4o-mini";
 const GROQ_MODEL = "qwen/qwen3.8-27b";
@@ -376,14 +377,23 @@ function routerProvider() {
 async function completeRouter(user) {
   const provider = routerProvider();
   try {
-    if (provider === "groq") return await completeWithGroq(user);
-    return await completeWithOpenAI(user);
+    const text = provider === "groq" ? await completeWithGroq(user) : await completeWithOpenAI(user);
+    recordModelOk(provider);
+    return text;
   } catch (err) {
-    if (provider === "openai" && !isRateLimitError(err)) {
-      console.error("[router] openai failed, trying groq:", err.message);
-      return completeWithGroq(user);
+    const kind = recordModelError(provider, err, "router");
+    // Any OpenAI failure, also no credit or a rate limit, tries Groq; if that fails too, the caller falls back to
+    // the heuristic router, so a message is never lost.
+    if (provider !== "openai") throw err;
+    console.error(`[router] openai failed (${kind}), trying groq:`, err.message);
+    try {
+      const text = await completeWithGroq(user);
+      recordModelOk("groq");
+      return text;
+    } catch (fallbackErr) {
+      recordModelError("groq", fallbackErr, "router");
+      throw fallbackErr;
     }
-    throw err;
   }
 }
 
@@ -406,7 +416,7 @@ async function completeWithOpenAI(user) {
 async function completeWithGroq(user) {
   const key = usableKey(process.env.GROQ_API_KEY);
   if (!key) throw new Error("No model key is configured");
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const response = await fetch(groqChatUrl(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,
@@ -432,11 +442,6 @@ async function completeWithGroq(user) {
   return stripThink(data.choices?.[0]?.message?.content || "");
 }
 
-function isRateLimitError(err) {
-  const status = err?.status || err?.statusCode || err?.response?.status;
-  if (status === 429) return true;
-  return /\b429\b|rate limit/i.test(String(err?.message || ""));
-}
 
 function normalize(parsed) {
   const intent = INTENTS.has(parsed.intent) ? parsed.intent : "unclear";
@@ -628,7 +633,7 @@ export function rejectsCorrection(text) {
 export function isNoiseReply(text) {
   const value = String(text || "").trim();
   if (!value) return true;
-  return /^(taking a moment\b|request failed\b|dira is busy right now\b|dira couldn't take that in\b|the advisor could not answer\b)/i.test(value);
+  return /^(taking a moment\b|request failed\b|dira is busy right now\b|dira couldn't take that in\b|the advisor could not answer\b|ai answers are (paused|unavailable)\b|the ai took too long\b)/i.test(value);
 }
 
 function applyAnswerFollowUp(classified, text, history, lastAction, fileAttached) {
@@ -781,7 +786,9 @@ export async function extractConversationalFacts(message) {
     const raw = await completeFacts(text.slice(0, 4000));
     parsed = parseFactList(raw).filter((fact) => fact.confidence > 0.75);
   } catch (err) {
-    console.error("[router] fact extract failed:", err.message);
+    // Fact chips are optional: without a model, the heuristic ones (or none) are offered.
+    console.error("[router] fact extract failed:", modelErrorKind(err), err.message);
+    recordModelError(usableKey(process.env.OPENAI_API_KEY) ? "openai" : "groq", err, "fact-chips");
   }
   const facts = (parsed.length ? parsed : heuristicFacts(text)).slice(0, 2);
   console.log("[router] conversational facts:", facts.length);
@@ -806,7 +813,7 @@ async function completeFacts(text) {
   }
   const key = usableKey(process.env.GROQ_API_KEY);
   if (!key) return "{\"facts\":[]}";
-  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+  const response = await fetch(groqChatUrl(), {
     method: "POST",
     headers: {
       Authorization: `Bearer ${key}`,

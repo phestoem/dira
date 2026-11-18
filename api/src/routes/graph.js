@@ -13,6 +13,7 @@ import { categoryOf, listRelationshipTypes, normalizeType } from "../services/gr
 import { groupSuggestions } from "../services/graph/graphQuality.js";
 import { rebuildGraph } from "../services/graph/rebuild.js";
 import { resetGraph } from "../services/graph/reset.js";
+import { modelErrorKind, modelErrorMessage } from "../services/modelStatus.js";
 
 export default async function graphRoutes(fastify) {
   fastify.get("/graph/types", { preHandler: [fastify.authenticate] }, async () => ({
@@ -106,8 +107,8 @@ export default async function graphRoutes(fastify) {
     try {
       extracted = await extractTriples(text, { selfName: self.name, today: new Date().toISOString().slice(0, 10) });
     } catch (err) {
-      const busy = err.status === 429;
-      return reply.code(busy ? 503 : 502).send({ error: busy ? "DIRA is busy right now. Send that again." : "Could not read that connection" });
+      // A fact chip needs the model to read it; say why it could not, in the same words as everywhere else.
+      return reply.code(503).send({ error: modelErrorMessage(modelErrorKind(err)) });
     }
     return commitTriples(request.userId, extracted.triples, { source: "user", entityFacts: extracted.entityFacts });
   });

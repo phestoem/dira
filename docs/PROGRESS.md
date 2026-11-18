@@ -9,6 +9,29 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-18: graceful model failure (see commit after be9fe57).
+  - api/src/services/modelStatus.js tells no credit / rate limit / bad key /
+    timeout / unavailable apart, gives the user-facing message, and keeps
+    each provider's last success and failure for /health (`models`).
+  - Advisor and router try Groq on every OpenAI failure (a credit error
+    used to skip Groq and return 503 "busy").
+  - Open questions answer with the reason + matching records instead of
+    a 503; people questions already fall back to code.
+  - A save never depends on the model: intake falls back to a plain note
+    to confirm; relationship statements whose extraction fails go the
+    same way.
+  - Fact chips fail quietly.
+  - OpenAI/Groq URLs are configurable (OPENAI_BASE_URL, GROQ_BASE_URL) for
+    stub tests.
+  - npm test now runs every test file (it ran graph.test.js only): 19/19,
+    with test/model-failure.test.js (local stub: OpenAI out of credit,
+    Groq down).
+  - Dev API under that stub: golden fixture 11/12 + reset gate with no
+    model at all (properties needs the model; it got the graceful reply),
+    zero 5xx.
+  - Real models: fixture 12/12 + reset gate, live readonly 12/12. A real
+    OpenAI timeout + Groq network blip during the live run fell back to
+    the heuristic router and the case still passed.
 - 2026-11-18: backup proposal ops/backup/ (dira-backup.sh,
   dira-restore-test.sh, env example, README). Tested on dira_dev only:
   retention by count, weekly hard links, restore PASS with all row counts
@@ -45,9 +68,8 @@ missing after the introduction), the same without its last change.
 ## Next steps
 1. Phesto applies the backup proposal; first manual run + restore test
    from R2 should show ok/PASS.
-2. Keys (Phesto creates; dev .env updated here).
-3. Graceful model failure.
-4. Personal data out of main's source into the database.
+2. Keys: skipped for now (Phesto, 2026-11-18).
+3. Personal data out of main's source into the database.
 
 ## Open questions for Phesto
 - None yet.
