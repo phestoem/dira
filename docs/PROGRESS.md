@@ -214,8 +214,13 @@ missing after the introduction), the same without its last change.
   env file; then restic (static binary), restic init, an R2 restore test,
   cron SOURCE=r2.
 - 2026-11-18 (Phesto): "for the backup and restore test, you may read the
-  dira database and create/drop dira_restore_test". Not yet in CLAUDE.md
-  (my edit was blocked by the permission check; Phesto to add it).
+  dira database and create/drop dira_restore_test". Now in CLAUDE.md.
+- 2026-11-18 (Phesto): deploy exception in CLAUDE.md: I may run
+  /opt/qusaz/dira/deploy.sh only after Phesto merged to main, with a
+  backup first and /health + readonly golden against prod after.
+  Passwordless sudo for the dira-api/dira-web restarts (and is-active,
+  which deploy.sh also runs with sudo): Phesto to add
+  /etc/sudoers.d/dira-deploy (needs Phesto's password).
 - 2026-11-18 (Phesto): base on `main`; bridge stays on, simplified;
   digest and nudges stay; nothing removed; backups to the other NUC +
   restic to Cloudflare R2 (7 daily + 4 weekly, monthly restore test);
@@ -249,7 +254,8 @@ Checked 2026-11-18 (read-only, earlier):
 
 ## Open questions for Phesto
 - Keys: still not split (same fingerprints dev/prod). Token logging waits.
-- CLAUDE.md: add the backup exception for the dira database.
+- Sudoers rule for dira-api/dira-web restart + is-active (command given
+  2026-11-18); then merge personal → main to deploy.
 - Journal sharing masks only names that are person records and not
   confirmed. A name with no record at all goes out as written. Mask all
   capitalised names that are not confirmed people too (safer, mangles

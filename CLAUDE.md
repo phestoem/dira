@@ -3,6 +3,15 @@
   API port 4801. Never touch /opt/qusaz/dira, the
   dira database, port 4800, or the dira-api/dira-web
   systemd services.
+  Exceptions (Phesto, 2026-11-18):
+  - Backup and restore test (ops/backup): may read the
+    dira database and create/drop dira_restore_test.
+  - Deploy: may run /opt/qusaz/dira/deploy.sh, which
+    restarts dira-api and dira-web, only after Phesto
+    has merged to main. Take a dira backup first; after
+    it, check /health on 4800 and run the readonly
+    golden check against prod. Never edit files in
+    /opt/qusaz/dira or its .env by hand.
 - Never print or copy secrets from .env.
 - Commit to branch `personal`. Don't push to main;
   I merge after review. Before every commit, check that
