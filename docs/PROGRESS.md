@@ -9,7 +9,7 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
-- 2026-11-18: journal sealed by default, per-entry "Share with Altimetrix"
+- 2026-11-18 `4fe1792`: journal sealed by default, per-entry "Share with Altimetrix"
   (Phesto: default off; only toggled entries go through the bridge;
   confirmed-people rule applies).
   - PATCH /journal/:id { sharedWithAltimetrix }; GET/POST return
