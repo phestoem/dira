@@ -11,6 +11,7 @@ import {
 import { commitTriples } from "../services/graph/relationshipExtractor.js";
 import { categoryOf, listRelationshipTypes, normalizeType } from "../services/graph/relationshipTypes.js";
 import { groupSuggestions } from "../services/graph/graphQuality.js";
+import { flagOn } from "../services/flags.js";
 import { rebuildGraph } from "../services/graph/rebuild.js";
 import { resetGraph } from "../services/graph/reset.js";
 import { modelErrorKind, modelErrorMessage } from "../services/modelStatus.js";
@@ -192,7 +193,10 @@ export default async function graphRoutes(fastify) {
     return resetGraph(request.userId, { dryRun });
   });
 
-  fastify.post("/graph/rebuild", { preHandler: [fastify.authenticate] }, async (request) => {
+  fastify.post("/graph/rebuild", { preHandler: [fastify.authenticate] }, async (request, reply) => {
+    if (!flagOn("DIRA_GRAPH_REBUILD")) {
+      return reply.code(409).send({ error: "Graph rebuilds are paused (DIRA_GRAPH_REBUILD is off). Your records are unchanged." });
+    }
     const body = request.body || {};
     const dryRun = body.dryRun !== false;
     const force = body.force === true;

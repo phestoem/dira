@@ -1,4 +1,5 @@
 import { prisma } from "../../prisma.js";
+import { flagOn } from "../flags.js";
 import { graphAutoExtractEnabled, setGraphAutoExtract } from "./autoExtract.js";
 import { findDuplicateCandidates, getOrCreateSelf, normalizeName, resolveEntity } from "./entityResolver.js";
 import { applySupersession, dedupeProposedNames, isCorrectionEvent } from "./graphQuality.js";
@@ -19,6 +20,7 @@ import { categoryOf, isSensitive, normalizeType } from "./relationshipTypes.js";
 export { graphAutoExtractEnabled, setGraphAutoExtract };
 
 export async function catchUpGraphExtractions() {
+  if (!flagOn("DIRA_GRAPH_REBUILD")) return { skipped: "DIRA_GRAPH_REBUILD is off" };
   const users = await prisma.user.findMany({ select: { id: true, settings: true } });
   for (const user of users) {
     if (!graphAutoExtractEnabled(user.settings)) continue;

@@ -648,6 +648,10 @@ test("after a reset, stated connections save and automatic extraction waits", as
   const user = await prisma.user.create({
     data: { email: `gate-${Date.now()}@example.com`, handle: `gate${Date.now()}`, name: "Ada Tester", settings: { graphAutoExtract: true } },
   });
+  // This checks the per-user setting, so the global switch (paused by default) is on here.
+  const savedFlag = process.env.DIRA_AUTO_EXTRACT;
+  process.env.DIRA_AUTO_EXTRACT = "on";
+  t.after(() => (savedFlag === undefined ? delete process.env.DIRA_AUTO_EXTRACT : (process.env.DIRA_AUTO_EXTRACT = savedFlag)));
   try {
     assert.equal(await autoExtractOn(user.id), true);
     await resetGraph(user.id, { dryRun: false });

@@ -1,4 +1,6 @@
 import { prisma } from "../prisma.js";
+import { flagOn } from "./flags.js";
+import { normalizeName } from "./graph/entityResolver.js";
 
 const TSH_THRESHOLD = 100_000;
 const LARGE_FINANCIAL = 500_000;
@@ -61,16 +63,19 @@ export async function sendLifeEvent(event, userId, diraUser) {
     }
 
     const amount = amountOf(event);
+    const known = await knownPeople(userId);
+    const { shared, withheld } = splitPeople(Array.isArray(event.people) ? event.people : [], known);
+    const hide = [...withheld, ...known.unconfirmed];
     const payload = {
       userId: linkedId,
       eventType: event.altimetrixEventType || mapEventType(event.eventType, amount),
-      title: event.title,
-      context: typeof event.understoodMeaning === "string" ? event.understoodMeaning.slice(0, 200) : null,
+      title: maskNames(event.title, hide),
+      context: typeof event.understoodMeaning === "string" ? maskNames(event.understoodMeaning, hide).slice(0, 200) : null,
       space: event.space,
-      people: Array.isArray(event.people) ? event.people : [],
+      people: shared,
       financials: amount > 0 ? { amount, currency: currencyOf(event) } : null,
       occurredAt: event.occurredAt || event.createdAt,
-      reflectionHint: generateReflectionHint(event),
+      reflectionHint: maskNames(generateReflectionHint(event), hide),
       sourceSystem: "dira",
       sourceEventId: event.id,
     };
@@ -91,7 +96,7 @@ async function postLifeEvent(diraUser, payload, markEventId) {
     }
     if (!diraUser?.altimetrixUserId) return { sent: false };
     const { base, secret } = config;
-    const response = await fetch(`${base}/life-events/ingest`, {
+    const response = await fetchWithRetry(`${base}/life-events/ingest`, {
       method: "POST",
       headers: {
         "X-Bridge-Secret": secret,
@@ -119,13 +124,10 @@ async function postLifeEvent(diraUser, payload, markEventId) {
   }
 }
 
+// Read-only: what comes back is attached to the answer or save as context and never written into people records.
 export async function getAltimetrixContext(topics, entityNames, eventType, diraUser, queryText) {
   try {
     if (!diraUser?.altimetrixUserId) return null;
-    const topicList = cleanList(topics);
-    const names = cleanList(entityNames);
-    if (topicList.length === 0 && names.length === 0) return null;
-
     const config = bridgeConfig();
     if (!config) {
       console.log("[bridge] skipping: not configured");
@@ -133,9 +135,16 @@ export async function getAltimetrixContext(topics, entityNames, eventType, diraU
     }
     const { base, secret } = config;
 
+    const known = await knownPeople(diraUser.id);
+    const askedNames = cleanList(entityNames);
+    const names = askedNames.filter((name) => known.shareable.has(normalizeName(name)));
+    const hide = [...askedNames.filter((name) => !names.includes(name)), ...known.unconfirmed];
+    const topicList = cleanList(topics).filter((topic) => !hide.some((name) => normalizeName(name) === normalizeName(topic)));
+    if (topicList.length === 0 && names.length === 0) return null;
+
     const subject = [...topicList, ...names].join(", ");
     const query = typeof queryText === "string" && queryText.trim()
-      ? queryText.trim().slice(0, 700)
+      ? maskNames(queryText.trim(), hide).slice(0, 700)
       : `What does this person think/feel about: ${subject}?`;
 
     const response = await fetch(`${base}/bridge/context`, {
@@ -151,7 +160,8 @@ export async function getAltimetrixContext(topics, entityNames, eventType, diraU
         entityNames: names,
         eventType: eventType || "personal",
       }),
-      signal: AbortSignal.timeout(8000),
+      // A save waits for this, so a slow Altimetrix only costs a few seconds and then the save goes on without it.
+      signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) return null;
     const data = await response.json();
@@ -181,7 +191,7 @@ export async function fetchAltimetrixNudge(diraUser) {
     url.searchParams.set("userId", diraUser.altimetrixUserId);
     const response = await fetch(url, {
       headers: { "X-Bridge-Secret": config.secret },
-      signal: AbortSignal.timeout(8000),
+      signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) return null;
     const data = await response.json();
@@ -196,12 +206,85 @@ export async function fetchAltimetrixNudge(diraUser) {
   }
 }
 
-// Null when no bridge secret is set; every outbound call to Altimetrix checks this first.
+// Null when DIRA_BRIDGE is off or no bridge secret is set; every outbound call to Altimetrix checks this first.
 export function bridgeConfig() {
+  if (!flagOn("DIRA_BRIDGE")) return null;
   const secret = process.env.ALTIMETRIX_BRIDGE_SECRET || process.env.ALTIMETRIX_WEBHOOK_SECRET;
   if (!secret) return null;
   const base = (process.env.ALTIMETRIX_URL || process.env.ALTIMETRIX_API_URL || "http://localhost:4700").replace(/\/$/, "");
   return { base, secret };
+}
+
+// Only people the user confirmed leave DIRA. A person record counts as confirmed when it is the self or has a confirmed
+// relationship to another record; extracted names without one stay home. Names of places, projects and other
+// non-person records may be shared.
+async function knownPeople(userId) {
+  const entities = await prisma.entity.findMany({
+    where: { userId, status: { not: "archived" }, mergedIntoId: null },
+    select: { id: true, name: true, aliases: true, entityType: true, isSelf: true },
+    take: 1000,
+  });
+  const personIds = entities.filter((entity) => entity.entityType === "person").map((entity) => entity.id);
+  const edges = personIds.length
+    ? await prisma.relationship.findMany({
+        where: { userId, status: "confirmed", fromKind: "entity", toKind: "entity", OR: [{ fromId: { in: personIds } }, { toId: { in: personIds } }] },
+        select: { fromId: true, toId: true },
+      })
+    : [];
+  const linked = new Set(edges.flatMap((edge) => [edge.fromId, edge.toId]));
+  const shareable = new Map();
+  const unconfirmed = [];
+  for (const entity of entities) {
+    const names = [entity.name, ...(entity.aliases || [])].filter(Boolean);
+    const ok = entity.entityType !== "person" || entity.isSelf || linked.has(entity.id);
+    for (const name of names) {
+      if (ok) shareable.set(normalizeName(name), entity.name);
+      else unconfirmed.push(name);
+    }
+    if (ok) shareable.set(entity.id, entity.name);
+  }
+  return { shareable, unconfirmed: unconfirmed.filter((name) => !shareable.has(normalizeName(name))) };
+}
+
+// Event people are [{ name | entityId, role }] (or plain names); unknown or unconfirmed ones are withheld.
+function splitPeople(people, known) {
+  const shared = [];
+  const withheld = [];
+  for (const person of people) {
+    const name = typeof person === "string" ? person : person?.name;
+    const key = typeof person === "object" && person?.entityId ? person.entityId : normalizeName(name);
+    if (key && known.shareable.has(key)) shared.push(typeof person === "string" ? { name: known.shareable.get(key) } : person);
+    else if (name) withheld.push(name);
+  }
+  return { shared, withheld };
+}
+
+function maskNames(text, names) {
+  if (typeof text !== "string" || !names.length) return text;
+  const list = [...new Set(names.map((name) => String(name).trim()).filter((name) => name.length >= 2))].sort((a, b) => b.length - a.length);
+  if (!list.length) return text;
+  const pattern = new RegExp(`(?<![\\p{L}\\d])(${list.map((name) => name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![\\p{L}\\d])`, "giu");
+  return text.replace(pattern, "someone");
+}
+
+// Sending runs after the save has answered; network errors, 429 and 5xx are retried, then the event stays unsent
+// (sentToAltimetrix = false) for the next sync.
+async function fetchWithRetry(url, init, attempts = 3) {
+  const delay = Number(process.env.ALTIMETRIX_RETRY_MS ?? 2000);
+  let last;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      const response = await fetch(url, { ...init, signal: AbortSignal.timeout(8000) });
+      if (response.ok || (response.status < 500 && response.status !== 429) || attempt === attempts) return response;
+      last = new Error(`status ${response.status}`);
+    } catch (err) {
+      last = err;
+      if (attempt === attempts) throw err;
+    }
+    console.log(`[bridge] attempt ${attempt} failed (${last.message}); retrying`);
+    await new Promise((resolve) => setTimeout(resolve, delay * attempt));
+  }
+  throw last;
 }
 
 function cleanList(value) {

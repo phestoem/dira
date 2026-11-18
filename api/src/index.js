@@ -24,6 +24,7 @@ import { bridgeConfig } from "./services/altimetrixBridge.js";
 import { graphAutoExtractEnabled } from "./services/graph/autoExtract.js";
 import { runScheduledDigests } from "./services/digestService.js";
 import { catchUpGraphExtractions } from "./services/graph/rebuild.js";
+import { flagStatus } from "./services/flags.js";
 import { modelStatus } from "./services/modelStatus.js";
 
 mkdirSync("/tmp/dira-uploads", { recursive: true });
@@ -66,7 +67,8 @@ if (process.env.DIRA_DISABLE_CRON === "true") {
     });
   }, { timezone: "Europe/Helsinki" });
 }
-console.log(bridgeConfig() ? "[bridge] configured" : "[bridge] skipping: not configured");
+console.log(`[flags] ${Object.entries(flagStatus()).map(([name, value]) => `${name}=${value}`).join(" ")}`);
+console.log(bridgeConfig() ? "[bridge] configured" : "[bridge] skipping: off or not configured");
 console.log(`[graph] auto-extract for users without a setting: ${graphAutoExtractEnabled({}) ? "on" : "off"} (GRAPH_AUTO_EXTRACT)`);
 
 app.get("/health", async () => ({
@@ -76,6 +78,7 @@ app.get("/health", async () => ({
   capabilities: ["readonly-header"],
   // Last success and failure per model provider (no secrets), so a dead key or empty credit shows here first.
   models: modelStatus(),
+  flags: flagStatus(),
 }));
 
 app.setErrorHandler((error, request, reply) => {

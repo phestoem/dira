@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
+import { flagOn } from "./flags.js";
 import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 import { isNoiseReply } from "./intentRouter.js";
@@ -184,6 +185,7 @@ Never extract journal entries or private reflections.
 The journal is sealed and is not a source of facts.`;
 
 export async function detectSignificantFacts(userMessage, userId) {
+  if (!flagOn("DIRA_FACT_CHIPS")) return [];
   const text = typeof userMessage === "string" ? userMessage.trim() : "";
   if (text.length < 8) return [];
   const apiKey = process.env.OPENAI_API_KEY;

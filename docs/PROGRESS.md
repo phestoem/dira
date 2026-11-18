@@ -9,6 +9,35 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-18: pause flags + simplified bridge.
+  - api/src/services/flags.js: DIRA_BRIDGE (default on), DIRA_AUTO_EXTRACT,
+    DIRA_GRAPH_REBUILD, DIRA_FACT_CHIPS (default off). on/off/true/false/
+    1/0/yes/no; anything else keeps the default. Logged at startup and in
+    /health (`flags`).
+  - DIRA_AUTO_EXTRACT=off pauses automatic extraction for every user,
+    whatever their graphAutoExtract setting; it covers saves, journal,
+    visions and the passive conversation extraction (all go through
+    autoExtractOn). Stated + confirmed connections still save.
+  - DIRA_GRAPH_REBUILD=off: POST /graph/rebuild answers 409, the hourly
+    catch-up skips. Reset still works.
+  - DIRA_FACT_CHIPS=off: no model call, no chips (home and advisor).
+  - Bridge: DIRA_BRIDGE=off makes bridgeConfig() null, so nothing goes
+    out. When on, only confirmed people leave DIRA: a person record counts
+    as confirmed when it is the self or has a confirmed entity–entity
+    relationship. Other names are dropped from `people`/`entityNames`/
+    topics and replaced by "someone" in title, context, hint and query.
+    Names of places, projects etc. still go. Sends run after the save
+    (setImmediate, as before), retry 3x on network/429/5xx (2 s, 4 s),
+    8 s timeout each; on failure the event stays unsent for the next sync.
+    The context fetch (a save waits for it) now times out at 3 s instead
+    of 8 s; so does the nudge. Altimetrix replies are only attached as
+    context; nothing it returns writes records (it suggests no people
+    today, so there is nothing to route to confirmation yet).
+  - test/flags.test.js (local stub plays Altimetrix and the model).
+    graph.test.js's per-user auto-extract test turns the global switch on.
+  - npm test 30/30; golden fixture 12/12 + reset gate
+    (logs/golden-flags-fixture.log); live readonly 12/12
+    (logs/golden-flags-live.log); zero 5xx in the API log.
 - 2026-11-18: personal data out of main's source.
   - test/contamination.test.js fails on any name, place, identifier or
     golden sentence from Phesto's records in api/src or web/ (words from
@@ -90,10 +119,17 @@ missing after the introduction), the same without its last change.
    from R2 should show ok/PASS.
 2. Keys: skipped for now (Phesto, 2026-11-18).
 3. The rest of the plan, in its order (docs/PERSONAL_SCOPE.md section 7):
-   pause flags, token/latency logging, cherry-pick beb392c, code answers
+   token/latency logging, cherry-pick beb392c, code answers
    for people questions + date precision, My people page, open-question
    path, deploy script.
 
 ## Open questions for Phesto
+- The bridge sends events (intake, home, email, queue) and relationship
+  shifts. Journal entries are not sent today, and documents only as the
+  events they become. You listed "events, journal and documents": should
+  journal entries start going to Altimetrix? (Not added: "as now".)
+- api/test/graph.test.js has fixtures with your real identifiers (a plot
+  number, places, a witness name). Should test fixtures be made synthetic
+  too? (The golden cases are your records by design, as the family test.)
 - When deploying: set DIGEST_FROM in prod .env (the digest sender was your
   own address in code; the default is now dira@qusaz.com).

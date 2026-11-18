@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
+import { flagOn } from "./flags.js";
 import { isRelationshipStatement, namesPersonWithRole } from "./graph/familyStatement.js";
 import { isPeopleQuestion } from "./graph/peopleGrounding.js";
 import { groqChatUrl, modelErrorKind, recordModelError, recordModelOk } from "./modelStatus.js";
@@ -779,6 +780,7 @@ Opinions and questions are not facts.
 Return { "facts": [] } if nothing specific.`;
 
 export async function extractConversationalFacts(message) {
+  if (!flagOn("DIRA_FACT_CHIPS")) return [];
   const text = String(message || "").trim();
   if (text.length < 12) return [];
   let parsed = [];
