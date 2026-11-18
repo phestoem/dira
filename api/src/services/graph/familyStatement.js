@@ -25,7 +25,7 @@ const NOT_A_NAME = new Set([
   "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", ...Object.keys(MONTHS),
 ]);
 
-// A connection to save needs someone named and what they are to you: "My sister Jeni", "Juma supervises Kitunda".
+// A connection to save needs someone named and what they are to you: "My sister Sigrun", "Juma supervises Hofsos".
 // Feelings, counts and "my family" on their own never qualify.
 export function namesPersonWithRole(text) {
   const value = String(text || "");
@@ -157,7 +157,7 @@ function readPerson(clause, triples, facts, seen) {
     }
     return;
   }
-  // "My brother Juma Enock Mwakyusa was born on 1 March 1990", "my son Powell"
+  // "My brother Jon Gunnar Arason was born on 1 March 1990", "my son Leifur"
   const relative = matchRole(clause, /\b(?:my|our) (sister|brother|son|daughter)\s+(?:is\s+)?/i);
   if (relative) {
     const kind = relative.role.toLowerCase();

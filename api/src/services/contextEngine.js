@@ -1,3 +1,4 @@
+import { placesIn, userPlaceNames } from "./userPlaces.js";
 import { modelErrorMessage, recordModelError, recordModelOk } from "./modelStatus.js";
 import { extname } from "path";
 import OpenAI from "openai";
@@ -368,7 +369,7 @@ async function interpretContent(rawText) {
     recordModelOk("openai");
     return normalizeUnderstood(parsed);
   } catch (err) {
-    // A save never depends on the model: without one, the text is kept as a plain note for Phesto to confirm.
+    // A save never depends on the model: without one, the text is kept as a plain note for the user to confirm.
     const kind = recordModelError("openai", err, "intake");
     console.error(`[intake] understanding failed (${kind}), saving as a plain note:`, err.message);
     return plainNote(rawText, kind);
@@ -761,7 +762,7 @@ export async function detectVisionInJournalEntry(entry, userId) {
 async function understandWithContext(rawText, userId, eventType) {
   const understood = await interpretContent(rawText);
   const user = await prisma.user.findUnique({ where: { id: userId } });
-  const topics = contextTopics(rawText, understood);
+  const topics = contextTopics(rawText, understood, await userPlaceNames(userId).catch(() => []));
   const entityNames = await expandGraphNames(userId, contextNames(rawText, understood)).catch(() => contextNames(rawText, understood));
   console.log(
     "[intake] altimetrix query:",
@@ -836,13 +837,13 @@ function contextQuery(rawText, understood) {
   return [bits.join(". "), note].filter(Boolean).join(" — ").slice(0, 700);
 }
 
-function contextTopics(rawText, understood) {
+function contextTopics(rawText, understood, places = []) {
   const people = Array.isArray(understood?.people) ? understood.people : [];
   return uniqueNeedles([
     ...phraseParts(understood?.location),
     ...phraseParts(understood?.project),
     ...people.flatMap((person) => phraseParts(person)),
-    ...extractQuickTopics(rawText),
+    ...extractQuickTopics(rawText, places),
     ...phraseParts(understood?.title),
   ]).slice(0, 8);
 }
@@ -868,11 +869,10 @@ function phraseParts(value) {
   return [words.join(" "), ...words];
 }
 
-function extractQuickTopics(text) {
+// places: the user's own place names (userPlaces.js); the activity words are general.
+function extractQuickTopics(text, places = []) {
   const source = String(text || "");
-  const locationWords = source.match(
-    /\b(Tanzania|Zanzibar|Mbeya|Dar|Helsinki|Finland|Jambiani|Arusha|Nairobi)\b/gi,
-  ) || [];
+  const locationWords = placesIn(source, places);
   const activityWords = source.match(
     /\b(farming|electrical|construction|fence|property|house|land|investment|business|family|health|travel|retirement|project|camp(?:ing)?|tent|visitors?|stays?|guesthouse|lodge|hotel)\b/gi,
   ) || [];

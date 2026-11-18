@@ -3,7 +3,8 @@ import { prisma } from "../prisma.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const APP_URL = "https://dira.qusaz.com";
-const FROM = "DIRA <phesto@qusaz.com>";
+// The digest's sender is configuration, not code: DIGEST_FROM in .env (an address on the verified sending domain).
+const FROM = process.env.DIGEST_FROM || "DIRA <dira@qusaz.com>";
 
 export async function generateDigest(userId) {
   const today = helsinkiDate(new Date());

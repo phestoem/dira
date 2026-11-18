@@ -13,8 +13,8 @@ type FactCardState = {
 
 const FALLBACK = [
   "What should I focus on this week?",
-  "Help me plan the next phase of Ntabha",
-  "How am I tracking against my Tanzania timeline?",
+  "Help me plan the next phase of my main project",
+  "How am I tracking against my plans?",
 ];
 
 export default function AdvisorPage() {

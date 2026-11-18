@@ -37,10 +37,10 @@ Intent types:
 - correction: they are correcting something DIRA
   said or did in this conversation
 - relationship_add: they state a connection to remember
-  ("Burton supervises the house", "Neema is my sister",
+  ("Ragnar supervises the house", "Hulda is my sister",
    "Otina anasimamia nyumba")
 - relationship_change: a connection ended or changed
-  ("Burton no longer supervises", "we sold the car",
+  ("Ragnar no longer supervises", "we sold the car",
    "dada yangu amehama")
 - graph_query: they ask who is connected, how they are
   connected, for a family tree, or who they sent
@@ -96,32 +96,32 @@ If unsure, none.
 alternatives has at most 2 other readings.
 
 Examples:
-'Here is the receipt for Ntabha land purchase' + file
+'Here is the receipt for Selfoss land purchase' + file
 → intent: intake_file, confidence: 0.95
 
-'How much have I spent in Tanzania this year?'
+'How much have I spent in Iceland this year?'
 → intent: question, confidence: 0.92
 
-'Burton supervises all my Mbeya projects'
+'Ragnar supervises all my Akureyri projects'
 → intent: relationship_add, confidence: 0.9
 
-'Neema ni dada yangu'
+'Hulda ni dada yangu'
 → intent: relationship_add, confidence: 0.9
 
-'My family: my father Enock Mwakyusa passed away on 25 April 2004 and my mother Froidah Biniala Kyando lives in our family home in Mbeya. My sisters are Jeni, Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda Goodluck Mambosho. My children are Careen (my eldest daughter, born before my marriage), Patrick, Presley, Powell and Prisha.'
+'My family: my father Gunnar Arason passed away on 12 March 2001 and my mother Hekla Bjorg Olafsdottir lives in our family home in Akureyri. My sisters are Sigrun, Thora, Hulda and Edda Gunnar Arason. My wife is Asta Kristin Jonsdottir. My children are Ylfa (my eldest daughter, born before my marriage), Einar, Kari, Leifur and Brynja.'
 → intent: relationship_add, confidence: 0.93
    Dates and places in a family introduction are facts about those people, not a new event.
 
-'Burton no longer supervises Mbeya'
+'Ragnar no longer supervises Akureyri'
 → intent: relationship_change, confidence: 0.88
 
-'Who is connected to the Mbeya home?'
+'Who is connected to the Akureyri home?'
 → intent: graph_query, confidence: 0.9
 
 'How am I connected to Otina?'
 → intent: graph_query, confidence: 0.9
 
-'Nani ameunganishwa na Mbeya?'
+'Nani ameunganishwa na Akureyri?'
 → intent: graph_query, confidence: 0.86
 
 'Fix the dates on my events'
@@ -134,11 +134,11 @@ Examples:
 'I felt really proud of my children today'
 → intent: journal, confidence: 0.90
 
-'The Mbeya electrical cost was 2.4M TSH not 2.3M'
+'The Akureyri electrical cost was 2.4M TSH not 2.3M'
 → intent: correction, confidence: 0.85
 
 conversationHistory shows DIRA just described
-Tent Camping Plans in Tuliza Nafsi.
+Garden Cabin Plans in Lakeview.
 'Not that, I meant the tent spots are part of the landscaping'
 → intent: correction, confidence: 0.9
    The previous exchange is the subject, not a new event.
@@ -206,7 +206,7 @@ cost 2,399,500 TSH. The items include wire,
 switches, and labour.'
 
 GOOD EXAMPLE — factual question:
-'Your Toyota Prado chassis number is RZJ1200017194.'
+'Your Toyota Prado chassis number is VIN00012345678.'
 
 BAD EXAMPLE — same question:
 'Based on the Motor Vehicle Registration document
@@ -772,7 +772,7 @@ function stripThink(text) {
 const FACT_CATEGORIES = new Set(["person", "date", "place", "event", "financial", "relationship"]);
 const FACT_PROMPT = `Extract any specific biographical or life facts from this message. Return JSON:
 { "facts": [{ "fact": string, "category": "person" | "date" | "place" | "event" | "financial" | "relationship", "suggestedTitle": string, "confidence": 0-1 }] }
-A relationship fact uses suggestedTitle like "Link: Neema — sister of you".
+A relationship fact uses suggestedTitle like "Link: Hulda — sister of you".
 Only return facts that are specific and saveable.
 Names, dates, and places are facts.
 Opinions and questions are not facts.

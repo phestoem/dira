@@ -22,7 +22,7 @@ export function isPeopleQuestion(text) {
   const value = String(text || "").trim();
   if (!value) return false;
   if (/\b(my|our)\s+(sisters|brothers|children|sons|daughters|wife|husband|father|mother)\s+(are|is)\b/i.test(value)) return false;
-  // "My sisters' birthdays: Jeni was born on 4 December 1980, …" tells; it doesn't ask.
+  // "My sisters' birthdays: Sigrun was born on 9 October 1979, …" tells; it doesn't ask.
   if (!value.includes("?") && !/^(?:please\s+)?(?:who|what|when|where|which|how|list|show|name|tell|give|remind|do|does|did|is|are)\b/i.test(value) && /\b(born|married|died|passed away)\b/i.test(value)) return false;
   if (/\b(family tree|who is|who's|who are|how old|birthdays?|birth dates?|relatives)\b/i.test(value)) return true;
   if (/\bhow many\b/i.test(value) && /\b(kids|children|sons|daughters|sisters|brothers)\b/i.test(value)) return true;
@@ -324,7 +324,7 @@ export function peopleFromTree(tree) {
   return rows;
 }
 
-// Event wording can say "my sister Jeni" where the edge only says sibling_of.
+// Event wording can say "my sister Sigrun" where the edge only says sibling_of.
 function refineKinds(people, records) {
   for (const person of people) {
     const choices = ROLE_KINDS[person.role];
@@ -335,11 +335,11 @@ function refineKinds(people, records) {
 }
 
 const RECORD_LINE = "From your records — confirm in Review to lock it in.";
-// "Prisha - Neema" is one name; reading it as "Neema" would hand the date to a sister.
+// "Brynja - Hulda" is one name; reading it as "Hulda" would hand the date to a sister.
 const NAME = "[\\p{Lu}][\\p{L}'’\\-]+(?:(?:\\s+[-–]\\s+|\\s+)[\\p{Lu}][\\p{L}'’\\-]+){0,3}";
 const MONTH_WORDS = Object.keys(MONTHS).sort((a, b) => b.length - a.length).map(anyCase).join("|");
 const DAY = "\\d{1,2}(?:st|nd|rd|th)?";
-// "3 February 1993", "25th of April 1977", "February 3rd, 1993", "Feb 17th 1978", "2006-08-05".
+// "7 June 1991", "25th of April 1977", "June 7th, 1991", "Feb 17th 1978", "2004-05-21".
 const DATE = `(?:${DAY}\\s+(?:of\\s+)?(?:${MONTH_WORDS})\\.?,?\\s+\\d{4}|(?:${MONTH_WORDS})\\.?\\s+${DAY},?\\s+\\d{4}|\\d{4}-\\d{2}-\\d{2})`;
 const DATE_RE = new RegExp(DATE, "gi");
 const KIN_WORDS = {
@@ -378,34 +378,34 @@ function collectKinship(text, eventId, people, records) {
     const resolved = resolveRecord(raw, people);
     if (resolved) mergeRecord(records, { ...resolved, kind, eventId, birthDate: null, deathDate: null, marriageDate: null });
   };
-  // "my sister Jeni", "our second son Presley", "the older son, Patrick", "your father Enock", "my wife is Zelda"
-  // Without my/our/your/the, only the "son, Patrick" form counts; "her mother Emmiliana" is someone else's.
+  // "my sister Sigrun", "our second son Kari", "the older son, Einar", "your father Gunnar", "my wife is Asta"
+  // Without my/our/your/the, only the "son, Einar" form counts; "her mother Ingrid" is someone else's.
   const before = new RegExp(`(\\b(?:[Mm]y|[Oo]ur|[Yy]our|[Tt]he)\\s+)?${ORDER}?\\b(${KIN})\\b(,?)\\s+(?:(?:is|was|named|called)\\s+)?(${NAME})`, "gu");
   for (const match of text.matchAll(before)) {
     if (!match[1] && !match[3]) continue;
     add(match[4], KIN_WORDS[match[2].toLowerCase()]);
   }
-  // "Careen is my eldest daughter", "Powell is our third son"
+  // "Ylfa is my eldest daughter", "Leifur is our third son"
   for (const match of text.matchAll(new RegExp(`(${NAME})\\s+is\\s+(?:my|our|your)\\s+${ORDER}?(${KIN})\\b`, "gu"))) {
     add(match[1], KIN_WORDS[match[2].toLowerCase()]);
   }
-  // "I am the father of Careen", "The speaker is the father of Careen"
+  // "I am the father of Ylfa", "The speaker is the father of Ylfa"
   for (const match of text.matchAll(new RegExp(`\\b(?:I am|I'm|[Tt]he speaker is|[Uu]ser is)\\s+the\\s+(?:father|mother|parent)\\s+of\\s+(${NAME})`, "gu"))) {
     add(match[1], "child");
   }
-  // "Froidah Biniala Kyando … married to my father"
+  // "Hekla Bjorg Olafsdottir … married to my father"
   const partner = text.match(/\bmarried to (?:my|our|your) (father|mother|dad|mum|mom)\b/i);
   if (partner) {
     const first = candidateNames(text.slice(0, partner.index)).find((name) => resolveRecord(name, people));
     if (first) add(first, parentKind(partner[1]) === "father" ? "mother" : "father");
   }
-  // Swahili: "mke wangu ni Zelda", "baba yangu ni Enock"
+  // Swahili: "mke wangu ni Asta", "baba yangu ni Gunnar"
   for (const match of text.matchAll(new RegExp(`\\b(mke|mume|baba|mama)\\s+(?:wangu|yangu)(?:\\s+ni)?\\s+(${NAME})`, "gu"))) {
     add(match[2], { mke: "wife", mume: "husband", baba: "father", mama: "mother" }[match[1].toLowerCase()]);
   }
 }
 
-// "I have four sisters: Jeni, Leah, Neema and Zenah", "my children are …", "You have sisters Jeni, Leah …"
+// "I have four sisters: Sigrun, Thora, Hulda and Edda", "my children are …", "You have sisters Sigrun, Thora …"
 function collectLists(text, eventId, people, records) {
   const lists = [
     new RegExp(`\\b(?:[Mm]y|[Oo]ur|[Yy]our)\\s+(?:\\w+\\s+)?(children|kids|sons|daughters|sisters|brothers|siblings)\\s+(?:are|include)\\s+(.+)$`, "u"),
@@ -432,23 +432,23 @@ function splitNameList(text) {
 function collectDatedNames(text, eventId, people, records) {
   const aboutBirth = /\b(born|birth|birthdays?|welcomed)\b/i.test(text);
   if (aboutBirth) {
-    // "Zenah … was born on February 3rd, 1993", "Patrick was born in Helsinki on September 25, 2008", "Powell, born on 30 May 2015"
+    // "Edda … was born on June 7th, 1991", "Einar was born in Reykjavik on April 2, 2009", "Leifur, born on 14 July 2016"
     for (const match of text.matchAll(new RegExp(`(${NAME}),?\\s+(?:was\\s+)?born\\b[^.!?]{0,60}?(${DATE})`, "gu"))) {
       addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
     }
-    // "On 11th December 2012 our second son Presley was born"
+    // "On 3rd November 2013 our second son Kari was born"
     for (const match of text.matchAll(new RegExp(`\\b[Oo]n\\s+(${DATE}),?\\s+(?:[^.!?]{0,40}?\\s)?(${NAME})\\s+was\\s+born\\b`, "gu"))) {
       addDate(records, people, match[2], eventId, { birthDate: spokenDate(match[1]) });
     }
   }
-  // "… Presley on 11 December 2012 and Prisha on 20 June 2020"; a bare "Leah 14 Dec 1983" only for someone known.
+  // "… Kari on 3 November 2013 and Brynja on 8 January 2019"; a bare "Thora 22 Jan 1982" only for someone known.
   for (const match of text.matchAll(new RegExp(`(${NAME}),?\\s+(?:on\\s+)?(${DATE})`, "gu"))) {
     const lead = text.slice(Math.max(0, match.index - 40), match.index);
     if (/\b(marriage|married|engagement|engaged|passed away|died|registered)\b/i.test(lead)) continue;
     if (!aboutBirth && !resolveRecord(match[1], people)?.personId) continue;
     addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
   }
-  // "Enock Mwakyusa, born … in Rungwe, Mbeya, and he died on 25 April 2004": the person is the
+  // "Gunnar Arason, born … in Dalvik, Akureyri, and he died on 12 March 2001": the person is the
   // first known name before the verb, not the nearest capitalised word (which is often a place).
   for (const match of text.matchAll(new RegExp(`\\b(?:passed away|died)\\s+(?:on\\s+)?(${DATE})`, "gu"))) {
     const names = candidateNames(text.slice(0, match.index));
@@ -457,7 +457,7 @@ function collectDatedNames(text, eventId, people, records) {
   }
 }
 
-// "I married Zelda … on 5 August 2006", "marriage to Zelda", "we got married on 5th August 2006", "Zelda joined me"
+// "I married Asta … on 21 May 2004", "marriage to Asta", "we got married on 21st May 2004", "Asta joined me"
 function collectMarriage(text, eventId, people, records) {
   if (!/\b(married|marriage|wedding|wed|engaged|engagement|joined me)\b/i.test(text)) return;
   const date = /\bengag/i.test(text) && !/\b(married|marriage|wedding)\b/i.test(text) ? null : marriageDateIn(text);
@@ -477,7 +477,7 @@ function collectMarriage(text, eventId, people, records) {
       mergeRecord(records, { ...resolved, kind: "spouse", eventId, birthDate: null, deathDate: null, marriageDate: date });
     }
   }
-  // "we got married on 5th August 2006" names nobody; it still dates the marriage.
+  // "we got married on 21st May 2004" names nobody; it still dates the marriage.
   if (!named && date && /\b(we|I)\b[^.!?]{0,20}\b(got married|married|wedding)\b|\bmy (wife|husband)\b/i.test(text) && !/\bparents\b/i.test(text)) {
     const kind = /\bmy wife\b/i.test(text) ? "wife" : /\bmy husband\b/i.test(text) ? "husband" : "spouse";
     records.push({ name: "", personId: null, kind, eventId, birthDate: null, deathDate: null, marriageDate: date });

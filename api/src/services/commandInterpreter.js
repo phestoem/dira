@@ -1,3 +1,4 @@
+import { placesIn, userPlaceNames } from "./userPlaces.js";
 import { randomUUID } from "crypto";
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
@@ -48,27 +49,27 @@ Return JSON:
 }
 
 Examples:
-'Change Ntagha to Ntabha in Mbeya land' →
+'Change Selfos to Selfoss in Akureyri land' →
   intentType: correction
-  correction: { findText: 'Ntagha', replaceText: 'Ntabha',
-                scope: 'Mbeya land', recordType: 'all' }
-'Which projects completed last year in Mbeya' →
+  correction: { findText: 'Selfos', replaceText: 'Selfoss',
+                scope: 'Akureyri land', recordType: 'all' }
+'Which projects completed last year in Akureyri' →
   intentType: query
   query: { entities: ['projects'],
-           filters: { location: 'Mbeya',
+           filters: { location: 'Akureyri',
                      timeframe: 'last year',
                      status: 'completed' },
            aggregation: 'list' }
-'When was I in Mbeya for Ntabha purchase,
- include Mbeya repair cost' →
+'When was I in Akureyri for Selfoss purchase,
+ include Akureyri repair cost' →
   intentType: query
-  query: { entities: ['Ntabha purchase', 'Mbeya repair'],
-           filters: { location: 'Mbeya' },
+  query: { entities: ['Selfoss purchase', 'Akureyri repair'],
+           filters: { location: 'Akureyri' },
            aggregation: 'list',
            includeRelated: ['costs', 'dates'] }
-'Mark Tuliza Nafsi landscaping as complete' →
+'Mark Lakeview landscaping as complete' →
   intentType: action
-  action: { verb: 'mark', target: 'Tuliza Nafsi landscaping',
+  action: { verb: 'mark', target: 'Lakeview landscaping',
             value: 'completed' }
 'Fix the dates' →
   intentType: system_fix
@@ -143,7 +144,7 @@ export async function interpretCommand(input, userId) {
   if (!text) throw httpError("Tell DIRA what you want", 400);
   if (text.length > 2000) throw httpError("That command is too long", 400);
 
-  const classified = await classifyIntent(text);
+  const classified = await classifyIntent(text, userId);
   console.log("[command]", classified.intentType, text.slice(0, 120));
 
   if (shouldClarify(classified)) {
@@ -663,8 +664,8 @@ function looksLikeSystemDateFix(input) {
   return false;
 }
 
-async function classifyIntent(input) {
-  const hints = hintFilters(input);
+async function classifyIntent(input, userId) {
+  const hints = hintFilters(input, await userPlaceNames(userId).catch(() => []));
   try {
     const parsed = await classifyWithModel(input);
     return enrichClassification(preferSystemDateFix(parsed, input), hints);
@@ -1258,12 +1259,13 @@ export function parseCommandTimeframe(phrase, now = new Date()) {
   return null;
 }
 
-function hintFilters(input) {
+// places: the user's own place names (userPlaces.js), so a place is recognised without "in" before it.
+function hintFilters(input, places = []) {
   const text = input.toLowerCase();
   const locationMatch = input.match(/\bin\s+([A-Z][A-Za-z]+(?:\s+[A-Z][A-Za-z]+)?)/);
-  const known = input.match(/\b(Tanzania|Zanzibar|Mbeya|Dar|Helsinki|Finland|Jambiani|Arusha|Nairobi|Ntabha)\b/i);
+  const known = placesIn(input, places)[0] || null;
   return {
-    location: locationMatch?.[1] || known?.[1] || null,
+    location: locationMatch?.[1] || known || null,
     timeframe: detectTimeframe(text),
     space: ["personal", "family", "professional", "vision"].find((space) => new RegExp(`\\b${space}\\b`).test(text)) || null,
     status: detectStatus(text),

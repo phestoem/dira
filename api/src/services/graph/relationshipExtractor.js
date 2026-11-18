@@ -18,17 +18,17 @@ function extractPrompt() {
 Return JSON only:
 { "triples": [{ "subject": { "name": "", "type": "person|place|property|project|organisation|asset|vehicle|self" }, "predicate": "", "object": { "name": "", "type": "" }, "validFrom": null, "validTo": null, "attributes": {}, "confidence": 0.5, "evidence": "" }], "entityFacts": [{ "name": "", "birthDate": null, "deathDate": null, "kind": null }] }
 Rules:
-- Subjects and objects must be real-world things: a person, place, property, project, organisation, vehicle, or named asset (for example "Plot P9104").
+- Subjects and objects must be real-world things: a person, place, property, project, organisation, vehicle, or named asset (for example "Plot B12").
 - Money amounts, dates, durations, percentages, quantities and statuses go in "attributes", never in subject or object.
 - Predicates must be one of: ${predicates}.
   Synonyms are accepted: mama, mum, mother, dada, mke, mume, mtoto, fundi, msimamizi, ananunua, alinunua, supervises, owns, occupies, married, alioa, studies at, sold to, sent money to.
   If no listed predicate fits, omit the triple.
 - Prefer relationships between people, places and assets over describing a single event's properties.
 - The narrator is the SELF named in the user message. "I", "me", "my", "mimi", "yangu", and every spelling of that person's name are type self. Never map the narrator to any other person.
-- Possessive kinship ("my wife", "my husband", "my father", "my mother", "my children", "mke wangu", "baba yangu") always connects that person to the narrator, one clause at a time. Never attach "my wife" to another person mentioned nearby. Keep every word of a name ("Zelda Goodluck Mambosho", "Prisha Neema").
+- Possessive kinship ("my wife", "my husband", "my father", "my mother", "my children", "mke wangu", "baba yangu") always connects that person to the narrator, one clause at a time. Never attach "my wife" to another person mentioned nearby. Keep every word of a name ("Asta Kristin Jonsdottir", "Brynja Hulda").
 - Only output a family relationship when the text states it explicitly. A shared surname or middle name is not evidence of any relationship.
 - Words such as wife, husband, parents, mother, father, children, sisters and family are not names. Use the person's name, or omit the triple.
-- Do not output generic activities (landscaping, purchase, renovation), money words (cash, payment, cost, fee), or identifier numbers (TIN, application, chassis) as subject or object. A named project such as "Kisarawe House Renovation" is allowed.
+- Do not output generic activities (landscaping, purchase, renovation), money words (cash, payment, cost, fee), or identifier numbers (TIN, application, chassis) as subject or object. A named project such as "Borgarnes House Renovation" is allowed.
 - "issued" is administrative. Omit it.
 - A death or birth is an entityFact (deathDate or birthDate), never a triple.
 - Do not invent family links that were not said.
@@ -39,10 +39,10 @@ Rules:
 - Work in English or Swahili.
 
 Bad: { "subject": { "name": "Electrical Works", "type": "project" }, "predicate": "hasTotalContractValue", "object": { "name": "2,399,500 TSH", "type": "asset" } }
-Bad: { "subject": { "name": "Plot P9104", "type": "property" }, "predicate": "dated", "object": { "name": "12 May 2024", "type": "other" } }
-Good: { "subject": { "name": "Burton", "type": "person" }, "predicate": "supervises", "object": { "name": "Mbeya Home", "type": "property" } }
-Good: { "subject": { "name": "me", "type": "self" }, "predicate": "owns", "object": { "name": "Plot P9104", "type": "property" } }
-Good: { "subject": { "name": "me", "type": "self" }, "predicate": "sent_money_to", "object": { "name": "Makoba", "type": "person" }, "attributes": { "amount": 50000, "currency": "TSH" } }`;
+Bad: { "subject": { "name": "Plot B12", "type": "property" }, "predicate": "dated", "object": { "name": "12 May 2024", "type": "other" } }
+Good: { "subject": { "name": "Ragnar", "type": "person" }, "predicate": "supervises", "object": { "name": "Akureyri Home", "type": "property" } }
+Good: { "subject": { "name": "me", "type": "self" }, "predicate": "owns", "object": { "name": "Plot B12", "type": "property" } }
+Good: { "subject": { "name": "me", "type": "self" }, "predicate": "sent_money_to", "object": { "name": "Halla", "type": "person" }, "attributes": { "amount": 50000, "currency": "TSH" } }`;
 }
 
 export async function extractTriples(text, context = {}) {

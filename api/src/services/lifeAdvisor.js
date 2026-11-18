@@ -39,7 +39,7 @@ Your responses:
    lists for options or action items)
 - Be conversational but substantive
 - Reference specific data points naturally
-  ('your Ntabha land purchase in July',
+  ('your Selfoss land purchase in July',
    'the 2.4M TSH electrical project')
 - Connect dots across different areas when relevant`;
 
@@ -101,7 +101,7 @@ cost 2,399,500 TSH. The items include wire,
 switches, and labour.'
 
 GOOD EXAMPLE — factual question:
-'Your Toyota Prado chassis number is RZJ1200017194.'
+'Your Toyota Prado chassis number is VIN00012345678.'
 
 BAD EXAMPLE — same question:
 'Based on the Motor Vehicle Registration document
@@ -359,7 +359,7 @@ function buildSystemPrompt(context) {
 You have access to ALL of the user's events.
 Use semantic understanding to find relevant ones —
 do not rely on exact keyword matching.
-'Mbeya project' should find events about Mbeya
+'Akureyri project' should find events about Akureyri
 even if the word 'project' doesn't appear.
 'car' should find vehicle registration events.
 'land' should find property purchase events.

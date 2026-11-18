@@ -9,6 +9,26 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-18: personal data out of main's source.
+  - test/contamination.test.js fails on any name, place, identifier or
+    golden sentence from Phesto's records in api/src or web/ (words from
+    the golden cases + a list of identifiers the cases do not mention).
+    It found 57 lines in 10 files.
+  - Place lists hardcoded in two regexes (command hints, Altimetrix
+    topics) now come from the user's own place entities
+    (src/services/userPlaces.js, cached 5 min). dira_dev has 28 places,
+    covering 8 of the 10 old names.
+  - Prompt examples and comments use invented names, places, dates and
+    identifiers (none of them is executable logic).
+  - Web examples (command bar, advisor) are generic.
+  - Digest sender is DIGEST_FROM (default "DIRA <dira@qusaz.com>").
+    **Prod .env needs DIGEST_FROM set to keep the old sender.**
+  - Left as configuration: the Europe/Helsinki time zone of cron and
+    digest (a later setting).
+  - npm test 21/21; golden fixture 12/12 + reset gate; live readonly
+    11/12. `properties` is flaky: the model-written answer sometimes
+    omits one property, 1 of 2 re-runs passed; the same failure is in the
+    baseline. Code answers (plan items 9/11) fix it.
 - 2026-11-18: graceful model failure (see commit after be9fe57).
   - api/src/services/modelStatus.js tells no credit / rate limit / bad key /
     timeout / unavailable apart, gives the user-facing message, and keeps
@@ -69,7 +89,11 @@ missing after the introduction), the same without its last change.
 1. Phesto applies the backup proposal; first manual run + restore test
    from R2 should show ok/PASS.
 2. Keys: skipped for now (Phesto, 2026-11-18).
-3. Personal data out of main's source into the database.
+3. The rest of the plan, in its order (docs/PERSONAL_SCOPE.md section 7):
+   pause flags, token/latency logging, cherry-pick beb392c, code answers
+   for people questions + date precision, My people page, open-question
+   path, deploy script.
 
 ## Open questions for Phesto
-- None yet.
+- When deploying: set DIGEST_FROM in prod .env (the digest sender was your
+  own address in code; the default is now dira@qusaz.com).

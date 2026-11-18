@@ -11,10 +11,10 @@ import {
 import { getAccessToken } from "@/lib/auth";
 
 const EXAMPLES = [
-  "Change Ntagha to Ntabha in Mbeya land",
-  "Which events are in Zanzibar?",
-  "Mark Tuliza Nafsi fence as active",
-  "When did I buy land in Ntabha?",
+  "Fix a misspelled name in my records",
+  "Which events happened last month?",
+  "Mark a project as complete",
+  "When did I last buy land?",
 ];
 
 export default function CommandBar() {
