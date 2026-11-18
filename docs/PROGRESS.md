@@ -9,7 +9,21 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
-- 2026-11-18: saves never wait for Altimetrix (Phesto: "fetch it only when
+- 2026-11-18: api/test fixtures synthetic (Phesto: golden cases stay real).
+  - contamination test now scans api/src, api/test and web/; golden
+    (api/scripts/golden) is exempt. The identifier list moved to
+    api/scripts/golden/personal.js so the test file itself is clean, and
+    gained a surname misspelling, a middle name, four Tanzanian names and
+    one first name found in graph.test.js (all in dira_dev records).
+    Helsinki is replaced in tests but not listed: Europe/Helsinki is the
+    configured time zone in src.
+  - graph.test.js: 664 name/place/plot replacements (same invented
+    mapping as src), expected lists re-sorted, three generic questions
+    reworded (they equalled golden turns), every year shifted back 3
+    (except retry delays in ms). Day and month are unchanged.
+  - npm test 31/31; golden fixture 12/12 + reset gate
+    (logs/golden-fixtures-fixture.log). No src change.
+- 2026-11-18 `c23e636`: saves never wait for Altimetrix(Phesto: "fetch it only when
   answering, or attach it in the background").
   - understandText/understandFile return as soon as the model (or the
     plain-note fallback) has understood; the context fetch starts in the
@@ -129,21 +143,29 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
-1. Phesto applies the backup proposal; first manual run + restore test
-   from R2 should show ok/PASS.
-2. Keys: skipped for now (Phesto, 2026-11-18).
-3. The rest of the plan, in its order (docs/PERSONAL_SCOPE.md section 7):
+Phesto (2026-11-18): before token logging, the backup + restore test and
+the dev/prod key split must be done. Checked 2026-11-18 (read-only):
+- Backup: NOT installed. No /opt/qusaz/shared/backup/dira/, no
+  /etc/qusaz/dira-backup.env, no cron line, no restic. Needs Phesto
+  (host, NUC ssh key, R2 bucket + token): ops/backup/README.md.
+- Keys: NOT split. Dev and prod OpenAI keys have the same fingerprint, and
+  so do the Groq keys. Needs Phesto to create the keys (dev $25/month hard
+  limit; prod $20/month, alerts at 50%/80%); then I put the dev key in dev
+  .env only.
+1. Journal → Altimetrix behind DIRA_BRIDGE_JOURNAL (default on), never the
+   sealed diary, confirmed-people rule. Waiting on the open question
+   below.
+2. Once backup + keys are done: the rest of the plan, in its order (docs/PERSONAL_SCOPE.md section 7):
    token/latency logging, cherry-pick beb392c, code answers
    for people questions + date precision, My people page, open-question
    path, deploy script.
 
 ## Open questions for Phesto
-- The bridge sends events (intake, home, email, queue) and relationship
-  shifts. Journal entries are not sent today, and documents only as the
-  events they become. You listed "events, journal and documents": should
-  journal entries start going to Altimetrix? (Not added: "as now".)
-- api/test/graph.test.js has fixtures with your real identifiers (a plot
-  number, places, a witness name). Should test fixtures be made synthetic
-  too? (The golden cases are your records by design, as the family test.)
+- Journal (answer: yes, DIRA_BRIDGE_JOURNAL, never the sealed diary): the
+  code has one journal table, DiaryEntry, and the schema calls it sealed
+  ("Altimetrix may read a row only when sharedWithAltimetrix is true").
+  Every entry is saved isPrivate=true, sharedWithAltimetrix=false, and no
+  screen changes that. So there is no "general journal" vs "sealed diary"
+  split today. Which entries count as general?
 - When deploying: set DIGEST_FROM in prod .env (the digest sender was your
   own address in code; the default is now dira@qusaz.com).

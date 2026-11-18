@@ -24,30 +24,30 @@ test.after(async () => {
 
 test("graph reset drops entity ids and keeps names", () => {
   const people = stripEntityIds([
-    { entityId: "person-1", name: "Burton", role: "supervisor" },
+    { entityId: "person-1", name: "Ragnar", role: "supervisor" },
     "Ada",
-    { name: "Neema", role: "spouse" },
+    { name: "Hulda", role: "spouse" },
   ]);
   assert.equal(people.removed, 1);
-  assert.deepEqual(people.list[0], { name: "Burton", role: "supervisor" });
+  assert.deepEqual(people.list[0], { name: "Ragnar", role: "supervisor" });
   assert.equal(people.list[1], "Ada");
-  assert.deepEqual(people.list[2], { name: "Neema", role: "spouse" });
-  const places = stripEntityIds([{ entityId: "place-1", name: "Mbeya", role: "location", relationship: "location" }]);
+  assert.deepEqual(people.list[2], { name: "Hulda", role: "spouse" });
+  const places = stripEntityIds([{ entityId: "place-1", name: "Akureyri", role: "location", relationship: "location" }]);
   assert.equal(places.removed, 1);
-  assert.equal(places.list[0].name, "Mbeya");
+  assert.equal(places.list[0].name, "Akureyri");
   assert.equal(places.list[0].role, "location");
   assert.equal(places.list[0].entityId, undefined);
 });
 
-const FAMILY_MESSAGE = "My family: my father Enock Mwakyusa passed away on 25 April 2004 and my mother Froidah Biniala Kyando lives in our family home in Mbeya. My sisters are Jeni, Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda Goodluck Mambosho. My children are Careen (my eldest daughter, born before my marriage), Patrick, Presley, Powell and Prisha.";
+const FAMILY_MESSAGE = "My family: my father Gunnar Arason passed away on 25 April 2001 and my mother Hekla Bjorg Olafsdottir lives in our family home in Akureyri. My sisters are Sigrun, Thora, Hulda and Edda Gunnar Arason. My wife is Asta Kristin Jonsdottir. My children are Ylfa (my eldest daughter, born before my marriage), Einar, Kari, Leifur and Brynja.";
 
 test("a family introduction expands into kinship edges", () => {
   assert.equal(isRelationshipStatement(FAMILY_MESSAGE), true);
   assert.equal(isRelationshipStatement("Who are my sisters?"), false);
   const parsed = parseFamilyStatement(FAMILY_MESSAGE);
   const prepared = prepareTriples(parsed.triples, {
-    selfAliases: buildSelfAliasSet({ names: ["Phesto Enock Mwakyusa"], aliases: ["phesto"] }),
-    selfName: "Phesto Enock Mwakyusa",
+    selfAliases: buildSelfAliasSet({ names: ["Bjorn Gunnar Arason"], aliases: ["bjorn"] }),
+    selfName: "Bjorn Gunnar Arason",
     relatives: [],
     message: FAMILY_MESSAGE,
   });
@@ -63,20 +63,20 @@ test("a family introduction expands into kinship edges", () => {
   assert.equal(children.length, 5);
   assert.equal(homes.length, 1);
   assert.deepEqual(siblings.map((triple) => triple.subject.name).sort(), [
-    "Jeni Enock Mwakyusa",
-    "Leah Enock Mwakyusa",
-    "Neema Enock Mwakyusa",
-    "Zenah Enock Mwakyusa",
+    "Edda Gunnar Arason",
+    "Hulda Gunnar Arason",
+    "Sigrun Gunnar Arason",
+    "Thora Gunnar Arason",
   ]);
-  assert.equal(spouses[0].subject.name, "Zelda Goodluck Mambosho");
-  assert.equal(homes[0].object.name, "Mbeya");
-  assert.equal(parsed.entityFacts.find((fact) => fact.name === "Enock Mwakyusa").deathDate, "2004-04-25");
-  const careen = children.find((triple) => triple.object.name === "Careen");
-  assert.equal(careen.object.kind, "daughter");
-  assert.equal(careen.attributes.birthOrder, 1);
-  assert.equal(kept.some((triple) => [triple.subject?.name, triple.object?.name].includes("Careen") && [triple.subject?.name, triple.object?.name].includes("Zelda Goodluck Mambosho")), false);
+  assert.equal(spouses[0].subject.name, "Asta Kristin Jonsdottir");
+  assert.equal(homes[0].object.name, "Akureyri");
+  assert.equal(parsed.entityFacts.find((fact) => fact.name === "Gunnar Arason").deathDate, "2001-04-25");
+  const ylfa = children.find((triple) => triple.object.name === "Ylfa");
+  assert.equal(ylfa.object.kind, "daughter");
+  assert.equal(ylfa.attributes.birthOrder, 1);
+  assert.equal(kept.some((triple) => [triple.subject?.name, triple.object?.name].includes("Ylfa") && [triple.subject?.name, triple.object?.name].includes("Asta Kristin Jonsdottir")), false);
   assert.equal(dropReason({
-    subject: { name: "Jeni Enock Mwakyusa", type: "person" },
+    subject: { name: "Sigrun Gunnar Arason", type: "person" },
     predicate: "sibling_of",
     object: { name: "me", type: "self" },
     evidence: "",
@@ -84,34 +84,34 @@ test("a family introduction expands into kinship edges", () => {
   const you = { id: "self", name: "you" };
   assert.equal(describeRelationshipLine({
     type: "parent_of",
-    from: { id: "enock", name: "Enock Mwakyusa", kind: "father", deathDate: "2004-04-25" },
+    from: { id: "gunnar", name: "Gunnar Arason", kind: "father", deathDate: "2001-04-25" },
     to: you,
     selfId: "self",
-  }), "Enock Mwakyusa — your father (passed 25 Apr 2004)");
+  }), "Gunnar Arason — your father (passed 25 Apr 2001)");
   assert.equal(describeRelationshipLine({
     type: "sibling_of",
-    from: { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sister" },
+    from: { id: "sigrun", name: "Sigrun Gunnar Arason", kind: "sister" },
     to: you,
     selfId: "self",
-  }), "Jeni Enock Mwakyusa — your sister");
+  }), "Sigrun Gunnar Arason — your sister");
   assert.equal(describeRelationshipLine({
     type: "spouse_of",
-    from: { id: "zelda", name: "Zelda Goodluck Mambosho", kind: "wife" },
+    from: { id: "asta", name: "Asta Kristin Jonsdottir", kind: "wife" },
     to: you,
     selfId: "self",
-  }), "Zelda Goodluck Mambosho — your wife");
+  }), "Asta Kristin Jonsdottir — your wife");
   assert.equal(describeRelationshipLine({
     type: "parent_of",
     from: you,
-    to: { id: "careen", name: "Careen", kind: "daughter" },
+    to: { id: "ylfa", name: "Ylfa", kind: "daughter" },
     selfId: "self",
     attributes: { birthOrder: 1 },
-  }), "Careen — your daughter (eldest)");
+  }), "Ylfa — your daughter (eldest)");
   assert.equal(chooseSelfName({
-    profileName: "phesto",
-    handle: "phesto",
-    eventNames: [{ name: "Phesto Enock Mwakyusa", count: 2 }],
-  }), "Phesto Enock Mwakyusa");
+    profileName: "bjorn",
+    handle: "bjorn",
+    eventNames: [{ name: "Bjorn Gunnar Arason", count: 2 }],
+  }), "Bjorn Gunnar Arason");
 });
 
 test("my father's family tree stays inside recorded facts", () => {
@@ -119,64 +119,64 @@ test("my father's family tree stays inside recorded facts", () => {
   assert.equal(isPeopleQuestion(question), true);
   assert.equal(isRelationshipStatement(question), false);
   const context = buildPeopleContext({
-    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
+    self: { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
     people: [
-      { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
-      { id: "enock", name: "Enock Mwakyusa", kind: "father", deathDate: "2004-04-25" },
-      { id: "froidah", name: "Froidah Biniala Kyando", kind: "mother" },
-      { id: "zelda", name: "Zelda Goodluck Mambosho", kind: "wife" },
-      { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sister" },
-      { id: "leah", name: "Leah Enock Mwakyusa", kind: "sister" },
-      { id: "neema", name: "Neema Enock Mwakyusa", kind: "sister" },
-      { id: "zenah", name: "Zenah Enock Mwakyusa", kind: "sister" },
+      { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
+      { id: "gunnar", name: "Gunnar Arason", kind: "father", deathDate: "2001-04-25" },
+      { id: "hekla", name: "Hekla Bjorg Olafsdottir", kind: "mother" },
+      { id: "asta", name: "Asta Kristin Jonsdottir", kind: "wife" },
+      { id: "sigrun", name: "Sigrun Gunnar Arason", kind: "sister" },
+      { id: "thora", name: "Thora Gunnar Arason", kind: "sister" },
+      { id: "hulda", name: "Hulda Gunnar Arason", kind: "sister" },
+      { id: "edda", name: "Edda Gunnar Arason", kind: "sister" },
     ],
     edges: [
-      { id: "e-father", type: "parent_of", status: "confirmed", fromId: "enock", toId: "self", fromName: "Enock Mwakyusa", toName: "Phesto Enock Mwakyusa" },
-      { id: "e-mother", type: "parent_of", status: "confirmed", fromId: "froidah", toId: "self", fromName: "Froidah Biniala Kyando", toName: "Phesto Enock Mwakyusa" },
-      { id: "e-wife", type: "spouse_of", status: "confirmed", fromId: "zelda", toId: "self", fromName: "Zelda Goodluck Mambosho", toName: "Phesto Enock Mwakyusa" },
-      { id: "e-asha", type: "sibling_of", status: "suggested", fromId: "asha", toId: "self", fromName: "Asha Mwakyusa", toName: "Phesto Enock Mwakyusa" },
+      { id: "e-father", type: "parent_of", status: "confirmed", fromId: "gunnar", toId: "self", fromName: "Gunnar Arason", toName: "Bjorn Gunnar Arason" },
+      { id: "e-mother", type: "parent_of", status: "confirmed", fromId: "hekla", toId: "self", fromName: "Hekla Bjorg Olafsdottir", toName: "Bjorn Gunnar Arason" },
+      { id: "e-wife", type: "spouse_of", status: "confirmed", fromId: "asta", toId: "self", fromName: "Asta Kristin Jonsdottir", toName: "Bjorn Gunnar Arason" },
+      { id: "e-sunna", type: "sibling_of", status: "suggested", fromId: "sunna", toId: "self", fromName: "Sunna Arason", toName: "Bjorn Gunnar Arason" },
     ],
     events: [
-      { id: "ev-feb", title: "Birth note", fullText: "Phesto Enock Mwakyusa was born on 17 February 1978." },
-      { id: "ev-may", title: "Later note", fullText: "Phesto Enock Mwakyusa born 12 May 1978." },
+      { id: "ev-feb", title: "Birth note", fullText: "Bjorn Gunnar Arason was born on 17 February 1975." },
+      { id: "ev-may", title: "Later note", fullText: "Bjorn Gunnar Arason born 12 May 1975." },
     ],
   });
-  const invented = "Your father's spouse is Hermes Mwakyusa (married 1980). Zelda Goodluck Mambosho, his child, was born 1987. You were born May 12, 1978. Jeni was born in 1980, Leah in 1982, Neema in 1984 and Zenah in 1986.";
+  const invented = "Your father's spouse is Hermes Arason (married 1977). Asta Kristin Jonsdottir, his child, was born 1984. You were born May 12, 1975. Sigrun was born in 1977, Thora in 1979, Hulda in 1981 and Edda in 1983.";
   const checked = groundAdvisorReply(invented, context);
-  assert.equal(checked.removed.includes("Hermes Mwakyusa"), true);
+  assert.equal(checked.removed.includes("Hermes Arason"), true);
   assert.equal(checked.reply.includes("Hermes"), false);
-  assert.equal(checked.reply.includes("1987"), false);
-  assert.equal(checked.reply.includes("1980"), false);
-  assert.equal(checked.reply.includes("1982"), false);
+  assert.equal(checked.reply.includes("1984"), false);
+  assert.equal(checked.reply.includes("1977"), false);
+  assert.equal(checked.reply.includes("1979"), false);
   const delivered = deliverPeopleAnswer(invented, context, question);
-  assert.match(delivered.reply, /Your father's spouse: Froidah Biniala Kyando/);
+  assert.match(delivered.reply, /Your father's spouse: Hekla Bjorg Olafsdottir/);
   assert.match(delivered.reply, /Your sisters' birth dates aren't recorded yet/);
-  assert.match(delivered.reply, /Zelda Goodluck Mambosho — your wife/);
-  assert.match(delivered.reply, /17 Feb 1978/);
-  assert.match(delivered.reply, /12 May 1978/);
+  assert.match(delivered.reply, /Asta Kristin Jonsdottir — your wife/);
+  assert.match(delivered.reply, /17 Feb 1975/);
+  assert.match(delivered.reply, /12 May 1975/);
   assert.match(delivered.reply, /Which is right/);
-  assert.match(delivered.reply, /unconfirmed: Asha Mwakyusa/);
+  assert.match(delivered.reply, /unconfirmed: Sunna Arason/);
   assert.equal(delivered.reply.includes("Hermes"), false);
-  assert.equal(delivered.reply.includes("1987"), false);
-  assert.equal(/Zelda[\s\S]{0,40}child|child[\s\S]{0,40}Zelda/i.test(delivered.reply), false);
+  assert.equal(delivered.reply.includes("1984"), false);
+  assert.equal(/Asta[\s\S]{0,40}child|child[\s\S]{0,40}Asta/i.test(delivered.reply), false);
   assert.equal(context.conflicts.length, 1);
   const review = conflictEdgeData("user-1", context.conflicts[0]);
   assert.equal(review.label, "conflict");
-  assert.match(review.evidenceText, /1978-02-17/);
-  assert.match(review.evidenceText, /1978-05-12/);
+  assert.match(review.evidenceText, /1975-02-17/);
+  assert.match(review.evidenceText, /1975-05-12/);
   assert.equal(answerPeopleQuestion(question, context), delivered.reply);
 });
 
 test("events answer wife, parents and sister births before an edge exists", () => {
   const sisters = [
-    { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sister" },
-    { id: "leah", name: "Leah Enock Mwakyusa", kind: "sister" },
-    { id: "neema", name: "Neema Enock Mwakyusa", kind: "sister" },
-    { id: "zenah", name: "Zenah Enock Mwakyusa", kind: "sister" },
+    { id: "sigrun", name: "Sigrun Gunnar Arason", kind: "sister" },
+    { id: "thora", name: "Thora Gunnar Arason", kind: "sister" },
+    { id: "hulda", name: "Hulda Gunnar Arason", kind: "sister" },
+    { id: "edda", name: "Edda Gunnar Arason", kind: "sister" },
   ];
   const context = buildPeopleContext({
-    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
-    people: [{ id: "self", name: "Phesto Enock Mwakyusa", kind: "self" }, ...sisters],
+    self: { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
+    people: [{ id: "self", name: "Bjorn Gunnar Arason", kind: "self" }, ...sisters],
     edges: sisters.map((person) => ({
       id: `edge-${person.id}`,
       type: "sibling_of",
@@ -184,114 +184,114 @@ test("events answer wife, parents and sister births before an edge exists", () =
       fromId: person.id,
       toId: "self",
       fromName: person.name,
-      toName: "Phesto Enock Mwakyusa",
+      toName: "Bjorn Gunnar Arason",
     })),
     events: [
-      { id: "ev-wife", title: "Marriage", fullText: "Engagement and marriage to Zelda Goodluck Mambosho on 5 Aug 2006. Zelda joined me in Finland." },
-      { id: "ev-parents", title: "Parents", fullText: "My parents' marriage. My father Enock Mwakyusa was born in our home and passed away on 25 April 2004. My mother is Froidah Biniala Kyando." },
-      { id: "ev-three", title: "Sisters", fullText: "Jeni 4 Dec 1980, Leah 14 Dec 1983, Neema 3 Dec 1987" },
-      { id: "ev-zenah", title: "Zenah", fullText: "Zenah Enock Mwakyusa was born on 3 February 1993." },
+      { id: "ev-wife", title: "Marriage", fullText: "Engagement and marriage to Asta Kristin Jonsdottir on 5 Aug 2003. Asta joined me in Norway." },
+      { id: "ev-parents", title: "Parents", fullText: "My parents' marriage. My father Gunnar Arason was born in our home and passed away on 25 April 2001. My mother is Hekla Bjorg Olafsdottir." },
+      { id: "ev-three", title: "Sisters", fullText: "Sigrun 4 Dec 1977, Thora 14 Dec 1980, Hulda 3 Dec 1984" },
+      { id: "ev-edda", title: "Edda", fullText: "Edda Gunnar Arason was born on 3 February 1990." },
     ],
   });
   assert.equal(isPeopleQuestion("who is my wife?"), true);
   assert.equal(isPeopleQuestion("my parents?"), true);
   assert.equal(isPeopleQuestion("sisters' birth dates"), true);
   const wife = answerPeopleQuestion("who is my wife?", context);
-  assert.match(wife, /Zelda Goodluck Mambosho/);
-  assert.match(wife, /5 Aug 2006/);
+  assert.match(wife, /Asta Kristin Jonsdottir/);
+  assert.match(wife, /5 Aug 2003/);
   assert.match(wife, /From your records — confirm in Review to lock it in\./);
   assert.equal(/not recorded/i.test(wife), false);
   const parents = answerPeopleQuestion("my parents?", context);
-  assert.match(parents, /Enock Mwakyusa — your father/);
-  assert.match(parents, /25 Apr 2004/);
-  assert.match(parents, /Froidah Biniala Kyando — your mother/);
+  assert.match(parents, /Gunnar Arason — your father/);
+  assert.match(parents, /25 Apr 2001/);
+  assert.match(parents, /Hekla Bjorg Olafsdottir — your mother/);
   assert.match(parents, /From your records — confirm in Review to lock it in\./);
   assert.equal(/not recorded/i.test(parents), false);
   const births = answerPeopleQuestion("sisters' birth dates", context);
-  assert.match(births, /Jeni Enock Mwakyusa — 4 Dec 1980/);
-  assert.match(births, /Leah Enock Mwakyusa — 14 Dec 1983/);
-  assert.match(births, /Neema Enock Mwakyusa — 3 Dec 1987/);
-  assert.match(births, /Zenah Enock Mwakyusa — 3 Feb 1993/);
+  assert.match(births, /Sigrun Gunnar Arason — 4 Dec 1977/);
+  assert.match(births, /Thora Gunnar Arason — 14 Dec 1980/);
+  assert.match(births, /Hulda Gunnar Arason — 3 Dec 1984/);
+  assert.match(births, /Edda Gunnar Arason — 3 Feb 1990/);
   assert.match(births, /From your records — confirm in Review to lock it in\./);
   assert.equal(/not recorded/i.test(births), false);
-  const grounded = groundAdvisorReply("Zelda Goodluck Mambosho married on 5 Aug 2006. Hermes Mwakyusa was born in 1987.", context);
-  assert.equal(grounded.reply.includes("Zelda Goodluck Mambosho"), true);
-  assert.equal(grounded.reply.includes("5 Aug 2006"), true);
+  const grounded = groundAdvisorReply("Asta Kristin Jonsdottir married on 5 Aug 2003. Hermes Arason was born in 1984.", context);
+  assert.equal(grounded.reply.includes("Asta Kristin Jonsdottir"), true);
+  assert.equal(grounded.reply.includes("5 Aug 2003"), true);
   assert.equal(grounded.reply.includes("Hermes"), false);
   const missed = deliverPeopleAnswer("Your wife isn't recorded yet.", context, "who is my wife?");
-  assert.match(missed.reply, /Zelda Goodluck Mambosho/);
+  assert.match(missed.reply, /Asta Kristin Jonsdottir/);
   assert.equal(/not recorded/i.test(missed.reply), false);
   const father = answerPeopleQuestion("who is my father?", context);
-  assert.match(father, /Enock Mwakyusa — your father/);
+  assert.match(father, /Gunnar Arason — your father/);
   assert.equal(father.trim().length > 0, true);
   const sisterReply = answerPeopleQuestion("who is my sister?", {
     ...context,
     people: context.people.map((person) => (person.kind === "sister" ? { ...person, kind: "sibling" } : person)),
   });
-  assert.match(sisterReply, /Jeni Enock Mwakyusa/);
-  assert.match(sisterReply, /Zenah Enock Mwakyusa/);
+  assert.match(sisterReply, /Sigrun Gunnar Arason/);
+  assert.match(sisterReply, /Edda Gunnar Arason/);
   assert.equal(sisterReply.trim().length > 0, true);
 });
 
 test("marriage wording and children are not guessed from sisters", () => {
   const sisters = [
-    { id: "jeni", name: "Jeni Enock Mwakyusa", kind: "sibling" },
-    { id: "leah", name: "Leah Enock Mwakyusa", kind: "sibling" },
-    { id: "neema", name: "Neema Enock Mwakyusa", kind: "sibling" },
-    { id: "zenah", name: "Zenah Enock Mwakyusa", kind: "sibling" },
+    { id: "sigrun", name: "Sigrun Gunnar Arason", kind: "sibling" },
+    { id: "thora", name: "Thora Gunnar Arason", kind: "sibling" },
+    { id: "hulda", name: "Hulda Gunnar Arason", kind: "sibling" },
+    { id: "edda", name: "Edda Gunnar Arason", kind: "sibling" },
   ];
   const context = buildPeopleContext({
-    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
-    people: [{ id: "self", name: "Phesto Enock Mwakyusa", kind: "self" }, ...sisters],
+    self: { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
+    people: [{ id: "self", name: "Bjorn Gunnar Arason", kind: "self" }, ...sisters],
     edges: [],
     events: [
-      { id: "ev-join", title: "Finland", rawInput: "We were married on 5 August 2006. Zelda Goodluck Mambosho joined me in Finland." },
-      { id: "ev-kids", title: "Children", fullText: "My children are Careen (my eldest daughter), Patrick, Presley, Powell and Prisha Neema." },
+      { id: "ev-join", title: "Norway", rawInput: "We were married on 5 August 2003. Asta Kristin Jonsdottir joined me in Norway." },
+      { id: "ev-kids", title: "Children", fullText: "My children are Ylfa (my eldest daughter), Einar, Kari, Leifur and Brynja Hulda." },
     ],
   });
   const wife = answerPeopleQuestion("who is my wife?", context);
-  assert.match(wife, /Zelda Goodluck Mambosho/);
-  assert.match(wife, /5 Aug 2006/);
+  assert.match(wife, /Asta Kristin Jonsdottir/);
+  assert.match(wife, /5 Aug 2003/);
   assert.equal(/not recorded/i.test(wife), false);
   const kids = answerPeopleQuestion("how many kids do I have?", context);
   assert.match(kids, /5 children/);
-  assert.match(kids, /Careen/);
-  assert.match(kids, /Prisha Neema/);
+  assert.match(kids, /Ylfa/);
+  assert.match(kids, /Brynja Hulda/);
   assert.equal(/\bFour\b/.test(kids), false);
   assert.equal(resolvePeopleFollowUp("what are their names?", "how many kids do I have?"), "what are my children's names?");
   const names = answerPeopleQuestion(resolvePeopleFollowUp("what are their names?", "how many kids do I have?"), context);
-  assert.match(names, /Patrick/);
-  assert.match(names, /Presley/);
+  assert.match(names, /Einar/);
+  assert.match(names, /Kari/);
   const onlySisters = buildPeopleContext({
-    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
-    people: [{ id: "self", name: "Phesto Enock Mwakyusa", kind: "self" }, ...sisters],
+    self: { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
+    people: [{ id: "self", name: "Bjorn Gunnar Arason", kind: "self" }, ...sisters],
     edges: [],
     events: [],
   });
   assert.equal(answerPeopleQuestion("how many kids do I have?", onlySisters), "Your children aren't recorded yet.");
 });
 
-const ANCHOR_MESSAGE = `My family: my father Enock Mwakyusa passed away
-on 25 April 2004 and my mother Froidah Biniala Kyando
-lives in our family home in Mbeya. My sisters are Jeni,
-Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda
-Goodluck Mambosho. My children are Careen (my eldest
-daughter, born before my marriage), Patrick, Presley,
-Powell and Prisha Neema.`;
+const ANCHOR_MESSAGE = `My family: my father Gunnar Arason passed away
+on 25 April 2001 and my mother Hekla Bjorg Olafsdottir
+lives in our family home in Akureyri. My sisters are Sigrun,
+Thora, Hulda and Edda Gunnar Arason. My wife is Asta
+Kristin Jonsdottir. My children are Ylfa (my eldest
+daughter, born before my marriage), Einar, Kari,
+Leifur and Brynja Hulda.`;
 
 test("possessive kinship stays on you and keeps full names", () => {
   const parsed = parseFamilyStatement(ANCHOR_MESSAGE);
   const prepared = prepareTriples([
     ...parsed.triples,
     {
-      subject: { name: "Zelda Goodluck Mambosho", type: "person" },
+      subject: { name: "Asta Kristin Jonsdottir", type: "person" },
       predicate: "spouse_of",
-      object: { name: "Enock Mwakyusa", type: "person" },
+      object: { name: "Gunnar Arason", type: "person" },
       evidence: ANCHOR_MESSAGE,
     },
   ], {
-    selfAliases: buildSelfAliasSet({ names: ["Phesto Enock Mwakyusa"], aliases: ["phesto"] }),
-    selfName: "Phesto Enock Mwakyusa",
+    selfAliases: buildSelfAliasSet({ names: ["Bjorn Gunnar Arason"], aliases: ["bjorn"] }),
+    selfName: "Bjorn Gunnar Arason",
     relatives: [],
     message: ANCHOR_MESSAGE,
   });
@@ -301,26 +301,26 @@ test("possessive kinship stays on you and keeps full names", () => {
   const siblings = kept.filter((triple) => triple.predicate === "sibling_of");
   const spouses = kept.filter((triple) => triple.predicate === "spouse_of");
   assert.equal(parents.length, 2);
-  assert.deepEqual(parents.map((triple) => triple.subject.name).sort(), ["Enock Mwakyusa", "Froidah Biniala Kyando"]);
+  assert.deepEqual(parents.map((triple) => triple.subject.name).sort(), ["Gunnar Arason", "Hekla Bjorg Olafsdottir"]);
   assert.equal(siblings.length, 4);
   assert.equal(spouses.length, 1);
-  assert.equal(spouses[0].subject.name, "Zelda Goodluck Mambosho");
+  assert.equal(spouses[0].subject.name, "Asta Kristin Jonsdottir");
   assert.equal(spouses[0].object.type, "self");
   assert.equal(children.length, 5);
-  assert.deepEqual(children.map((triple) => triple.object.name).sort(), ["Careen", "Patrick", "Powell", "Presley", "Prisha Neema"]);
+  assert.deepEqual(children.map((triple) => triple.object.name).sort(), ["Brynja Hulda", "Einar", "Kari", "Leifur", "Ylfa"]);
   assert.equal(kept.some((triple) => {
     const names = [triple.subject?.name, triple.object?.name];
-    return names.includes("Zelda Goodluck Mambosho") && names.includes("Enock Mwakyusa");
+    return names.includes("Asta Kristin Jonsdottir") && names.includes("Gunnar Arason");
   }), false);
   assert.equal(prepared.dropped.some((triple) => triple.reason === "possessive-mismatch"), true);
   assert.equal(describeRelationshipLine({
     type: "spouse_of",
-    from: { id: "zelda", name: "Zelda Goodluck Mambosho", kind: "wife" },
-    to: { id: "enock", name: "Enock Mwakyusa", kind: "father" },
+    from: { id: "asta", name: "Asta Kristin Jonsdottir", kind: "wife" },
+    to: { id: "gunnar", name: "Gunnar Arason", kind: "father" },
     selfId: "self",
-  }), "Zelda Goodluck Mambosho — wife of Enock Mwakyusa (your father)");
-  const hyphen = parseFamilyStatement("My children are Careen and Prisha - Neema.");
-  assert.equal(hyphen.triples.some((triple) => triple.object?.name === "Prisha Neema"), true);
+  }), "Asta Kristin Jonsdottir — wife of Gunnar Arason (your father)");
+  const hyphen = parseFamilyStatement("My children are Ylfa and Brynja - Hulda.");
+  assert.equal(hyphen.triples.some((triple) => triple.object?.name === "Brynja Hulda"), true);
   assert.equal(hyphen.triples.some((triple) => String(triple.object?.name || "").includes(" - ")), false);
 });
 
@@ -329,7 +329,7 @@ test("questions are not corrections and kinship uses the full source", () => {
   assert.equal(rejectsCorrection("and his family?"), true);
   assert.equal(rejectsCorrection("their names"), true);
   assert.equal(rejectsCorrection("no, that's wrong"), false);
-  assert.equal(rejectsCorrection("actually I meant Leah"), false);
+  assert.equal(rejectsCorrection("actually I meant Thora"), false);
   const history = [
     { role: "user", content: "how many kids do I have?" },
     { role: "assistant", content: "Four" },
@@ -342,25 +342,25 @@ test("questions are not corrections and kinship uses the full source", () => {
   assert.equal(isNoiseReply("Request failed"), true);
   assert.equal(isNoiseReply(""), true);
   assert.equal(contextualQuestion("what are their names?", "how many kids do I have?", "Four").includes("Previous answer: Four"), true);
-  assert.equal(contextualQuestion("and his family?", "who is my father?", "Enock Mwakyusa — your father."), "my father's family tree\n\nPrevious answer: Enock Mwakyusa — your father.");
-  const family = "My sisters are Jeni, Leah, Neema and Zenah Enock Mwakyusa. My wife is Zelda Goodluck Mambosho.";
+  assert.equal(contextualQuestion("and his family?", "who is my father?", "Gunnar Arason — your father."), "my father's family tree\n\nPrevious answer: Gunnar Arason — your father.");
+  const family = "My sisters are Sigrun, Thora, Hulda and Edda Gunnar Arason. My wife is Asta Kristin Jonsdottir.";
   assert.equal(dropReason({
-    subject: { name: "Jeni", type: "person" },
+    subject: { name: "Sigrun", type: "person" },
     predicate: "sibling_of",
     object: { name: "me", type: "self" },
-    evidence: "Jeni",
+    evidence: "Sigrun",
   }, { message: family }), null);
   assert.equal(dropReason({
-    subject: { name: "Zelda Goodluck Mambosho", type: "person" },
+    subject: { name: "Asta Kristin Jonsdottir", type: "person" },
     predicate: "spouse_of",
     object: { name: "me", type: "self" },
-    evidence: "Zelda",
+    evidence: "Asta",
   }, { sourceText: family }), null);
   assert.equal(dropReason({
-    subject: { name: "Jeni", type: "person" },
+    subject: { name: "Sigrun", type: "person" },
     predicate: "sibling_of",
     object: { name: "me", type: "self" },
-    evidence: "Jeni",
+    evidence: "Sigrun",
   }), "unsupported-family");
   assert.equal(graphAutoExtractEnabled({ graphAutoExtract: false }, "true"), false);
   assert.equal(graphAutoExtractEnabled({ graphAutoExtract: true }, "false"), true);
@@ -387,28 +387,28 @@ test("amounts, dates and unknown predicates are not nodes", () => {
     object: { name: "2,399,500 TSH", type: "asset" },
   }), "amount-as-node");
   assert.equal(dropReason({
-    subject: { name: "Plot P9104", type: "property" },
+    subject: { name: "Plot B12", type: "property" },
     predicate: "dated",
-    object: { name: "12 May 2024", type: "other" },
+    object: { name: "12 May 2021", type: "other" },
   }), "date-as-node");
   const birth = prepareTriples([{
     subject: { name: "Ada", type: "person" },
     predicate: "born",
-    object: { name: "2004", type: "other" },
-    evidence: "born in 2004",
+    object: { name: "2001", type: "other" },
+    evidence: "born in 2001",
   }]);
   assert.equal(birth.kept.length, 0);
   assert.equal(birth.entityFacts[0].name, "Ada");
-  assert.equal(birth.entityFacts[0].birthDate, "2004-01-01");
+  assert.equal(birth.entityFacts[0].birthDate, "2001-01-01");
   assert.equal(dropReason({
     subject: { name: "Ada", type: "self" },
     predicate: "hasTotalContractValue",
-    object: { name: "Mbeya Home", type: "property" },
+    object: { name: "Akureyri Home", type: "property" },
   }), "unknown-predicate");
   assert.equal(dropReason({
-    subject: { name: "Burton", type: "person" },
+    subject: { name: "Ragnar", type: "person" },
     predicate: "supervises",
-    object: { name: "Mbeya Home", type: "property" },
+    object: { name: "Akureyri Home", type: "property" },
   }), null);
 
   const event = { id: "event-1", title: "Electrical Works", people: [], places: [], financials: {} };
@@ -424,25 +424,25 @@ test("amounts, dates and unknown predicates are not nodes", () => {
 });
 
 test("graph rebuild quality rules keep self, family and places honest", () => {
-  const aliases = buildSelfAliasSet({ names: ["Phesto Enock Mwakyusa", "Phesto Mwakyusa"] });
-  assert.equal(mentionsSelf("Phesto Enock Mwakayusa", aliases), true);
-  assert.equal(mentionsSelf("Phesto Mwakyusa", aliases), true);
+  const aliases = buildSelfAliasSet({ names: ["Bjorn Gunnar Arason", "Bjorn Arason"] });
+  assert.equal(mentionsSelf("Bjorn Gunnar Arasson", aliases), true);
+  assert.equal(mentionsSelf("Bjorn Arason", aliases), true);
   const selfOwned = prepareTriples([{
-    subject: { name: "Phesto Enock Mwakayusa", type: "person" },
+    subject: { name: "Bjorn Gunnar Arasson", type: "person" },
     predicate: "owns",
-    object: { name: "Plot P9104", type: "property" },
+    object: { name: "Plot B12", type: "property" },
     evidence: "registered occupier",
     confidence: 0.9,
-  }], { selfAliases: aliases, selfName: "Phesto Enock Mwakyusa", relatives: [] });
+  }], { selfAliases: aliases, selfName: "Bjorn Gunnar Arason", relatives: [] });
   assert.equal(selfOwned.kept[0].subject.type, "self");
-  assert.equal(selfOwned.kept[0].subject.name, "Phesto Enock Mwakyusa");
+  assert.equal(selfOwned.kept[0].subject.name, "Bjorn Gunnar Arason");
 
   const surname = prepareTriples([{
-    subject: { name: "Amina Mwakyusa", type: "person" },
+    subject: { name: "Amina Arason", type: "person" },
     predicate: "sibling_of",
-    object: { name: "Phesto Mwakyusa", type: "person" },
-    evidence: "Amina Mwakyusa appears on the same title",
-  }], { selfAliases: aliases, selfName: "Phesto Enock Mwakyusa", relatives: [] });
+    object: { name: "Bjorn Arason", type: "person" },
+    evidence: "Amina Arason appears on the same title",
+  }], { selfAliases: aliases, selfName: "Bjorn Gunnar Arason", relatives: [] });
   assert.equal(surname.dropped[0].reason, "unsupported-family");
 
   const wife = prepareTriples([{
@@ -452,10 +452,10 @@ test("graph rebuild quality rules keep self, family and places honest", () => {
     evidence: "my wife",
   }], {
     selfAliases: aliases,
-    selfName: "Phesto Enock Mwakyusa",
-    relatives: [{ role: "spouse", name: "Neema", id: "spouse-1" }],
+    selfName: "Bjorn Gunnar Arason",
+    relatives: [{ role: "spouse", name: "Hulda", id: "spouse-1" }],
   });
-  assert.equal(wife.kept[0].subject.name, "Neema");
+  assert.equal(wife.kept[0].subject.name, "Hulda");
   assert.equal(wife.reviewQuestions.length, 0);
 
   const unknownWife = prepareTriples([{
@@ -463,7 +463,7 @@ test("graph rebuild quality rules keep self, family and places honest", () => {
     predicate: "spouse_of",
     object: { name: "me", type: "self" },
     evidence: "my wife",
-  }], { selfAliases: aliases, selfName: "Phesto Enock Mwakyusa", relatives: [] });
+  }], { selfAliases: aliases, selfName: "Bjorn Gunnar Arason", relatives: [] });
   assert.equal(unknownWife.dropped[0].reason, "unresolved-kinship");
   assert.match(unknownWife.reviewQuestions[0], /Who is 'wife'/);
 
@@ -472,24 +472,24 @@ test("graph rebuild quality rules keep self, family and places honest", () => {
   assert.equal(normalizeType("alioa").type, "spouse_of");
 
   let places = [];
-  places = applySupersession(places, { fromName: "Jimny", toName: "Dar es Salaam", type: "located_in", at: "2019-01-01" });
-  places = applySupersession(places, { fromName: "Jimny", toName: "Mbeya", type: "located_in", at: "2024-01-01" });
-  assert.equal(places[0].validTo, "2024-01-01");
+  places = applySupersession(places, { fromName: "Jimny", toName: "Dar es Salaam", type: "located_in", at: "2016-01-01" });
+  places = applySupersession(places, { fromName: "Jimny", toName: "Akureyri", type: "located_in", at: "2021-01-01" });
+  assert.equal(places[0].validTo, "2021-01-01");
   assert.equal(places[1].validTo, null);
 
-  const names = dedupeProposedNames(["land in Ntabha, Mbeya", "existing plot in Ntabha"]);
-  assert.equal(names.get("land in Ntabha, Mbeya"), "Ntabha plot");
-  assert.equal(names.get("existing plot in Ntabha"), "Ntabha plot");
+  const names = dedupeProposedNames(["land in Selfoss, Akureyri", "existing plot in Selfoss"]);
+  assert.equal(names.get("land in Selfoss, Akureyri"), "Selfoss plot");
+  assert.equal(names.get("existing plot in Selfoss"), "Selfoss plot");
 
   const grouped = groupSuggestions([
-    { id: "1", category: "family", type: "spouse_of", fromName: "Phesto", toName: "Neema" },
-    { id: "2", category: "family", type: "parent_of", fromName: "Mara", toName: "Phesto" },
-    { id: "3", category: "ownership", type: "owns", fromName: "Phesto", toName: "Plot P9104" },
-    { id: "4", category: "work", type: "supervises", fromName: "Burton", toName: "Mbeya Home" },
-  ], "Phesto");
+    { id: "1", category: "family", type: "spouse_of", fromName: "Bjorn", toName: "Hulda" },
+    { id: "2", category: "family", type: "parent_of", fromName: "Mara", toName: "Bjorn" },
+    { id: "3", category: "ownership", type: "owns", fromName: "Bjorn", toName: "Plot B12" },
+    { id: "4", category: "work", type: "supervises", fromName: "Ragnar", toName: "Akureyri Home" },
+  ], "Bjorn");
   assert.equal(grouped.count, 3);
   assert.equal(grouped.family.people.length, 2);
-  assert.equal(grouped.assets.items[0].name, "Plot P9104");
+  assert.equal(grouped.assets.items[0].name, "Plot B12");
 });
 
 test("graph extraction backs off on rate limits", async () => {
@@ -523,90 +523,90 @@ test("graph extraction backs off on rate limits", async () => {
 
 test("a generic entity kind never hides the tree role", () => {
   const rows = peopleFromTree({
-    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
-    parents: [{ id: "enock", name: "Enock Mwakyusa", kind: "person" }],
-    siblings: [{ id: "jeni", name: "Jeni", kind: "person" }, { id: "leah", name: "Leah", kind: "sister" }],
-    spouse: [{ id: "zelda", name: "Zelda Goodluck Mambosho", kind: "person" }],
-    children: [{ id: "patrick", name: "Patrick", kind: null }],
+    self: { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
+    parents: [{ id: "gunnar", name: "Gunnar Arason", kind: "person" }],
+    siblings: [{ id: "sigrun", name: "Sigrun", kind: "person" }, { id: "thora", name: "Thora", kind: "sister" }],
+    spouse: [{ id: "asta", name: "Asta Kristin Jonsdottir", kind: "person" }],
+    children: [{ id: "einar", name: "Einar", kind: null }],
   });
   assert.deepEqual(rows.map((row) => `${row.name}:${row.kind}`), [
-    "Phesto Enock Mwakyusa:self",
-    "Enock Mwakyusa:parent",
-    "Jeni:sibling",
-    "Leah:sister",
-    "Zelda Goodluck Mambosho:spouse",
-    "Patrick:child",
+    "Bjorn Gunnar Arason:self",
+    "Gunnar Arason:parent",
+    "Sigrun:sibling",
+    "Thora:sister",
+    "Asta Kristin Jonsdottir:spouse",
+    "Einar:child",
   ]);
 });
 
 test("event wording as saved in dira_dev answers family questions", () => {
   // Tree rows as getFamilyTree returns them after a graph reset: few edges, generic kinds.
   const people = peopleFromTree({
-    self: { id: "self", name: "Phesto Enock Mwakyusa", kind: "self" },
-    siblings: ["Jeni", "Neema", "Zenah Enock Mwakyusa", "Leah"].map((name) => ({ id: name.toLowerCase().split(" ")[0], name, kind: "person" })),
-    spouse: [{ id: "zelda", name: "Zelda Goodluck Mambosho", kind: "person" }],
-    children: [{ id: "patrick", name: "Patrick", kind: null }, { id: "powell", name: "Powell", kind: null }],
-  }).concat([{ id: "prisha", name: "Prisha - Neema", kind: "person", role: "other" }]);
+    self: { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
+    siblings: ["Sigrun", "Hulda", "Edda Gunnar Arason", "Thora"].map((name) => ({ id: name.toLowerCase().split(" ")[0], name, kind: "person" })),
+    spouse: [{ id: "asta", name: "Asta Kristin Jonsdottir", kind: "person" }],
+    children: [{ id: "einar", name: "Einar", kind: null }, { id: "leifur", name: "Leifur", kind: null }],
+  }).concat([{ id: "brynja", name: "Brynja - Hulda", kind: "person", role: "other" }]);
   const events = [
-    { id: "ev-births", title: "Birthdates of Jeni, Leah, and Neema Mwakyusa", rawInput: "My sister Jeni Enock Mwakyusa was born on December 4th, 1980, followed by Leah Enock Mwakyusa born on December 14th, 1983, and then Neema Enock Mwakyusa born on December 3rd, 1987." },
-    { id: "ev-zenah", title: "Birth Information of Zenah Enock Mwakyusa", rawInput: "Zenah Enock Mwakyusa was born on February 3rd, 1993, in Meta hospital Mbeya." },
-    { id: "ev-engaged", title: "First Flight to Finland and Engagement", rawInput: "In the year 2005 May 3rd I flew from Dar es salaam Tanzania to FInland for the first time. Came for studies, and a day before, on 2nd May I engaged my fiance Zelda Goodluck Mambosho." },
-    { id: "ev-married", title: "Marriage and Relocation Timeline", rawInput: "My wife joined me in FInland in December 2008, about two years after we got married on 5th August 2006." },
-    { id: "ev-parents-married", title: "Parents' Marriage", rawInput: "My parents got married on 25th April 1977 in Makungu Mgololo, Iringa Tanzania." },
-    { id: "ev-father", title: "Enock Mwakyusa Profile", rawInput: "My fadher is Enock Mwakyusa, born in Feb 19th 1956 in Rungwe Mbeya, he died on April 25th 2004." },
-    { id: "ev-family", title: "Family Information", rawInput: "Your father Enock Mwakyusa passed away on 25 April 2004, your mother Froidah Biniala Kyando lives in Mbeya, and you have sisters Jeni, Leah, Neema, and Zenah, a wife Zelda Goodluck" },
-    { id: "ev-mother", title: "Froidah Biniala Kyando Profile", rawInput: "Her name is Froidah Biniala Kyando born in 1960, married to my father Enock Mwakyusa." },
-    { id: "ev-careen", title: "Careen Fortunate Phesto's Father", rawInput: "The speaker is the father of Careen Fortunate Phesto." },
-    { id: "ev-careen-born", title: "Careen Fortunate Phesto's Birth Information", rawInput: "Careen Fortunate Phesto was born on February 4th, 2002, and her mother's name is Emmiliana Maegga." },
-    { id: "ev-patrick", title: "Birth of older son, Patrick", understoodMeaning: "The older son, Patrick was born in Helsinki, Finland on September 25, 2008.", rawInput: "Our older son was born on 25th September 2008 in Helsinki Finland" },
-    { id: "ev-presley", title: "Birth of Second Son", rawInput: "On 11th December 2012 our second son Presley was born in Helsinki" },
-    { id: "ev-powell", title: "Birth Announcement for Powell", rawInput: "You welcomed your son Powell, born on 30 May 2015." },
-    { id: "ev-prisha", title: "Welcoming Prisha - Neema", rawInput: "You welcomed your daughter Prisha - Neema on June 20, 2020." },
+    { id: "ev-births", title: "Birthdates of Sigrun, Thora, and Hulda Arason", rawInput: "My sister Sigrun Gunnar Arason was born on December 4th, 1977, followed by Thora Gunnar Arason born on December 14th, 1980, and then Hulda Gunnar Arason born on December 3rd, 1984." },
+    { id: "ev-edda", title: "Birth Information of Edda Gunnar Arason", rawInput: "Edda Gunnar Arason was born on February 3rd, 1990, in Meta hospital Akureyri." },
+    { id: "ev-engaged", title: "First Flight to Norway and Engagement", rawInput: "In the year 2002 May 3rd I flew from Dar es salaam Iceland to Norway for the first time. Came for studies, and a day before, on 2nd May I engaged my fiance Asta Kristin Jonsdottir." },
+    { id: "ev-married", title: "Marriage and Relocation Timeline", rawInput: "My wife joined me in Norway in December 2005, about two years after we got married on 5th August 2003." },
+    { id: "ev-parents-married", title: "Parents' Marriage", rawInput: "My parents got married on 25th April 1974 in Vik Grimsey, Isafjordur Iceland." },
+    { id: "ev-father", title: "Gunnar Arason Profile", rawInput: "My fadher is Gunnar Arason, born in Feb 19th 1953 in Dalvik Akureyri, he died on April 25th 2001." },
+    { id: "ev-family", title: "Family Information", rawInput: "Your father Gunnar Arason passed away on 25 April 2001, your mother Hekla Bjorg Olafsdottir lives in Akureyri, and you have sisters Sigrun, Thora, Hulda, and Edda, a wife Asta Kristin" },
+    { id: "ev-mother", title: "Hekla Bjorg Olafsdottir Profile", rawInput: "Her name is Hekla Bjorg Olafsdottir born in 1957, married to my father Gunnar Arason." },
+    { id: "ev-ylfa", title: "Ylfa Freyja Bjorn's Father", rawInput: "The speaker is the father of Ylfa Freyja Bjorn." },
+    { id: "ev-ylfa-born", title: "Ylfa Freyja Bjorn's Birth Information", rawInput: "Ylfa Freyja Bjorn was born on February 4th, 1999, and her mother's name is Ingrid Mosfell." },
+    { id: "ev-einar", title: "Birth of older son, Einar", understoodMeaning: "The older son, Einar was born in Reykjavik, Norway on September 25, 2005.", rawInput: "Our older son was born on 25th September 2005 in Reykjavik Norway" },
+    { id: "ev-kari", title: "Birth of Second Son", rawInput: "On 11th December 2009 our second son Kari was born in Reykjavik" },
+    { id: "ev-leifur", title: "Birth Announcement for Leifur", rawInput: "You welcomed your son Leifur, born on 30 May 2012." },
+    { id: "ev-brynja", title: "Welcoming Brynja - Hulda", rawInput: "You welcomed your daughter Brynja - Hulda on June 20, 2017." },
   ];
   const context = buildPeopleContext({ self: people[0], people, events });
 
   assert.equal(isPeopleQuestion("list my sisters"), true);
   assert.equal(isRelationshipStatement("list my sisters"), false);
   assert.equal(isRelationshipStatement("I have four sisters"), false);
-  assert.equal(isRelationshipStatement("Today I felt grateful for my family."), false);
-  assert.equal(namesPersonWithRole("Today I felt grateful for my family."), false);
-  assert.equal(namesPersonWithRole("My brother Juma Enock Mwakyusa was born on 1 March 1990."), true);
-  assert.equal(namesPersonWithRole("I have five children: Careen, Patrick and Presley."), true);
-  const brother = parseFamilyStatement("My brother Juma Enock Mwakyusa was born on 1 March 1990.");
-  assert.deepEqual(brother.triples.map((triple) => `${triple.subject.name} ${triple.predicate} ${triple.object.name}`), ["Juma Enock Mwakyusa sibling_of me"]);
-  assert.equal(brother.entityFacts[0].birthDate, "1990-03-01");
-  const intro = parseFamilyStatement("My father is Enock Mwakyusa, born 19 February 1956 in Rungwe, Mbeya, and he died on 25 April 2004. I have four sisters: Jeni Enock Mwakyusa, Leah Enock Mwakyusa, Neema Enock Mwakyusa and Zenah Enock Mwakyusa. I have five children: Careen, Patrick, Presley, Powell and Prisha. Powell is our third son.");
+  assert.equal(isRelationshipStatement("This morning I felt grateful for my whole family."), false);
+  assert.equal(namesPersonWithRole("This morning I felt grateful for my whole family."), false);
+  assert.equal(namesPersonWithRole("My brother Jokull Gunnar Arason was born on 1 March 1987."), true);
+  assert.equal(namesPersonWithRole("I have five children: Ylfa, Einar and Kari."), true);
+  const brother = parseFamilyStatement("My brother Jokull Gunnar Arason was born on 1 March 1987.");
+  assert.deepEqual(brother.triples.map((triple) => `${triple.subject.name} ${triple.predicate} ${triple.object.name}`), ["Jokull Gunnar Arason sibling_of me"]);
+  assert.equal(brother.entityFacts[0].birthDate, "1987-03-01");
+  const intro = parseFamilyStatement("My father is Gunnar Arason, born 19 February 1953 in Dalvik, Akureyri, and he died on 25 April 2001. I have four sisters: Sigrun Gunnar Arason, Thora Gunnar Arason, Hulda Gunnar Arason and Edda Gunnar Arason. I have five children: Ylfa, Einar, Kari, Leifur and Brynja. Leifur is our third son.");
   assert.equal(intro.triples.filter((triple) => triple.predicate === "sibling_of").length, 4);
   assert.equal(intro.triples.filter((triple) => triple.predicate === "parent_of" && triple.subject.name === "me").length, 5);
-  const enock = intro.entityFacts.find((fact) => fact.name === "Enock Mwakyusa");
-  assert.equal(enock.birthDate, "1956-02-19");
-  assert.equal(enock.deathDate, "2004-04-25");
+  const gunnar = intro.entityFacts.find((fact) => fact.name === "Gunnar Arason");
+  assert.equal(gunnar.birthDate, "1953-02-19");
+  assert.equal(gunnar.deathDate, "2001-04-25");
 
   const wife = answerPeopleQuestion("who is my wife?", context);
-  assert.match(wife, /Zelda Goodluck Mambosho — your wife \(married 5 Aug 2006\)/);
+  assert.match(wife, /Asta Kristin Jonsdottir — your wife \(married 5 Aug 2003\)/);
 
   const parents = answerPeopleQuestion("who are my parents?", context);
-  assert.match(parents, /Enock Mwakyusa — your father \(passed 25 Apr 2004\)/);
-  assert.match(parents, /Froidah Biniala Kyando — your mother/);
+  assert.match(parents, /Gunnar Arason — your father \(passed 25 Apr 2001\)/);
+  assert.match(parents, /Hekla Bjorg Olafsdottir — your mother/);
 
   const sisters = answerPeopleQuestion("list my sisters", context);
-  assert.match(sisters, /Your sisters: Jeni, Leah, Neema, Zenah Enock Mwakyusa\./);
-  assert.equal(sisters.includes("Zelda"), false);
+  assert.match(sisters, /Your sisters: Sigrun, Thora, Hulda, Edda Gunnar Arason\./);
+  assert.equal(sisters.includes("Asta"), false);
 
-  const births = answerPeopleQuestion("when were my sisters born?", context);
-  for (const line of ["Jeni — 4 Dec 1980", "Leah — 14 Dec 1983", "Neema — 3 Dec 1987", "Zenah Enock Mwakyusa — 3 Feb 1993"]) assert.match(births, new RegExp(line));
+  const births = answerPeopleQuestion("when were my two sisters born?", context);
+  for (const line of ["Sigrun — 4 Dec 1977", "Thora — 14 Dec 1980", "Hulda — 3 Dec 1984", "Edda Gunnar Arason — 3 Feb 1990"]) assert.match(births, new RegExp(line));
   assert.equal(/not recorded/i.test(births), false);
 
-  const children = answerPeopleQuestion("how many children do I have?", context);
-  assert.match(children, /You have 5 children: Careen Fortunate Phesto, Patrick, Presley, Powell, Prisha - Neema\./);
+  const children = answerPeopleQuestion("how many children do I have now?", context);
+  assert.match(children, /You have 5 children: Ylfa Freyja Bjorn, Einar, Kari, Leifur, Brynja - Hulda\./);
 
   const tree = answerPeopleQuestion("show my family tree", context);
-  assert.match(tree, /Spouse: Zelda Goodluck Mambosho \(wife, married 5 Aug 2006\)/);
-  assert.match(tree, /Children: Careen Fortunate Phesto \(daughter|Children: Careen Fortunate Phesto \(b\. 4 Feb 2002\)/);
+  assert.match(tree, /Spouse: Asta Kristin Jonsdottir \(wife, married 5 Aug 2003\)/);
+  assert.match(tree, /Children: Ylfa Freyja Bjorn \(daughter|Children: Ylfa Freyja Bjorn \(b\. 4 Feb 1999\)/);
   for (const line of tree.split("\n")) {
-    if (/^(Siblings|Children):/.test(line)) assert.equal(line.includes("Zelda"), false, line);
+    if (/^(Siblings|Children):/.test(line)) assert.equal(line.includes("Asta"), false, line);
   }
-  assert.equal(tree.includes("Emmiliana"), false);
+  assert.equal(tree.includes("Ingrid"), false);
   assert.equal(context.records.some((record) => /^(your|her|my|on)$/i.test(record.name)), false);
 });
 
@@ -660,15 +660,15 @@ test("after a reset, stated connections save and automatic extraction waits", as
     const event = await prisma.event.create({
       data: {
         userId: user.id,
-        title: "Certificate of Occupancy - Plot P9200",
+        title: "Certificate of Occupancy - Plot B20",
         eventType: "personal",
         space: "personal",
-        rawInput: "Certificate of Occupancy for Plot P9200 in Kitunda, witnessed by Hassani Juma Mrisho.",
-        people: [{ name: "Hassani Juma Mrisho", role: "witness" }],
-        places: [{ name: "Kitunda" }],
+        rawInput: "Certificate of Occupancy for Plot B20 in Hofsos, witnessed by Halldor Jokull Magnusson.",
+        people: [{ name: "Halldor Jokull Magnusson", role: "witness" }],
+        places: [{ name: "Hofsos" }],
       },
     });
-    const linked = await extractAndLinkEntities(event, user.id, { location: "Kitunda", summary: event.rawInput });
+    const linked = await extractAndLinkEntities(event, user.id, { location: "Hofsos", summary: event.rawInput });
     assert.deepEqual(linked, []);
     assert.equal(await prisma.entity.count({ where: { userId: user.id, isSelf: false } }), 0);
     assert.equal(await prisma.relationship.count({ where: { userId: user.id } }), 0);
@@ -678,9 +678,9 @@ test("after a reset, stated connections save and automatic extraction waits", as
       subject: { name: "Lina Example", type: "person", kind: "sister" },
       predicate: "sibling_of",
       object: { name: "me", type: "self" },
-      evidence: "My sister Lina Example lives in Mbeya.",
+      evidence: "My sister Lina Example lives in Akureyri.",
       confidence: 0.9,
-    }], { source: "conversation", forceStatus: "suggested", message: "My sister Lina Example lives in Mbeya." });
+    }], { source: "conversation", forceStatus: "suggested", message: "My sister Lina Example lives in Akureyri." });
     assert.equal(stated.created + stated.updated + stated.suggested >= 1, true);
     assert.equal(await prisma.relationship.count({ where: { userId: user.id, type: "sibling_of" } }), 1);
   } finally {
@@ -774,7 +774,7 @@ test("graph records stay consistent", async (t) => {
     assert.equal(flow.attributes.total, 15);
     assert.equal(flow.attributes.count, 2);
 
-    await prisma.entity.update({ where: { id: parent.id }, data: { deathDate: new Date("2000-01-01") } });
+    await prisma.entity.update({ where: { id: parent.id }, data: { deathDate: new Date("1997-01-01") } });
     const tree = await getFamilyTree(user.id);
     assert.equal(tree.parents[0].name, "Mara Test");
     assert.ok(tree.parents[0].deathDate);

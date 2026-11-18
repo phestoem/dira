@@ -4,13 +4,14 @@ import { join, relative } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { CASES, SEED_MESSAGES, SELF_NAME } from "../scripts/golden/cases.js";
+import { PERSONAL } from "../scripts/golden/personal.js";
 
-// Personal data lives in the database only: no name, place, plot number or golden sentence from Phesto's records may
-// appear in a prompt, regex, example, comment or UI text in api/src or web/. The golden cases are the source of
-// those words (they are Phesto's real records), plus identifiers that the cases do not mention.
-const ROOTS = [fileURLToPath(new URL("../src", import.meta.url)), fileURLToPath(new URL("../../web", import.meta.url))];
+// Personal data lives in the database only: no name, place, plot number or golden sentence from the owner's records may
+// appear in a prompt, regex, example, comment, UI text or test fixture in api/src, api/test or web/. The golden
+// cases (api/scripts/golden, exempt) are the source of those words, as the owner's real records, plus identifiers
+// the cases do not mention (personal.js there).
+const ROOTS = [fileURLToPath(new URL("../src", import.meta.url)), fileURLToPath(new URL(".", import.meta.url)), fileURLToPath(new URL("../../web", import.meta.url))];
 const SKIP_DIRS = new Set(["node_modules", ".next", "public", "out", "dist"]);
-const PERSONAL = ["Burton", "Ntagha", "Makoba", "Emmiliana", "Hassani", "Mrisho", "Juma Enock", "RZJ1200017194", "P9200", "Tent Camping Plans", "Tuliza Nafsi", "Ntabha", "Kisarawe", "Jambiani", "Kitunda", "Mbeya", "Rungwe", "Tanzania", "Finland", "Arusha", "Nairobi", "Zanzibar"];
 // Capitalised words in the cases that are ordinary words, months, brands or units.
 const ORDINARY = new Set(["my", "i", "i'm", "she", "he", "her", "his", "our", "we", "is", "in", "after", "careen's", "the", "and", "tsh", "toyota", "suzuki", "prado", "jimny", "dar", "es", "salaam", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "who", "what", "when", "how", "list", "show", "tell", "do", "does", "which", "where"]);
 
@@ -41,7 +42,7 @@ function sentences() {
   return [...new Set(texts.flatMap((text) => [text, ...text.split(/(?<=[.!?])\s+/)]).map((text) => text.trim().replace(/\s+/g, " ").toLowerCase()).filter((text) => text.length >= 24))];
 }
 
-test("api/src and web/ contain no personal name, place, identifier or golden sentence", () => {
+test("api/src, api/test and web/ contain no personal name, place, identifier or golden sentence", () => {
   const words = personalWords();
   const pattern = new RegExp(`(?<![\\p{L}\\d])(${words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")})(?![\\p{L}\\d])`, "iu");
   const golden = sentences();

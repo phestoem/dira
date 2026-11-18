@@ -1,0 +1,3 @@
+// Identifiers from Phesto's records that the golden cases do not mention; the contamination test keeps them out of
+// api/src, api/test and web/ (Helsinki is not listed: Europe/Helsinki is the configured time zone). Golden data, like cases.js: it never goes into a prompt or fixture.
+export const PERSONAL = ["Burton", "Ntagha", "Makoba", "Emmiliana", "Hassani", "Mrisho", "Juma Enock", "RZJ1200017194", "P9200", "Tent Camping Plans", "Tuliza Nafsi", "Ntabha", "Kisarawe", "Jambiani", "Kitunda", "Mbeya", "Rungwe", "Tanzania", "Finland", "Arusha", "Nairobi", "Zanzibar", "Mwakayusa", "Fortunate", "Mgololo", "Makungu", "Maegga", "Iringa", "Asha"];
