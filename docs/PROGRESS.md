@@ -219,8 +219,9 @@ missing after the introduction), the same without its last change.
   /opt/qusaz/dira/deploy.sh only after Phesto merged to main, with a
   backup first and /health + readonly golden against prod after.
   Passwordless sudo for the dira-api/dira-web restarts (and is-active,
-  which deploy.sh also runs with sudo): Phesto to add
-  /etc/sudoers.d/dira-deploy (needs Phesto's password).
+  which deploy.sh also runs with sudo): /etc/sudoers.d/dira-deploy,
+  added by Phesto 22:51; sudo -n is-active works for both (restart not
+  exercised: it would restart prod).
 - 2026-11-18 (Phesto): base on `main`; bridge stays on, simplified;
   digest and nudges stay; nothing removed; backups to the other NUC +
   restic to Cloudflare R2 (7 daily + 4 weekly, monthly restore test);
@@ -254,8 +255,7 @@ Checked 2026-11-18 (read-only, earlier):
 
 ## Open questions for Phesto
 - Keys: still not split (same fingerprints dev/prod). Token logging waits.
-- Sudoers rule for dira-api/dira-web restart + is-active (command given
-  2026-11-18); then merge personal → main to deploy.
+- Merge personal → main to deploy (sudoers rule in place, see Decisions).
 - Journal sharing masks only names that are person records and not
   confirmed. A name with no record at all goes out as written. Mask all
   capitalised names that are not confirmed people too (safer, mangles
