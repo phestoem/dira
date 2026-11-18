@@ -124,6 +124,19 @@ Pushed to origin/fix/people-answers on 2026-10-17 (first made on local
   guessed from a bare year.
 
 ## In progress
+- 2026-11-18 (resume after a month), uncommitted, waiting for Phesto's review:
+  per-save token logging. jsonCall returns `tokens` per call (API input,
+  cached, output, reasoning; input split by character share into
+  instruction = system prompt + schema / people = known records / message /
+  other; the split is an estimate, no tokenizer dependency). ingest() logs
+  one `[tokens] save …` line per save, and with KNOWLEDGE_TOKEN_LOG=<file>
+  one JSON line with every call. 5 life-set seeds on a temp dira_dev user
+  (gpt-5.5 extractor, gpt-4o-mini router): 2 calls per save; extractor in
+  3.7–3.8k (instruction ~3.63k, people 0–118 growing, message 15–42),
+  cached 2,816 from save 2; out 211–1,082, reasoning 0–499; router ~220
+  in / 9 out. Checks 2026-11-18: dev and prod share one OpenAI key; prod
+  had 0 saves since 15 Oct, 2 home inputs failed 503 on 429 (23 Oct,
+  18 Nov 13:36); a test call at ~14:00 succeeded.
 - Phase 2 runs (tmux `phase2`, `api/scripts/golden/phase2.sh <label>
   <runs> <sets…>`): logs/phase2/<label>/summary.txt, finished when it ends
   with "== … done". Running now: v4 (life, synthetic, hold-outs 1–3) then

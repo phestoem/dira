@@ -4,6 +4,7 @@ import { prisma } from "../src/prisma.js";
 import { runReadonly } from "../src/readonly.js";
 import { extractEvent, ingest, setExtractor, settled } from "../src/services/knowledge/ingest.js";
 import { fit } from "../src/services/knowledge/resolver.js";
+import { callTokens } from "../src/services/knowledge/model.js";
 import { fallbackKind } from "../src/services/knowledge/router.js";
 import { parseWhen, shapeProblem } from "../src/services/knowledge/store.js";
 
@@ -249,4 +250,13 @@ test("a statement whose extraction failed is extracted by the catch-up", async (
     setExtractor(null);
     await prisma.user.delete({ where: { id: user.id } }).catch(() => {});
   }
+});
+
+test("token use per call: API counts as given, input split over the prompt parts by characters", () => {
+  const usage = { prompt_tokens: 1002, completion_tokens: 300, prompt_tokens_details: { cached_tokens: 512 }, completion_tokens_details: { reasoning_tokens: 120 } };
+  const tokens = callTokens({ name: "claims", model: "m", usage, system: "x".repeat(500), schema: {}, user: `head\n${"p".repeat(300)}\n${"t".repeat(194)}`, parts: { people: "p".repeat(300), message: "t".repeat(194) } });
+  assert.deepEqual([tokens.input, tokens.cached, tokens.output, tokens.reasoning], [1002, 512, 300, 120]);
+  assert.deepEqual(tokens.chars, { instruction: 502, people: 300, message: 194, other: 6 });
+  assert.deepEqual(tokens.split, { instruction: 502, people: 300, message: 194, other: 6 });
+  assert.equal(callTokens({ name: "route", model: "m", usage: null, system: "s", schema: {}, user: "u" }).split.instruction, null);
 });

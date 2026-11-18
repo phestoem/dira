@@ -33,18 +33,19 @@ export function fallbackKind(text) {
 export async function classify(text, history = []) {
   const recent = history.slice(-4).map((turn) => `${turn.role}: ${String(turn.content || "").slice(0, 300)}`).join("\n");
   try {
-    const { json } = await jsonCall({
+    const { json, tokens } = await jsonCall({
       model: routerModel(),
       name: "route",
       schema: SCHEMA,
       system: SYSTEM,
       user: `${recent ? `Recent conversation:\n${recent}\n\n` : ""}Message:\n${text}`,
+      parts: { history: recent, message: text },
       timeoutMs: 12000,
     });
-    if (!["statement", "question", "mixed"].includes(json.kind)) return { ...fallbackKind(text), fallback: true };
-    return { kind: json.kind, question: json.kind === "statement" ? "" : json.question || text };
+    if (!["statement", "question", "mixed"].includes(json.kind)) return { ...fallbackKind(text), fallback: true, tokens };
+    return { kind: json.kind, question: json.kind === "statement" ? "" : json.question || text, tokens };
   } catch (err) {
     console.error("[knowledge] router fallback:", err.message);
-    return { ...fallbackKind(text), fallback: true };
+    return { ...fallbackKind(text), fallback: true, tokens: { call: "route", model: routerModel(), error: err.message } };
   }
 }

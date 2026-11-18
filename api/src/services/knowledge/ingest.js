@@ -38,13 +38,28 @@ export async function ingest(userId, text, { source = "chat", ref = null, histor
   const body = String(text || "").trim();
   if (!body) return { kind: "empty", stored: false };
   if (!SOURCES.includes(source)) throw new Error(`unknown source ${source}`);
-  const route = source === "chat" ? await classify(body, history) : { kind: "statement", question: "" };
-  if (route.kind === "question" || isReadonly()) return { ...route, stored: false };
+  const { tokens, ...route } = source === "chat" ? await classify(body, history) : { kind: "statement", question: "" };
+  const calls = tokens ? [tokens] : [];
+  if (route.kind === "question" || isReadonly()) {
+    logTokens({ userId, eventId: null, source, kind: route.kind, calls });
+    return { ...route, stored: false };
+  }
   const event = await prisma.event.create({
     data: { userId, title: titleOf(body), rawInput: body, fullText: body, eventType: "note", source, rawSourceRef: ref, occurredAt: new Date() },
   });
-  const done = enqueue(userId, () => extractEvent(userId, event, { source, asOf }));
+  const done = enqueue(userId, () => extractEvent(userId, event, { source, asOf, kind: route.kind, calls }));
   return { ...route, stored: true, eventId: event.id, extraction: done };
+}
+
+// Token use per save: every model call the save made (router, extractor), one console line, and with
+// KNOWLEDGE_TOKEN_LOG=<file> one JSON line with each call's counts. No text is logged.
+export function logTokens({ userId, eventId, source, kind, calls }) {
+  const sum = (field) => calls.reduce((total, call) => total + (call[field] || 0), 0);
+  const part = (field) => calls.reduce((total, call) => total + (call.split?.[field] || 0), 0);
+  console.log(`[tokens] save ${eventId || "-"} ${kind} calls=${calls.length} in=${sum("input")} (instruction ~${part("instruction")}, people ~${part("people")}, message ~${part("message")}, other ~${part("other") + part("history")}; cached ${sum("cached")}) out=${sum("output")} (reasoning ${sum("reasoning")})${calls.some((call) => call.error) ? " with failed calls" : ""}`);
+  const file = process.env.KNOWLEDGE_TOKEN_LOG;
+  if (!file) return;
+  try { appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), userId, eventId, source, kind, calls })}\n`); } catch { /* log only */ }
 }
 
 // KNOWLEDGE_TRACE=<file>: one JSON line per extracted source (raw claims, validator drops, store skips, token use).
@@ -54,8 +69,15 @@ function trace(entry) {
   try { appendFileSync(file, `${JSON.stringify({ at: new Date().toISOString(), ...entry })}\n`); } catch { /* trace only */ }
 }
 
-export async function extractEvent(userId, event, { source, asOf } = {}) {
-  const result = extractor ? await extractor(event.fullText || event.rawInput || "", { userId, source, asOf, eventId: event.id }) : { claims: [] };
+export async function extractEvent(userId, event, { source, asOf, kind = "statement", calls = [] } = {}) {
+  let result;
+  try {
+    result = extractor ? await extractor(event.fullText || event.rawInput || "", { userId, source, asOf, eventId: event.id }) : { claims: [] };
+  } catch (err) {
+    logTokens({ userId, eventId: event.id, source, kind, calls: [...calls, { call: "claims", error: err.message }] });
+    throw err;
+  }
+  logTokens({ userId, eventId: event.id, source, kind, calls: result.tokens ? [...calls, result.tokens] : calls });
   const stored = await writeClaims(userId, result.claims || [], { eventId: event.id, source, sourceRef: event.rawSourceRef, extractor: result.extractor, model: result.model });
   trace({ userId, eventId: event.id, source, text: event.fullText || event.rawInput, model: result.model, usage: result.usage, raw: result.raw, dropped: result.dropped, skipped: stored.skipped.map((item) => ({ reason: item.reason, item: item.item })), written: stored.written.length });
   await prisma.event.update({ where: { id: event.id }, data: { graphExtractedAt: new Date() } });

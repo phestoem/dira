@@ -222,16 +222,18 @@ export async function extractClaims(text, { userId, asOf = null, source = "chat"
   ]);
   const known = knownLines(self, entities, claims);
   const today = (asOf ? new Date(asOf) : new Date()).toISOString().slice(0, 10);
+  const records = known.length ? known.join("\n") : "";
   const user = [
     `Today: ${today}`,
     `Narrator: ${self.name}`,
     `Source: ${source}`,
-    known.length ? `Known records:\n${known.join("\n")}` : "Known records: none yet",
+    known.length ? `Known records:\n${records}` : "Known records: none yet",
     `Text:\n${text}`,
   ].join("\n\n");
   const model = extractModel();
-  const { json, usage } = await jsonCall({ model, name: "claims", schema: CLAIMS_SCHEMA, system: CLAIMS_PROMPT, user, timeoutMs: 60000 });
+  // "people" is the known-records context: every known entity (people, places, things, projects) with its roles.
+  const { json, usage, tokens } = await jsonCall({ model, name: "claims", schema: CLAIMS_SCHEMA, system: CLAIMS_PROMPT, user, parts: { people: records, message: text }, timeoutMs: 60000 });
   const raw = withPlaces((json.claims || []).map(fromAlias).map(repairShape).map((claim) => ({ ...claim, subject: claim.subject?.type === "self" ? "me" : claim.subject, object: claim.object?.type === "self" ? "me" : claim.object, context: claim.context?.type === "self" ? "me" : claim.context })));
   const { kept, dropped } = validateClaims(raw, text, { known: entities.map((entity) => [entity.name, ...(entity.aliases || [])]).flat(), selfName: self.name, today });
-  return { claims: kept, dropped, raw, usage, extractor: EXTRACTOR_VERSION, model };
+  return { claims: kept, dropped, raw, usage, tokens: { ...tokens, knownRecords: known.length }, extractor: EXTRACTOR_VERSION, model };
 }
