@@ -6,6 +6,7 @@ import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.
 import { extractAndLinkEntities } from "./entities.js";
 import {
   applyCorrections,
+  attachAltimetrixContext,
   createEventFromUnderstanding,
   understandFile,
   understandText,
@@ -237,6 +238,7 @@ async function rememberUnderstanding(queueId, result) {
       }),
     },
   });
+  attachAltimetrixContext(queueId, result.understood);
 
   return {
     queueId,

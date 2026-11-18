@@ -31,6 +31,7 @@ test("flags: the bridge defaults on, the paused features default off, and on/off
 test("paused features and the bridge", async (t) => {
   const calls = { model: 0, ingest: [], context: [] };
   let failIngest = 1;
+  let holdContext = null; // when set, context requests wait for it
   const server = createServer((req, res) => {
     let body = "";
     req.on("data", (chunk) => (body += chunk));
@@ -46,8 +47,10 @@ test("paused features and the bridge", async (t) => {
       }
       if (req.url.startsWith("/alt/bridge/context")) {
         calls.context.push(JSON.parse(body));
-        res.writeHead(200, { "content-type": "application/json" });
-        return res.end(JSON.stringify({ context: "Felt good about the cabin.", memoriesFound: 1, threadsFound: 0 }));
+        return Promise.resolve(holdContext).then(() => {
+          res.writeHead(200, { "content-type": "application/json" });
+          res.end(JSON.stringify({ context: "Felt good about the cabin.", memoriesFound: 1, threadsFound: 0 }));
+        });
       }
       calls.model += 1;
       res.writeHead(500, { "content-type": "application/json" });
@@ -78,6 +81,7 @@ test("paused features and the bridge", async (t) => {
   const { catchUpGraphExtractions } = await import("../src/services/graph/rebuild.js");
   const { extractConversationalFacts } = await import("../src/services/intentRouter.js");
   const { detectSignificantFacts } = await import("../src/services/lifeAdvisor.js");
+  const { altimetrixContextFor, attachAltimetrixContext, understandText } = await import("../src/services/contextEngine.js");
   const graphRoutes = (await import("../src/routes/graph.js")).default;
 
   const stamp = Date.now();
@@ -170,5 +174,29 @@ test("paused features and the bridge", async (t) => {
     assert.deepEqual(asked.topics, ["roof"]);
     assert.equal(asked.query, "someone and someone asked Bo Linden about the Lakeview roof");
     assert.equal(await prisma.entity.count({ where: { userId: user.id } }), before, "no records were written");
+  });
+
+  await t.test("a save does not wait for Altimetrix; the context lands on the stored preview later", async () => {
+    let release;
+    holdContext = new Promise((resolve) => (release = resolve));
+    t.after(() => release());
+    const before = calls.context.length;
+    const result = await understandText("Bo Linden checked the Lakeview roof today.", user.id);
+    assert.equal(result.understood.altimetrixContext, undefined, "the save answered without the context");
+    for (let i = 0; i < 100 && calls.context.length === before; i += 1) await new Promise((resolve) => setTimeout(resolve, 20));
+    assert.equal(calls.context.length, before + 1, "the context request went out in the background and is still held");
+    const queue = await prisma.inputQueue.create({
+      data: { userId: user.id, rawContent: "Bo Linden checked the Lakeview roof today.", contentType: "text", source: "manual", processingStatus: "processing", understoodAs: JSON.stringify({ understood: result.understood }) },
+    });
+    attachAltimetrixContext(queue.id, result.understood);
+    release();
+    holdContext = null;
+    await altimetrixContextFor(result.understood);
+    let stored = null;
+    for (let i = 0; i < 50 && !stored?.understood?.altimetrixContext; i += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      stored = JSON.parse((await prisma.inputQueue.findUnique({ where: { id: queue.id } })).understoodAs);
+    }
+    assert.equal(stored.understood.altimetrixContext, "Felt good about the cabin.");
   });
 });

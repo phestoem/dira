@@ -9,7 +9,22 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
-- 2026-11-18: pause flags + simplified bridge.
+- 2026-11-18: saves never wait for Altimetrix (Phesto: "fetch it only when
+  answering, or attach it in the background").
+  - understandText/understandFile return as soon as the model (or the
+    plain-note fallback) has understood; the context fetch starts in the
+    background. attachAltimetrixContext(queueId, understood) adds it to
+    the stored preview (queue row) when it arrives; the queue panel shows
+    it from there. The first preview card no longer shows it.
+  - Wired at the four places that store a preview (intake, home x2,
+    email).
+  - test/flags.test.js: Altimetrix holds the context request; the save
+    still returns, and the context lands on the queue row after release.
+  - npm test 31/31; golden fixture 12/12 + reset gate
+    (logs/golden-ctx-fixture.log); live readonly 11/12 twice, `properties`
+    (the known flake: the model's list left out one property; the answer
+    path is not touched by this change) (logs/golden-ctx-live*.log).
+- 2026-11-18 `034ae4f`: pause flags + simplified bridge.
   - api/src/services/flags.js: DIRA_BRIDGE (default on), DIRA_AUTO_EXTRACT,
     DIRA_GRAPH_REBUILD, DIRA_FACT_CHIPS (default off). on/off/true/false/
     1/0/yes/no; anything else keeps the default. Logged at startup and in
@@ -29,8 +44,7 @@ plan. One item per commit, family golden test before each commit.
     Names of places, projects etc. still go. Sends run after the save
     (setImmediate, as before), retry 3x on network/429/5xx (2 s, 4 s),
     8 s timeout each; on failure the event stays unsent for the next sync.
-    The context fetch (a save waits for it) now times out at 3 s instead
-    of 8 s; so does the nudge. Altimetrix replies are only attached as
+    The context fetch times out at 3 s instead of 8 s; so does the nudge. Altimetrix replies are only attached as
     context; nothing it returns writes records (it suggests no people
     today, so there is nothing to route to confirmation yet).
   - test/flags.test.js (local stub plays Altimetrix and the model).

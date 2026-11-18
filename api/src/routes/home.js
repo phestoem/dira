@@ -7,6 +7,7 @@ import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.
 import { confirmCommand, interpretCommand } from "../services/commandInterpreter.js";
 import {
   applyCorrections,
+  attachAltimetrixContext,
   createEventFromUnderstanding,
   detectVisionInJournalEntry,
   understandFile,
@@ -202,6 +203,7 @@ async function saveOfferedFact(userId, content) {
       }),
     },
   });
+  attachAltimetrixContext(queue.id, result.understood);
   const understood = applyCorrections(result.understood, null);
   understood.space = SPACES.has(result.suggestedSpace) ? result.suggestedSpace : "personal";
   if (EVENT_TYPES.has(result.suggestedEventType)) understood.eventType = result.suggestedEventType;
@@ -275,6 +277,7 @@ async function intakeResponse(userId, routing, queueId, result) {
       }),
     },
   });
+  attachAltimetrixContext(queueId, result.understood);
   const understood = publicUnderstanding(result);
   const sessionId = remember(userId, { kind: "intake", queueId, routing });
   const line = routing.action === "confirm"

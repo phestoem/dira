@@ -3,7 +3,7 @@ import { Readable } from "stream";
 import { mkdir, writeFile } from "fs/promises";
 import { prisma } from "../prisma.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
-import { createEventFromUnderstanding, understandFile, understandText } from "../services/contextEngine.js";
+import { attachAltimetrixContext, createEventFromUnderstanding, understandFile, understandText } from "../services/contextEngine.js";
 import { extractAndLinkEntities } from "./entities.js";
 
 const UPLOAD_DIR = "/tmp/dira-uploads";
@@ -343,6 +343,7 @@ async function storeUnderstanding(queueId, result) {
       error: result.understood?.needsClarification || null,
     },
   });
+  attachAltimetrixContext(queueId, result.understood);
 }
 
 async function maybeAutoSave(userId, queueId, result) {

@@ -759,9 +759,25 @@ export async function detectVisionInJournalEntry(entry, userId) {
   return result;
 }
 
+// A save never waits for Altimetrix: the understanding is returned at once and the context is fetched in the
+// background. attachAltimetrixContext() adds it to the stored preview (queue row) when it arrives.
+const pendingContext = new WeakMap();
+
 async function understandWithContext(rawText, userId, eventType) {
   const understood = await interpretContent(rawText);
+  pendingContext.set(understood, fetchAltimetrixContext(rawText, understood, userId, eventType).catch((err) => {
+    console.error("[intake] altimetrix context failed:", err.message);
+    return null;
+  }));
+  return understood;
+}
+
+async function fetchAltimetrixContext(rawText, understood, userId, eventType) {
   const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user?.altimetrixUserId) {
+    console.log("[intake] altimetrix skipped: account not linked");
+    return null;
+  }
   const topics = contextTopics(rawText, understood, await userPlaceNames(userId).catch(() => []));
   const entityNames = await expandGraphNames(userId, contextNames(rawText, understood)).catch(() => contextNames(rawText, understood));
   console.log(
@@ -777,14 +793,33 @@ async function understandWithContext(rawText, userId, eventType) {
     user,
     contextQuery(rawText, understood),
   );
-  if (!user?.altimetrixUserId) {
-    console.log("[intake] altimetrix skipped: account not linked");
-  } else if (altimetrixContext?.context) {
-    console.log("[intake] altimetrix context attached");
-  } else {
-    console.log("[intake] altimetrix returned no context");
-  }
-  return applyAltimetrix(understood, altimetrixContext);
+  console.log(altimetrixContext?.context ? "[intake] altimetrix context arrived" : "[intake] altimetrix returned no context");
+  return altimetrixContext;
+}
+
+// Call after storing a preview on a queue row; runs in the background and never throws.
+export function attachAltimetrixContext(queueId, understood) {
+  const pending = understood && pendingContext.get(understood);
+  if (!queueId || !pending) return;
+  setImmediate(async () => {
+    try {
+      const context = await pending;
+      if (!context?.context) return;
+      const row = await prisma.inputQueue.findUnique({ where: { id: queueId }, select: { understoodAs: true } });
+      const stored = row?.understoodAs ? JSON.parse(row.understoodAs) : null;
+      if (!stored?.understood) return;
+      stored.understood = applyAltimetrix(stored.understood, context);
+      await prisma.inputQueue.update({ where: { id: queueId }, data: { understoodAs: JSON.stringify(stored) } });
+      console.log("[intake] altimetrix context attached to", queueId);
+    } catch (err) {
+      console.error("[intake] altimetrix attach failed:", err.message);
+    }
+  });
+}
+
+// For tests: the background context fetch of one understanding.
+export function altimetrixContextFor(understood) {
+  return pendingContext.get(understood) || Promise.resolve(null);
 }
 
 function applyAltimetrix(understood, altimetrixContext) {
