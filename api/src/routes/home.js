@@ -4,6 +4,7 @@ import { writeFile } from "fs/promises";
 import { prisma } from "../prisma.js";
 import { isReadonly, runReadonly, wantsReadonly } from "../readonly.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
+import { attachToEvent, lastSavedFor, looksLikeContinuation, noteSaved } from "../services/followUp.js";
 import { confirmCommand, interpretCommand } from "../services/commandInterpreter.js";
 import {
   applyCorrections,
@@ -69,6 +70,7 @@ export default async function homeRoutes(fastify) {
         await cancelPending(entry, request.userId);
         return doneResponse(entry.routing, "dismissed", { message: "Left it as it was." }, null);
       }
+      if (entry.kind === "attach") return await confirmAttach(request.userId, entry, body);
       if (entry.kind === "clarify") {
         const intent = typeof body.selectedOption === "string" ? body.selectedOption : "";
         if (!INTENT_LABEL[intent]) return reply.code(400).send({ error: "Choose one of the options." });
@@ -257,7 +259,10 @@ async function runIntakeText(userId, routing, payload) {
   });
   try {
     const result = await understandText(content, userId);
-    return intakeResponse(userId, routing, queue.id, result);
+    const preview = await intakeResponse(userId, routing, queue.id, result);
+    const previous = payload.lastAction?.saved ? lastSavedFor(userId) : null;
+    if (previous && looksLikeContinuation(content, previous.title)) return attachOffer(userId, routing, queue.id, previous, preview);
+    return preview;
   } catch (err) {
     await markQueueFailed(queue.id, err);
     throw err;
@@ -295,6 +300,38 @@ async function intakeResponse(userId, routing, queueId, result) {
     },
     clarificationOptions: null,
   };
+}
+
+// The message right after a save reads like more of it: offer that event first. "new" shows the normal preview
+// (already made, so no second model call); cancelling drops the queued input like any dismissed preview.
+function attachOffer(userId, routing, queueId, previous, preview) {
+  const title = previous.title || "the last save";
+  const sessionId = remember(userId, { kind: "attach", queueId, eventId: previous.eventId, title, preview, routing });
+  return {
+    sessionId,
+    routing: publicRouting(routing),
+    action: "clarify",
+    result: {
+      type: "clarification",
+      content: { prompt: `Add to “${title}”?`, eventId: previous.eventId, queueId },
+      confirmationRequired: false,
+      confirmationText: `Add to “${title}”?`,
+    },
+    clarificationOptions: [
+      { label: `Add to ${title}`, intent: "attach", description: `Add this to “${title}”` },
+      { label: "Save as new", intent: "new", description: "Save this as its own event" },
+    ],
+  };
+}
+
+async function confirmAttach(userId, entry, body) {
+  if (body.selectedOption === "new") return entry.preview;
+  const queue = await prisma.inputQueue.findFirst({ where: { id: entry.queueId, userId } });
+  const stored = parseJsonObject(queue?.understoodAs);
+  const { event, added } = await attachToEvent(userId, entry.eventId, stored?.understood || {}, queue?.rawContent || "", entry.queueId);
+  noteSaved(userId, event);
+  const detail = added.length ? `: ${added.join(", ")}` : "";
+  return doneResponse(entry.routing, "saved", { message: `Added to ${event.title}${detail}.`, eventId: event.id, queueId: entry.queueId }, null);
 }
 
 async function runQuestion(userId, routing, payload) {
@@ -529,6 +566,7 @@ async function confirmIntake(request, entry, body) {
     sourceFile: typeof stored.sourceFile === "string" ? stored.sourceFile : queue.filePath,
     occurredAt,
   });
+  noteSaved(userId, event);
   setImmediate(async () => {
     try {
       await extractAndLinkEntities(event, userId, understood);
@@ -568,7 +606,7 @@ async function confirmDismiss(userId, entry) {
 }
 
 async function cancelPending(entry, userId) {
-  if (entry.kind === "intake" || entry.kind === "dismiss") {
+  if (entry.kind === "intake" || entry.kind === "dismiss" || entry.kind === "attach") {
     await prisma.inputQueue.updateMany({
       where: { id: entry.queueId, userId, processingStatus: "processing" },
       data: { processingStatus: "dismissed", processedAt: new Date() },

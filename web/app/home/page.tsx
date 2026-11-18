@@ -669,7 +669,7 @@ function ResponseBody({
   if (result.type === "clarification") {
     return (
       <div>
-        <p className="text-sm leading-[1.8] text-[#F5F3EE]">Did you mean:</p>
+        <p className="text-sm leading-[1.8] text-[#F5F3EE]">{clarificationPrompt(result.content) || "Did you mean:"}</p>
         {!resolved ? (
           <div className="mt-3 flex flex-wrap gap-2">
             {(response.clarificationOptions || []).map((option) => (
@@ -1218,6 +1218,13 @@ function isNoiseHistory(content: string) {
   const value = content.trim();
   if (!value) return true;
   return /^(taking a moment\b|request failed\b|dira is busy right now\b|dira couldn't take that in\b)/i.test(value);
+}
+
+// A follow-up offer ("Add to …?") carries its own question; a plain clarification does not.
+function clarificationPrompt(content: unknown) {
+  if (!content || typeof content !== "object") return "";
+  const prompt = (content as { prompt?: unknown }).prompt;
+  return typeof prompt === "string" ? prompt : "";
 }
 
 function toLastAction(response: HomeResponse): HomeLastAction {

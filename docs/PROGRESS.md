@@ -3,12 +3,32 @@
 Last updated: 2026-11-18 (evening)
 
 ## Current goal
+Now (Phesto, 2026-11-18, from real use): 1 follow-ups attach to the last
+save, 2 save confirmations show key fields, 3 link confirmed people by
+name/alias without a model, 4 "what should I focus on" answers from dates
+and upcoming events. One item per commit, golden before each.
+
 DIRA for Phesto only: stability and low cost (docs/PERSONAL_SCOPE.md).
 Order (Phesto, 2026-11-18): backup → keys → graceful model failure →
 personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-18: real-use 1/4, follow-ups attach to the last save.
+  - services/followUp.js: the last saved event per user (30 min, memory);
+    looksLikeContinuation (opener word such as also/and/we'll/returning/
+    it's, or a shared word of 4+ letters with the title; no model).
+  - /home/input: an intake right after a save (lastAction.saved) that
+    continues it returns a clarification "Add to “<title>”?" with
+    [Add to <title>] [Save as new]. Add merges into the event: text
+    appended, new people added, place/date/amount only if missing; the
+    queue row points at the event; reply "Added to <title>: with X,
+    1,200 EUR." New returns the preview already made (no second model
+    call). Cancel dismisses the queued input.
+  - Web: the clarification card shows the offer's question.
+  - test/follow-up.test.js (stub understanding, code router). npm test
+    45/45; golden fixture 12/12 + reset gate, live 12/12
+    (logs/golden-followup-*.log).
 - 2026-11-18 23:04: deployed to prod. personal fast-forwarded into main
   (570df39..8698d0e, Phesto's go), pushed; prod merged it as 8a8eaf2.
   - First run stopped at `git pull` (prod main had 25 local merge commits,
