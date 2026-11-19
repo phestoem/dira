@@ -78,6 +78,8 @@ function missing(kind, records, today) {
   return out;
 }
 
+const sortKey = (item) => (item.precision === "month" ? Date.UTC(item.at.getUTCFullYear(), item.at.getUTCMonth() + 1, 0) : item.at.getTime());
+
 const wordIn = (term, text) => new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}`, "i").test(String(text || ""));
 
 // [{ name, kind, records, next, progress, missing }] for the things the question asks about: one per name it
@@ -109,7 +111,8 @@ export function timelineSubjects(question, events, now = new Date()) {
       .flatMap((event) => [["starts", event.occurredAt, event.datePrecision], ["ends", event.endsAt, null], ["due", event.dueAt, null]]
         .filter(([, at, precision]) => at && new Date(at) >= (precision === "month" ? monthStart : today))
         .map(([what, at, precision]) => ({ event, what, at: new Date(at), precision })))
-      .sort((a, b) => a.at - b.at);
+      // A month-only date ranks at the end of its month, so an exact day in that month comes first.
+      .sort((a, b) => sortKey(a) - sortKey(b));
     const progress = group.records.filter((event) => PROGRESS.test(textOf(event)) && (!event.occurredAt || new Date(event.occurredAt) < today));
     const label = names.length && topics.length && groups.length === 1 ? `${group.name} ${topics.join(" ")}` : group.name;
     return { name: label, kind, records: group.records, next: dated[0] || null, progress, missing: kind ? missing(kind, group.records, today) : [], today };

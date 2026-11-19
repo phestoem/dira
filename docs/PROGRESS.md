@@ -14,8 +14,23 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 22:56: prod deploy of 65d07c7 (month precision, chained
+  relations, compound people, timeline) and the approved date fix.
+  Backups dira_20261119_225345.dump (before deploy) and _225425 (before
+  the fix). Migration 20261119230000_event_date_precision applied; both
+  services active; /health ok. Date fix, one transaction, matched by id,
+  title and current value: a trip given its start and end dates; two
+  events whose day had been invented from "in December" set to the month
+  (datePrecision "month"). Second dry run: 0 changes. Script kept outside
+  the repo (personal data).
+  - Prod golden readonly: 14/15, no rows changed. trip-timeline failed:
+    a month-only date (stored as the 1st) sorted before the exact trip
+    date in the same month, so the answer counted to no day. Fixed: a
+    month-only date ranks at the end of its month (timeline.js sortKey);
+    test added. npm test 84/84; dev golden fixture 15/15 + reset gate,
+    live 15/15 (logs/golden-sortkey-*.log). Redeploy follows.
 - 2026-11-19: chained relations from records ("my father's wife",
-  "my wife's …", "my sister's …", "my sister Jeni's husband").
+  "my wife's …", "my sister's …", "my sister <name>'s husband").
   - peopleGrounding.chainedPeopleAnswer: the base relative(s), then that
     person's recorded connection of the asked kind; without one only two
     things follow from your own connections: a parent's spouse is your
@@ -23,7 +38,7 @@ plan. One item per commit, family golden test before each commit.
     else unrecorded says "not recorded yet" (your children are not assumed
     to be your spouse's). loadPeopleContext now names connection ends
     outside the tree.
-  - Golden: new case fathers-wife (Froidah, never Zelda): 15 cases.
+  - Golden: new case fathers-wife (the mother, never the own wife): 15 cases.
   - test/chained-people.test.js. npm test 83/83; golden fixture 15/15 +
     reset gate; live readonly 15/15 (logs/golden-chain-*.log).
 - 2026-11-19: month-precision dates (needed before the prod fix of the
@@ -54,12 +69,10 @@ plan. One item per commit, family golden test before each commit.
     contractor, cost estimate, payments, materials, start or finish date).
     Code only, no model call, so "on track" is never said. Nothing on
     record matches → normal chat.
-  - Golden: seed "Trip to Tanzania: I fly to Dar es Salaam on 10 December
-    2026." and case trip-timeline (14 cases).
-  - On the dira_dev copy of prod: the trip record "Trip to Tanzania" has
-    no date (saved 18 Nov, before dates were kept); the answer uses the
-    dated "Travel and Project Update" (15 Dec) and lists the trip as no
-    date.
+  - Golden: a seed with a dated trip and case trip-timeline (14 cases).
+  - On the dira_dev copy of prod: the trip record had no date (saved
+    18 Nov, before dates were kept); the answer used another dated
+    record and listed the trip as no date.
   - test/timeline.test.js. npm test 75/75; golden fixture 14/14 + reset
     gate; live readonly on dira_dev 14/14 (logs/golden-timeline-*.log).
 - 2026-11-19: real-use 5, compound people questions.
@@ -165,7 +178,7 @@ plan. One item per commit, family golden test before each commit.
   dates, 1 marriage date on the spouse connection. Second dry run: 0
   changes. Script kept outside the repo (personal data); log in
   logs/backfill-family-20261119.log (gitignored).
-  - Mbeya stays on the properties list (Phesto).
+  - The disputed land entry stays on the properties list (Phesto).
 - 2026-11-19: properties answered by code from records.
   - services/holdings.js: holdings found in saved events' text (plot
     numbers; "<kind> in <Place>"; "<Place> land/house"; "<Name> is our
@@ -522,8 +535,8 @@ For comparison, `fix/people-answers` today: fixture 10/13 (children
 missing after the introduction), the same without its last change.
 
 ## Decisions made and why
-- 2026-11-19 (Phesto): Kisarawe amounts are EUR, including the two 500
-  installments (October, November) that name no currency.
+- 2026-11-19 (Phesto): a house project's amounts are EUR, including two
+  installments whose text names no currency.
 - 2026-11-19 (Phesto): restores into dev always go through
   ops/backup/restore-into-dev.sh (sessions cleared, own JWT secret, nothing
   leaves dev).
@@ -574,8 +587,6 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- Prod "Trip to Tanzania" has no date (and no return date): set them in
-  the UI, or approve a one-off fix (backup, dry run first).
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);

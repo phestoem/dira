@@ -45,6 +45,17 @@ test("a project: its records by name, recorded progress, missing contractor and 
   assert.doesNotMatch(answer, /on track|Dinner/i);
 });
 
+test("an exact day comes before a month-only date in the same month", () => {
+  const events = [
+    { id: 1, title: "Travel update for Lakeview", occurredAt: day("2026-12-01"), datePrecision: "month" },
+    { id: 2, title: "Trip to Lakeview", occurredAt: day("2026-12-10"), endsAt: day("2027-01-17") },
+  ];
+  const answer = timelineAnswer("", timelineSubjects("how many days until my trip to Lakeview?", events, NOW));
+  assert.match(answer, /- Next date: Trip to Lakeview starts 10 Dec 2026, in 20 days\./);
+  assert.match(answer, /Travel update for Lakeview \(Dec 2026\)/);
+  assert.doesNotMatch(answer, /return date/, "the return date is recorded");
+});
+
 test("two names, two blocks; nothing dated ahead says so", () => {
   const answer = timelineAnswer("", timelineSubjects("Where am I with Elmstead and Quiet Harbour?", EVENTS, NOW));
   const [first, second] = answer.split("\n\n");
