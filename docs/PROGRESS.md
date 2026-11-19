@@ -14,6 +14,24 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 20:55: first restore test: prod dump into dira_dev
+  (Phesto, instead of a second backfill).
+  - Dev API stopped; dira_dev dumped first to
+    /opt/qusaz/backups/dira_dev/dira_dev_pre_restore_20261119.dump (it
+    also had the parked branch's `claims` table, 0 rows, and its
+    migration; not in prod, so gone from dira_dev now).
+  - DROP + CREATE dira_dev (owner dira_user), pg_restore (owners kept) of
+    dira_20261119_204348.dump: 0.49 s for drop, create and restore.
+  - Row counts, prod vs dira_dev: users 1/1, entities 15/15,
+    relationships 15/15, events 56/56, input_queue 77/77, diary_entries
+    2/2, visions 2/2, refresh_tokens 8/8, life_events 0/0,
+    _prisma_migrations 10/10 (9 finished both); vector extension present.
+  - Dev API restarted. Off in dev: DIRA_DISABLE_CRON=true ("[cron]
+    disabled" at start); bridge: DIRA_BRIDGE=off now set explicitly in dev
+    .env (it was unset = on, inert only because dev has no bridge secret);
+    email: no RESEND_API_KEY in dev, so no digest or OTP mail can send.
+  - Golden live readonly on dira_dev 12/12, no rows changed; fixture
+    12/12 + reset gate (logs/golden-restore-*.log).
 - 2026-11-19 20:46: deployed 7a26f50 (dates only from records, stated
   dates on confirm, property list by code) to prod. main fast-forwarded
   8225d06..7a26f50, pushed; prod merged it as 8ce77d6. Backup first
@@ -433,8 +451,6 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- dira_dev has no father record, so its live family-tree golden fails
-  on his dates (prod is backfilled). Backfill dira_dev the same way?
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
