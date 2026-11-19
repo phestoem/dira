@@ -14,6 +14,13 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 20:46: deployed 7a26f50 (dates only from records, stated
+  dates on confirm, property list by code) to prod. main fast-forwarded
+  8225d06..7a26f50, pushed; prod merged it as 8ce77d6. Backup first
+  (dira_20261119_204348.dump); no migration; both services active;
+  /health ok. Readonly golden against prod 12/12 (family-tree,
+  sister-births, properties included), every date from records, no rows
+  changed (logs/deploy-20261119c.log, logs/golden-prod-readonly-20261119c.log).
 - 2026-11-19 20:4x: one-off prod family backfill (Phesto approved the
   dry run, with one date he corrected). Backup first
   (dira_20261119_203734.dump). One transaction, empty fields only, records
