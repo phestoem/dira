@@ -52,14 +52,21 @@ export async function loadPeopleContext(userId) {
     status: edge.status,
     fromId: edge.fromId,
     toId: edge.toId,
+    validFrom: edge.validFrom || null,
     fromName: people.find((person) => person.id === edge.fromId)?.name || "",
     toName: people.find((person) => person.id === edge.toId)?.name || "",
   }));
   return buildPeopleContext({ self: tree.self, people, edges: namedEdges, events });
 }
 
+// Dates come only from records: birth and death on the person record, marriage on the spouse_of connection.
+// Event text adds names and roles, never dates.
 export function buildPeopleContext({ self, people = [], edges = [], events = [] } = {}) {
-  const roster = people.filter((person) => person?.name);
+  const roster = people.filter((person) => person?.name).map((person) => ({ ...person }));
+  for (const person of roster) {
+    const edge = edges.find((item) => item.type === "spouse_of" && item.status !== "suggested" && item.validFrom && (item.fromId === person.id || item.toId === person.id));
+    if (edge && ["wife", "husband", "spouse"].includes(person.kind)) person.marriageDate = normalizeDate(edge.validFrom);
+  }
   const allowedNames = roster.map((person) => person.name);
   const allowedDates = new Set();
   const facts = [];
@@ -80,6 +87,10 @@ export function buildPeopleContext({ self, people = [], edges = [], events = [] 
         bits.push(`deathDate ${iso}`);
       }
     }
+    if (person.marriageDate) {
+      allowedDates.add(person.marriageDate);
+      bits.push(`marriageDate ${person.marriageDate}`);
+    }
     facts.push({ text: bits.join(" | "), source: { type: "entity", id: person.id } });
   }
   const confirmed = edges.filter((edge) => edge.status !== "suggested");
@@ -95,23 +106,8 @@ export function buildPeopleContext({ self, people = [], edges = [], events = [] 
   const eventFacts = [];
   for (const record of records) {
     if (!record.name) continue;
-    if (record.name) allowedNames.push(record.name);
-    for (const iso of [record.birthDate, record.deathDate, record.marriageDate]) {
-      if (iso) allowedDates.add(iso);
-    }
-    if (record.birthDate || record.deathDate) {
-      eventFacts.push({
-        personName: record.name,
-        entityId: record.personId,
-        field: record.deathDate && !record.birthDate ? "deathDate" : "birthDate",
-        value: record.birthDate || record.deathDate,
-        sources: [`event:${record.eventId}`],
-      });
-    }
+    allowedNames.push(record.name);
     const bits = [record.name, record.kind].filter(Boolean);
-    if (record.birthDate) bits.push(`birthDate ${record.birthDate}`);
-    if (record.deathDate) bits.push(`deathDate ${record.deathDate}`);
-    if (record.marriageDate) bits.push(`marriageDate ${record.marriageDate}`);
     facts.push({ text: bits.join(" | "), source: { type: "event", id: record.eventId } });
   }
   for (const edge of suggested) {
@@ -198,9 +194,7 @@ export function answerPeopleQuestion(question, context) {
   if (mother && !lines.some((line) => line.includes(mother.name))) lines.push(`${mother.name} — your mother.`);
   if (sisters.length) {
     lines.push(`Your sisters: ${sisters.map((person) => person.name).join(", ")}.`);
-    const dated = sisters.filter((person) => birthOf(person, context));
-    if (!dated.length) lines.push("Your sisters' birth dates aren't recorded yet.");
-    else lines.push(dated.map((person) => `${person.name} — ${prettyDate(birthOf(person, context).iso)}`).join("\n"));
+    lines.push(sisters.map((person) => `${person.name} — ${birthOf(person) ? prettyDate(birthOf(person).iso) : "birth date not recorded yet"}`).join("\n"));
   }
   if (spouse) lines.push(`${spouse.name} — your ${spouse.kind}.`);
   for (const conflict of context?.conflicts || []) {
@@ -259,7 +253,7 @@ export function deliverPeopleAnswer(modelText, context, question) {
   const recorded = answerPeopleQuestion(question, context);
   const familyTree = /\bfamily tree\b/i.test(question || "");
   const modelMissed = /\b(not recorded|isn't recorded|aren't recorded)\b/i.test(checked.reply)
-    && !/\b(not recorded|isn't recorded|aren't recorded)\b/i.test(recorded);
+    && !/^Your [\p{L}' ]+ (?:isn't|aren't) recorded yet\.$/u.test(recorded.trim());
   const reply = recorded.trim() && (familyTree || checked.removed.length || modelMissed) ? recorded : (checked.reply || recorded);
   return { reply, removed: checked.removed, sourceIds: parsed.sourceIds.filter((id) => knownSource(id, context)) };
 }
@@ -341,7 +335,6 @@ const MONTH_WORDS = Object.keys(MONTHS).sort((a, b) => b.length - a.length).map(
 const DAY = "\\d{1,2}(?:st|nd|rd|th)?";
 // "7 June 1991", "25th of April 1977", "June 7th, 1991", "Feb 17th 1978", "2004-05-21".
 const DATE = `(?:${DAY}\\s+(?:of\\s+)?(?:${MONTH_WORDS})\\.?,?\\s+\\d{4}|(?:${MONTH_WORDS})\\.?\\s+${DAY},?\\s+\\d{4}|\\d{4}-\\d{2}-\\d{2})`;
-const DATE_RE = new RegExp(DATE, "gi");
 const KIN_WORDS = {
   father: "father", dad: "father", baba: "father", fadher: "father",
   mother: "mother", mum: "mother", mom: "mother", mama: "mother",
@@ -366,7 +359,6 @@ function recordedFromEvents(events, people) {
     for (const sentence of text.split(/(?<=[.!?])\s+(?=[\p{Lu}\d])/u)) {
       collectKinship(sentence, event.id, people, records);
       collectLists(sentence, event.id, people, records);
-      collectDatedNames(sentence, event.id, people, records);
       collectMarriage(sentence, event.id, people, records);
     }
   }
@@ -429,44 +421,9 @@ function splitNameList(text) {
     .filter(Boolean);
 }
 
-const DEATH_WORDS = /\b(passed away|passing|passed|died|death|deceased|late|funeral|buried|burial|memorial)\b/i;
-
-function collectDatedNames(text, eventId, people, records) {
-  const aboutBirth = /\b(born|birth|birthdays?|welcomed)\b/i.test(text);
-  if (aboutBirth) {
-    // "Edda … was born on June 7th, 1991", "Einar was born in Reykjavik on April 2, 2009", "Leifur, born on 14 July 2016"
-    for (const match of text.matchAll(new RegExp(`(${NAME}),?\\s+(?:was\\s+)?born\\b[^.!?]{0,60}?(${DATE})`, "gu"))) {
-      addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
-    }
-    // "On 3rd November 2013 our second son Kari was born"
-    for (const match of text.matchAll(new RegExp(`\\b[Oo]n\\s+(${DATE}),?\\s+(?:[^.!?]{0,40}?\\s)?(${NAME})\\s+was\\s+born\\b`, "gu"))) {
-      addDate(records, people, match[2], eventId, { birthDate: spokenDate(match[1]) });
-    }
-  }
-  // "… Kari on 3 November 2013 and Brynja on 8 January 2019"; a bare "Thora 22 Jan 1982" only for someone known.
-  for (const match of text.matchAll(new RegExp(`(${NAME}),?\\s+(?:on\\s+)?(${DATE})`, "gu"))) {
-    const lead = text.slice(Math.max(0, match.index - 40), match.index);
-    const trail = text.slice(match.index + match[0].length, match.index + match[0].length + 30);
-    if (/\b(marriage|married|engagement|engaged|registered)\b/i.test(lead)) continue;
-    // A date next to a passing ("the passing of the father, X, on …", "late father X, …", "X on … passed away")
-    // dates the death, not the birth.
-    if (DEATH_WORDS.test(lead) || /^\W{0,3}(?:he |she |they )?(passed|died|was buried)\b/i.test(trail)) continue;
-    if (!aboutBirth && !resolveRecord(match[1], people)?.personId) continue;
-    addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
-  }
-  // "Gunnar Arason, born … in Dalvik, Akureyri, and he died on 12 March 2001": the person is the
-  // first known name before the verb, not the nearest capitalised word (which is often a place).
-  for (const match of text.matchAll(new RegExp(`\\b(?:passed away|died)\\s+(?:on\\s+)?(${DATE})`, "gu"))) {
-    const names = candidateNames(text.slice(0, match.index));
-    const who = names.find((name) => resolveRecord(name, people)?.personId) || names[0];
-    if (who) addDate(records, people, who, eventId, { deathDate: spokenDate(match[1]) });
-  }
-}
-
 // "I married Asta … on 21 May 2004", "marriage to Asta", "we got married on 21st May 2004", "Asta joined me"
 function collectMarriage(text, eventId, people, records) {
   if (!/\b(married|marriage|wedding|wed|engaged|engagement|joined me)\b/i.test(text)) return;
-  const date = /\bengag/i.test(text) && !/\b(married|marriage|wedding)\b/i.test(text) ? null : marriageDateIn(text);
   let named = false;
   const patterns = [
     new RegExp(`\\b(?:married|wed)\\s+(?:to\\s+)?(${NAME})`, "gu"),
@@ -480,31 +437,14 @@ function collectMarriage(text, eventId, people, records) {
       const resolved = resolveRecord(match[1], people);
       if (!resolved) continue;
       named = true;
-      mergeRecord(records, { ...resolved, kind: "spouse", eventId, birthDate: null, deathDate: null, marriageDate: date });
+      mergeRecord(records, { ...resolved, kind: "spouse", eventId, birthDate: null, deathDate: null, marriageDate: null });
     }
   }
-  // "we got married on 21st May 2004" names nobody; it still dates the marriage.
-  if (!named && date && /\b(we|I)\b[^.!?]{0,20}\b(got married|married|wedding)\b|\bmy (wife|husband)\b/i.test(text) && !/\bparents\b/i.test(text)) {
-    const kind = /\bmy wife\b/i.test(text) ? "wife" : /\bmy husband\b/i.test(text) ? "husband" : "spouse";
-    records.push({ name: "", personId: null, kind, eventId, birthDate: null, deathDate: null, marriageDate: date });
+  // "my wife joined me … after we got married" names nobody; it still says the spouse is a wife.
+  if (!named && /\bmy (wife|husband)\b/i.test(text) && /\b(married|marriage|wedding)\b/i.test(text) && !/\bparents\b/i.test(text)) {
+    const kind = /\bmy wife\b/i.test(text) ? "wife" : "husband";
+    records.push({ name: "", personId: null, kind, eventId, birthDate: null, deathDate: null, marriageDate: null });
   }
-  const spouse = records.find((item) => item.eventId === eventId && ["spouse", "wife", "husband"].includes(item.kind));
-  if (spouse && !spouse.marriageDate && date) spouse.marriageDate = date;
-}
-
-function marriageDateIn(text) {
-  const word = String(text || "").match(/\b(?:married|marriage|wedding|wed)\b/i);
-  if (!word) return null;
-  const dates = [...String(text).matchAll(DATE_RE)].map((match) => ({ at: match.index, iso: normalizeDate(match[0]) })).filter((item) => item.iso);
-  if (!dates.length) return null;
-  dates.sort((a, b) => Math.abs(a.at - word.index) - Math.abs(b.at - word.index));
-  return dates[0].iso;
-}
-
-function addDate(records, people, raw, eventId, dates) {
-  const resolved = resolveRecord(raw, people);
-  if (!resolved) return;
-  mergeRecord(records, { ...resolved, kind: null, eventId, birthDate: dates.birthDate || null, deathDate: dates.deathDate || null, marriageDate: null });
 }
 
 function mergeRecord(records, claim) {
@@ -583,11 +523,6 @@ function parentKind(word) {
   return ["mother", "mum", "mom", "mama"].includes(String(word || "").toLowerCase()) ? "mother" : "father";
 }
 
-function spokenDate(text) {
-  const match = String(text || "").match(new RegExp(DATE, "i"));
-  return match ? normalizeDate(match[0]) : null;
-}
-
 function anyCase(word) {
   return `[${word[0].toUpperCase()}${word[0]}]${word.slice(1)}`;
 }
@@ -597,13 +532,11 @@ function spouseAnswer(question, context) {
   const confirmed = (context?.people || []).find((person) => ["wife", "husband", "spouse"].includes(person.kind));
   const record = spouseRecord(context);
   if (confirmed) {
-    const married = record?.marriageDate ? ` (married ${prettyDate(record.marriageDate)})` : "";
-    const line = `${confirmed.name} — your ${confirmed.kind === "spouse" ? word : confirmed.kind}${married}.`;
-    return record?.marriageDate ? `${line}\n${RECORD_LINE}` : line;
+    const married = confirmed.marriageDate ? `married ${prettyDate(confirmed.marriageDate)}` : "marriage date not recorded yet";
+    return `${confirmed.name} — your ${confirmed.kind === "spouse" ? word : confirmed.kind} (${married}).`;
   }
   if (!record?.name) return "Your spouse isn't recorded yet.";
-  const married = record.marriageDate ? ` (married ${prettyDate(record.marriageDate)})` : "";
-  return `${record.name} — your ${record.kind && record.kind !== "spouse" ? record.kind : word}${married}.\n${RECORD_LINE}`;
+  return `${record.name} — your ${record.kind && record.kind !== "spouse" ? record.kind : word} (marriage date not recorded yet).\n${RECORD_LINE}`;
 }
 
 function spouseRecord(context) {
@@ -612,7 +545,6 @@ function spouseRecord(context) {
   return hits.reduce((best, item) => ({
     name: String(item.name || "").length > String(best.name || "").length ? item.name : best.name,
     kind: best.kind && best.kind !== "spouse" ? best.kind : (item.kind || best.kind),
-    marriageDate: best.marriageDate || item.marriageDate,
   }));
 }
 
@@ -621,7 +553,7 @@ function relatives(context, kinds) {
   const fromTree = (context?.people || []).filter((person) => kinds.includes(person.kind));
   const fromEvents = distinctPeople((context?.records || []).filter((item) => kinds.includes(item.kind)))
     .filter((item) => !fromTree.some((person) => samePerson(item, person)));
-  const birth = (person) => birthOf(person, context)?.iso || "9999";
+  const birth = (person) => birthOf(person)?.iso || "9999";
   const all = [...fromTree, ...fromEvents].sort((a, b) => birth(a).localeCompare(birth(b)));
   return { fromTree, fromEvents, all };
 }
@@ -631,10 +563,9 @@ function kindOf(person, context, choices) {
   return (context?.records || []).find((item) => choices.includes(item.kind) && samePerson(item, person))?.kind || person.kind;
 }
 
-function deathOf(person, context) {
-  const own = normalizeDate(person?.deathDate);
-  if (own) return own;
-  return (context?.records || []).find((item) => item.deathDate && samePerson(item, person))?.deathDate || null;
+// Dates only from the person's own record.
+function deathOf(person) {
+  return normalizeDate(person?.deathDate) || null;
 }
 
 function parentsAnswer(context) {
@@ -644,7 +575,7 @@ function parentsAnswer(context) {
   const lines = found.all
     .map((person) => ({ person, kind: kindOf(person, context, ["father", "mother"]) }))
     .sort((a, b) => rank[a.kind] - rank[b.kind])
-    .map(({ person, kind }) => `${person.name} — your ${kind}${passed({ deathDate: deathOf(person, context) })}.`);
+    .map(({ person, kind }) => `${person.name} — your ${kind}${passed({ deathDate: deathOf(person) })}.`);
   if (found.fromEvents.length) lines.push(RECORD_LINE);
   return lines.join("\n");
 }
@@ -653,7 +584,7 @@ function parentRoleAnswer(kind, context) {
   const found = relatives(context, [kind, "parent"]);
   const person = found.all.find((item) => kindOf(item, context, ["father", "mother"]) === kind);
   if (!person) return `Your ${kind} isn't recorded yet.`;
-  const line = `${person.name} — your ${kind}${passed({ deathDate: deathOf(person, context) })}.`;
+  const line = `${person.name} — your ${kind}${passed({ deathDate: deathOf(person) })}.`;
   return found.fromTree.includes(person) ? line : `${line}\n${RECORD_LINE}`;
 }
 
@@ -681,15 +612,10 @@ function siblingAnswer(question, context) {
 function siblingBirthAnswer(question, context) {
   const { want, people } = siblingsFor(question, context);
   if (!people.length) return `Your ${want.label} aren't recorded yet.`;
-  let fromEvent = false;
-  const lines = people.map((person) => {
-    const found = birthOf(person, context);
-    if (!found) return `${person.name} — birth date not recorded yet`;
-    if (found.fromEvent) fromEvent = true;
-    return `${person.name} — ${prettyDate(found.iso)}`;
-  });
-  if (fromEvent) lines.push(RECORD_LINE);
-  return lines.join("\n");
+  return people.map((person) => {
+    const found = birthOf(person);
+    return found ? `${person.name} — ${prettyDate(found.iso)}` : `${person.name} — birth date not recorded yet`;
+  }).join("\n");
 }
 
 function childrenAnswer(question, context) {
@@ -705,8 +631,8 @@ function childrenAnswer(question, context) {
 function familyTreeAnswer(context) {
   const self = (context?.people || []).find((person) => person.kind === "self") || context?.self;
   const born = (person) => {
-    const found = birthOf(person, context);
-    return found ? `b. ${prettyDate(found.iso)}` : "";
+    const found = birthOf(person);
+    return found ? `b. ${prettyDate(found.iso)}` : "birth date not recorded";
   };
   const describe = (person, ...bits) => {
     const extra = bits.filter(Boolean).join(", ");
@@ -717,7 +643,7 @@ function familyTreeAnswer(context) {
   const parents = relatives(context, ["father", "mother", "parent"]).all;
   if (parents.length) {
     lines.push(`Parents: ${parents.map((person) => {
-      const death = deathOf(person, context);
+      const death = deathOf(person);
       return describe(person, kindOf(person, context, ["father", "mother"]), born(person), death ? `passed ${prettyDate(death)}` : "");
     }).join("; ")}`);
   }
@@ -726,7 +652,7 @@ function familyTreeAnswer(context) {
   if (spouse || record?.name) {
     const person = spouse || record;
     const kind = person.kind && person.kind !== "spouse" ? person.kind : (record?.kind && record.kind !== "spouse" ? record.kind : "spouse");
-    lines.push(`Spouse: ${describe(person, kind, record?.marriageDate ? `married ${prettyDate(record.marriageDate)}` : "")}`);
+    lines.push(`Spouse: ${describe(person, kind, spouse?.marriageDate ? `married ${prettyDate(spouse.marriageDate)}` : "marriage date not recorded")}`);
   }
   const siblings = siblingsFor("siblings", context).people;
   if (siblings.length) lines.push(`Siblings: ${siblings.map((person) => describe(person, kindOf(person, context, ["sister", "brother"]).replace("sibling", ""), born(person))).join("; ")}`);
@@ -736,14 +662,11 @@ function familyTreeAnswer(context) {
   return lines.join("\n");
 }
 
-// A birth date on or after the person's death date is never shown.
-function birthOf(person, context) {
-  const death = deathOf(person, context);
-  const usable = (iso) => iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) && !(death && iso >= death);
+// Only the person's own record; a birth date on or after the death date is never shown.
+function birthOf(person) {
+  const death = deathOf(person);
   const own = normalizeDate(person?.birthDate);
-  if (usable(own)) return { iso: own, fromEvent: false };
-  const record = (context?.records || []).find((item) => usable(item.birthDate) && samePerson(item, person));
-  return record ? { iso: record.birthDate, fromEvent: true } : null;
+  return own && /^\d{4}-\d{2}-\d{2}$/.test(own) && !(death && own >= death) ? { iso: own } : null;
 }
 
 function factConflicts(people, eventFacts) {

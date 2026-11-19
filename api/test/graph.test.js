@@ -150,24 +150,22 @@ test("my father's family tree stays inside recorded facts", () => {
   assert.equal(checked.reply.includes("1979"), false);
   const delivered = deliverPeopleAnswer(invented, context, question);
   assert.match(delivered.reply, /Your father's spouse: Hekla Bjorg Olafsdottir/);
-  assert.match(delivered.reply, /Your sisters' birth dates aren't recorded yet/);
+  assert.match(delivered.reply, /Sigrun Gunnar Arason — birth date not recorded yet/);
   assert.match(delivered.reply, /Asta Kristin Jonsdottir — your wife/);
-  assert.match(delivered.reply, /17 Feb 1975/);
-  assert.match(delivered.reply, /12 May 1975/);
-  assert.match(delivered.reply, /Which is right/);
+  assert.doesNotMatch(delivered.reply, /17 Feb 1975|12 May 1975/, "dates only in event text are not used");
   assert.match(delivered.reply, /unconfirmed: Sunna Arason/);
   assert.equal(delivered.reply.includes("Hermes"), false);
   assert.equal(delivered.reply.includes("1984"), false);
   assert.equal(/Asta[\s\S]{0,40}child|child[\s\S]{0,40}Asta/i.test(delivered.reply), false);
-  assert.equal(context.conflicts.length, 1);
-  const review = conflictEdgeData("user-1", context.conflicts[0]);
+  assert.equal(context.conflicts.length, 0, "event text no longer gives dates, so it cannot conflict");
+  const review = conflictEdgeData("user-1", { entityId: "self", name: "Bjorn Gunnar Arason", field: "birthDate", values: ["1975-02-17", "1975-05-12"], sources: ["event:ev-feb", "event:ev-may"] });
   assert.equal(review.label, "conflict");
   assert.match(review.evidenceText, /1975-02-17/);
   assert.match(review.evidenceText, /1975-05-12/);
   assert.equal(answerPeopleQuestion(question, context), delivered.reply);
 });
 
-test("events answer wife, parents and sister births before an edge exists", () => {
+test("events name the wife and parents before an edge exists; their dates come only from records", () => {
   const sisters = [
     { id: "sigrun", name: "Sigrun Gunnar Arason", kind: "sister" },
     { id: "thora", name: "Thora Gunnar Arason", kind: "sister" },
@@ -197,30 +195,39 @@ test("events answer wife, parents and sister births before an edge exists", () =
   assert.equal(isPeopleQuestion("my parents?"), true);
   assert.equal(isPeopleQuestion("sisters' birth dates"), true);
   const wife = answerPeopleQuestion("who is my wife?", context);
-  assert.match(wife, /Asta Kristin Jonsdottir/);
-  assert.match(wife, /5 Aug 2003/);
+  assert.match(wife, /Asta Kristin Jonsdottir — your wife \(marriage date not recorded yet\)/);
   assert.match(wife, /From your records — confirm in Review to lock it in\./);
-  assert.equal(/not recorded/i.test(wife), false);
   const parents = answerPeopleQuestion("my parents?", context);
-  assert.match(parents, /Gunnar Arason — your father/);
-  assert.match(parents, /25 Apr 2001/);
+  assert.match(parents, /Gunnar Arason — your father\./);
+  assert.doesNotMatch(parents, /25 Apr 2001/);
   assert.match(parents, /Hekla Bjorg Olafsdottir — your mother/);
   assert.match(parents, /From your records — confirm in Review to lock it in\./);
-  assert.equal(/not recorded/i.test(parents), false);
   const births = answerPeopleQuestion("sisters' birth dates", context);
-  assert.match(births, /Sigrun Gunnar Arason — 4 Dec 1977/);
-  assert.match(births, /Thora Gunnar Arason — 14 Dec 1980/);
-  assert.match(births, /Hulda Gunnar Arason — 3 Dec 1984/);
-  assert.match(births, /Edda Gunnar Arason — 3 Feb 1990/);
-  assert.match(births, /From your records — confirm in Review to lock it in\./);
-  assert.equal(/not recorded/i.test(births), false);
+  for (const name of ["Sigrun", "Thora", "Hulda", "Edda"]) assert.match(births, new RegExp(`${name} Gunnar Arason — birth date not recorded yet`));
   const grounded = groundAdvisorReply("Asta Kristin Jonsdottir married on 5 Aug 2003. Hermes Arason was born in 1984.", context);
   assert.equal(grounded.reply.includes("Asta Kristin Jonsdottir"), true);
-  assert.equal(grounded.reply.includes("5 Aug 2003"), true);
+  assert.equal(grounded.reply.includes("5 Aug 2003"), false, "a date only in event text is not grounded");
   assert.equal(grounded.reply.includes("Hermes"), false);
   const missed = deliverPeopleAnswer("Your wife isn't recorded yet.", context, "who is my wife?");
   assert.match(missed.reply, /Asta Kristin Jonsdottir/);
-  assert.equal(/not recorded/i.test(missed.reply), false);
+
+  // The same people with the dates on their records.
+  const recorded = buildPeopleContext({
+    self: { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
+    people: [
+      { id: "self", name: "Bjorn Gunnar Arason", kind: "self" },
+      { id: "gunnar", name: "Gunnar Arason", kind: "father", deathDate: "2001-04-25" },
+      { id: "asta", name: "Asta Kristin Jonsdottir", kind: "wife" },
+      ...sisters.map((person, index) => ({ ...person, birthDate: ["1977-12-04", "1980-12-14", "1984-12-03", "1990-02-03"][index] })),
+    ],
+    edges: [{ id: "e-wife", type: "spouse_of", status: "confirmed", fromId: "asta", toId: "self", validFrom: new Date("2003-08-05T00:00:00Z") }],
+    events: [],
+  });
+  assert.equal(answerPeopleQuestion("who is my wife?", recorded), "Asta Kristin Jonsdottir — your wife (married 5 Aug 2003).");
+  assert.match(answerPeopleQuestion("my parents?", recorded), /Gunnar Arason — your father \(passed 25 Apr 2001\)/);
+  const recordedBirths = answerPeopleQuestion("sisters' birth dates", recorded);
+  for (const line of ["Sigrun Gunnar Arason — 4 Dec 1977", "Thora Gunnar Arason — 14 Dec 1980", "Hulda Gunnar Arason — 3 Dec 1984", "Edda Gunnar Arason — 3 Feb 1990"]) assert.match(recordedBirths, new RegExp(line));
+  assert.equal(groundAdvisorReply("Asta Kristin Jonsdottir married on 5 Aug 2003.", recorded).reply.includes("5 Aug 2003"), true);
   const father = answerPeopleQuestion("who is my father?", context);
   assert.match(father, /Gunnar Arason — your father/);
   assert.equal(father.trim().length > 0, true);
@@ -250,9 +257,7 @@ test("marriage wording and children are not guessed from sisters", () => {
     ],
   });
   const wife = answerPeopleQuestion("who is my wife?", context);
-  assert.match(wife, /Asta Kristin Jonsdottir/);
-  assert.match(wife, /5 Aug 2003/);
-  assert.equal(/not recorded/i.test(wife), false);
+  assert.match(wife, /Asta Kristin Jonsdottir — your wife \(marriage date not recorded yet\)/);
   const kids = answerPeopleQuestion("how many kids do I have?", context);
   assert.match(kids, /5 children/);
   assert.match(kids, /Ylfa/);
@@ -583,26 +588,26 @@ test("event wording as saved in dira_dev answers family questions", () => {
   assert.equal(gunnar.deathDate, "2001-04-25");
 
   const wife = answerPeopleQuestion("who is my wife?", context);
-  assert.match(wife, /Asta Kristin Jonsdottir — your wife \(married 5 Aug 2003\)/);
+  assert.match(wife, /Asta Kristin Jonsdottir — your wife \(marriage date not recorded yet\)/);
 
   const parents = answerPeopleQuestion("who are my parents?", context);
-  assert.match(parents, /Gunnar Arason — your father \(passed 25 Apr 2001\)/);
+  assert.match(parents, /Gunnar Arason — your father\./);
   assert.match(parents, /Hekla Bjorg Olafsdottir — your mother/);
 
   const sisters = answerPeopleQuestion("list my sisters", context);
-  assert.match(sisters, /Your sisters: Sigrun, Thora, Hulda, Edda Gunnar Arason\./);
+  assert.match(sisters, /Your sisters: Sigrun, Hulda, Edda Gunnar Arason, Thora\./, "record order: no birth dates are recorded to sort by");
   assert.equal(sisters.includes("Asta"), false);
 
   const births = answerPeopleQuestion("when were my two sisters born?", context);
-  for (const line of ["Sigrun — 4 Dec 1977", "Thora — 14 Dec 1980", "Hulda — 3 Dec 1984", "Edda Gunnar Arason — 3 Feb 1990"]) assert.match(births, new RegExp(line));
-  assert.equal(/not recorded/i.test(births), false);
+  for (const name of ["Sigrun", "Thora", "Hulda", "Edda Gunnar Arason"]) assert.match(births, new RegExp(`${name} — birth date not recorded yet`));
 
   const children = answerPeopleQuestion("how many children do I have now?", context);
-  assert.match(children, /You have 5 children: Ylfa Freyja Bjorn, Einar, Kari, Leifur, Brynja - Hulda\./);
+  assert.match(children, /You have 5 children: Einar, Leifur, Ylfa Freyja Bjorn, Kari, Brynja - Hulda\./, "record order: no birth dates are recorded to sort by");
 
   const tree = answerPeopleQuestion("show my family tree", context);
-  assert.match(tree, /Spouse: Asta Kristin Jonsdottir \(wife, married 5 Aug 2003\)/);
-  assert.match(tree, /Children: Ylfa Freyja Bjorn \(daughter|Children: Ylfa Freyja Bjorn \(b\. 4 Feb 1999\)/);
+  assert.match(tree, /Spouse: Asta Kristin Jonsdottir \(wife, marriage date not recorded\)/);
+  assert.match(tree, /Children: .*Ylfa Freyja Bjorn \((?:daughter, )?birth date not recorded\)/);
+  assert.doesNotMatch(tree, /b\. \d/, "no date comes from event text");
   for (const line of tree.split("\n")) {
     if (/^(Siblings|Children):/.test(line)) assert.equal(line.includes("Asta"), false, line);
   }

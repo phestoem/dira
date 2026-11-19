@@ -14,6 +14,30 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: people answers read dates only from records.
+  - Report for Phesto (read-only, prod dira, details in chat only): on
+    records = own birth date, father's death date; nothing else. Only in
+    event text = father's birth, 4 sisters' births, wife's birth, the
+    marriage date, 5 children's births. The mother is no person record in
+    the prod tree (named only in events). dira_dev differs (sisters, wife,
+    3 children dated on records; no father record).
+  - peopleGrounding: no date parsing from event text (collectDatedNames,
+    marriage dates, death/birth fallbacks removed). Event text still gives
+    names and roles. Birth/death from the person record; marriage from the
+    confirmed spouse_of validFrom. Missing → "birth date not recorded" /
+    "marriage date not recorded (yet)". Lists without recorded births keep
+    record order.
+  - services/graph/statedDates.js: a saved message that states a birth,
+    death or marriage date for someone with a person record shows it in
+    the save preview ("Also records on their pages: …"); confirm (home or
+    /queue) writes it to empty fields only; a different recorded date is
+    reported, never overwritten; birth on/after death skipped. Code only.
+  - Tests updated to the rule (graph.test.js, death-dates.test.js), new
+    test/stated-dates.test.js. npm test 62/62; golden fixture 12/12 +
+    reset gate with all dates from records; live readonly on dira_dev
+    10/12: family-tree (no father record in dira_dev: dates not recorded,
+    as intended until filled) and `properties` (item 3)
+    (logs/golden-recorddates-*.log).
 - 2026-11-19 19:36: deployed 8225d06 (death-date fix) to prod. main
   fast-forwarded e49c70b..8225d06 (Phesto's go), pushed; prod merged it as
   a379352. Backup first (dira_20261119_193447.dump); no migration; both

@@ -5,7 +5,7 @@ import { prisma } from "../prisma.js";
 // self is left out. A record is found by its full name, an alias, or its first name (3+ letters) when no other
 // confirmed person has that first name. Unknown names stay plain names: nothing here creates a record.
 
-function fold(text) {
+export function fold(text) {
   return String(text || "")
     .normalize("NFKD")
     .replace(/[̀-ͯ]/g, "")

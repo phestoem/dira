@@ -3,6 +3,7 @@ import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.
 import { savedSummary } from "../services/savedSummary.js";
 import { applyCorrections, createEventFromUnderstanding } from "../services/contextEngine.js";
 import { extractAndLinkEntities } from "./entities.js";
+import { applyStatedDates, recordedLine } from "../services/graph/statedDates.js";
 
 const EVENT_TYPES = new Set([
   "project_update",
@@ -85,6 +86,7 @@ export default async function queueRoutes(fastify) {
         sourceFile: typeof stored.sourceFile === "string" ? stored.sourceFile : queue.filePath,
         occurredAt,
       });
+      const recorded = await applyStatedDates(userId, stored.recordDates);
       setImmediate(() => {
         extractAndLinkEntities(event, userId, understood).catch((err) => {
           console.error("[entity-extract] failed:", err.message);
@@ -99,7 +101,7 @@ export default async function queueRoutes(fastify) {
           console.error("[bridge] error:", err.message);
         }
       });
-      return { ...event, savedMessage: `Saved: ${await savedSummary(userId, event)}.` };
+      return { ...event, savedMessage: `Saved: ${await savedSummary(userId, event)}.${recordedLine(recorded)}`, recordedDates: recorded };
     } catch (error) {
       request.log.error(error);
       const statusCode = error.statusCode || 500;

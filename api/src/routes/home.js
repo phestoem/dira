@@ -20,6 +20,7 @@ import { extractConversationalFacts, previousExchangeFrom, routeIntent } from ".
 import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 import { describeRelationshipLine, parseFamilyStatement } from "../services/graph/familyStatement.js";
+import { applyStatedDates, recordedLine, statedDates, statedDatesLine } from "../services/graph/statedDates.js";
 import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
 import { commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
@@ -272,10 +273,14 @@ async function runIntakeText(userId, routing, payload) {
 }
 
 async function intakeResponse(userId, routing, queueId, result) {
+  const queued = await prisma.inputQueue.findUnique({ where: { id: queueId }, select: { rawContent: true } });
+  // Dates the message states for people who have records; written to those records only on confirm.
+  const recordDates = await statedDates(userId, queued?.rawContent || "");
   await prisma.inputQueue.update({
     where: { id: queueId },
     data: {
       understoodAs: JSON.stringify({
+        recordDates,
         understood: result.understood,
         suggestedSpace: result.suggestedSpace,
         suggestedEventType: result.suggestedEventType,
@@ -287,16 +292,17 @@ async function intakeResponse(userId, routing, queueId, result) {
   attachAltimetrixContext(queueId, result.understood);
   const understood = publicUnderstanding(result);
   const sessionId = remember(userId, { kind: "intake", queueId, routing });
-  const line = routing.action === "confirm"
+  const dates = statedDatesLine(recordDates);
+  const line = `${routing.action === "confirm"
     ? "I think you want to save this as an event. Confirm?"
-    : intakeLine(understood);
+    : intakeLine(understood)}${dates ? ` ${dates}` : ""}`;
   return {
     sessionId,
     routing: publicRouting(routing),
     action: routing.action,
     result: {
       type: "understanding",
-      content: { ...understood, queueId },
+      content: { ...understood, queueId, recordDates },
       confirmationRequired: true,
       confirmationText: line,
     },
@@ -569,6 +575,8 @@ async function confirmIntake(request, entry, body) {
     occurredAt,
   });
   noteSaved(userId, event);
+  const recorded = await applyStatedDates(userId, stored.recordDates);
+  const datesNote = recordedLine(recorded);
   setImmediate(async () => {
     try {
       await extractAndLinkEntities(event, userId, understood);
@@ -585,7 +593,7 @@ async function confirmIntake(request, entry, body) {
       console.error("[bridge] error:", err.message);
     }
   });
-  return doneResponse(entry.routing, "saved", { message: `Saved: ${await savedSummary(userId, event)}.`, eventId: event.id, queueId: queue.id }, null);
+  return doneResponse(entry.routing, "saved", { message: `Saved: ${await savedSummary(userId, event)}.${datesNote}`, eventId: event.id, queueId: queue.id, recordedDates: recorded }, null);
 }
 
 async function confirmJournal(userId, entry) {
