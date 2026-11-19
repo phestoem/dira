@@ -21,7 +21,7 @@ plan. One item per commit, family golden test before each commit.
   Prod golden readonly: first run 11/12, `sisters` flagged "readonly
   violated: updated event" (answer itself right). The write was a PATCH
   /events/<id> from the web app at 21:52:09, after a GET of that event at
-  21:51:40 (Phesto editing during the run); the harness only calls
+  21:51:40 (Phesto confirmed: he was editing it in the live app); the harness only calls
   /home/input and /home/confirm. Rerun 12/12, no rows changed
   (logs/deploy-20261119d.log, logs/golden-prod-readonly-20261119f.log
   and -g.log). Commit 3ccdd94 said 12/12 before the first result was
