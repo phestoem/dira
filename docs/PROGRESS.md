@@ -542,6 +542,9 @@ For comparison, `fix/people-answers` today: fixture 10/13 (children
 missing after the introduction), the same without its last change.
 
 ## Decisions made and why
+- 2026-11-19 (Phesto): git history keeps the older PROGRESS.md versions
+  that named family members and places; not rewritten (main is what prod
+  pulls). New entries stay neutral.
 - 2026-11-19 (Phesto): a house project's amounts are EUR, including two
   installments whose text names no currency.
 - 2026-11-19 (Phesto): restores into dev always go through
