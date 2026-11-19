@@ -90,7 +90,8 @@ set_flag DIRA_BRIDGE off
 for key in RESEND_API_KEY ALTIMETRIX_BRIDGE_SECRET ALTIMETRIX_WEBHOOK_SECRET; do
   [ -z "$(env_value "$DEV_ENV" "$key" || true)" ] || fail "$key is set in dev .env: remove it before running dev on prod data"
 done
-say "dev .env: DIRA_DISABLE_CRON=true, DIRA_BRIDGE=off, no Resend key, no bridge secret"
+chmod 600 "$DEV_ENV"
+say "dev .env (600): DIRA_DISABLE_CRON=true, DIRA_BRIDGE=off, no Resend key, no bridge secret"
 
 # 7. Restart and compare.
 # exec, with every stream redirected, so no shell waits on the API or holds the caller's output open.

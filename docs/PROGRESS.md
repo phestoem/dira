@@ -14,6 +14,17 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 21:40: prod JWT rotated by Phesto (ops/rotate-prod-jwt.md);
+  verified read-only, no secret printed: JWT_SECRET once in prod .env,
+  64 hex chars; prod .env 600 qusaz:qusaz (= dira-api User=qusaz), old
+  copy kept at 600; dev and prod fingerprints differ; prod
+  refresh_tokens: 1 row, created after the restart (the 8 old ones gone);
+  dira-api active since 21:39:44, dira-web active, /health ok; API log
+  since the restart: 0 errors, 0 5xx, 2 x 401 at 21:40:13 (GET /events,
+  /graph/suggestions with the old token, before the new login at
+  21:40:41), request-otp and verify-otp 200; prod golden readonly 12/12,
+  no rows changed (logs/golden-prod-readonly-20261119e.log). Dev .env was
+  664, now 600; restore-into-dev.sh keeps it 600.
 - 2026-11-19 21:36: backup permissions. /opt/qusaz/backups/dira/ was
   775 (dirs) and 664 (every dump, checksum, log and status file):
   readable by any local user. Now dirs 700, files 600, all qusaz (the
@@ -487,9 +498,6 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- Prod JWT rotation: steps in ops/rotate-prod-jwt.md, Phesto applies.
-  dira_dev pre-restore dumps in /opt/qusaz/backups/dira_dev/ hold copies
-  of prod refresh tokens; harmless once prod's are cleared (step 4).
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
