@@ -13,6 +13,7 @@ export const SEED_MESSAGES = [
   "I bought land in Jambiani for 2,000,000 TSH in 2021.",
   "I have land in Ntabha, Mbeya, and a house in Kisarawe. Tuliza Nafsi is our place in Zanzibar.",
   "I own two cars, a Toyota Prado and a Suzuki Jimny, both kept in Dar es Salaam.",
+  "Trip to Tanzania: I fly to Dar es Salaam on 10 December 2026.",
 ];
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -112,6 +113,18 @@ export const CASES = [
     id: "properties",
     turns: ["what properties do I have?"],
     check: ({ answer }) => has("P9104", "P9098", "Jambiani", "Ntabha", "Kisarawe")(answer),
+  },
+  {
+    // Days left, what is recorded and what is not; never "on track" without recorded progress.
+    id: "trip-timeline",
+    turns: ["how many days until my trip to Tanzania?"],
+    check: ({ answer }) => {
+      const failures = [];
+      if (!/\bin \d+ days\b|\btomorrow\b|\btoday\b/.test(answer)) failures.push("no days-until for a recorded date");
+      if (!/Not recorded: /.test(answer)) failures.push("does not say what is not recorded");
+      if (/\bon track\b/i.test(answer)) failures.push('says "on track"');
+      return failures;
+    },
   },
   {
     id: "cars",

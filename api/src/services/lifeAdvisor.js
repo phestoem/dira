@@ -1,3 +1,4 @@
+import { answerTimeline, isTimelineQuestion } from "./timeline.js";
 import { holdingsAnswer, isPropertyListQuestion, loadHoldings } from "./holdings.js";
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
@@ -124,6 +125,11 @@ export async function chat(messages, userId) {
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
   }
   if (isFocusQuestion(latest)) return answerFocus(userId, history, latest);
+  // Timeline and progress questions: days left, what is recorded and what is not, by code; never "on track".
+  if (isTimelineQuestion(latest)) {
+    const timeline = await answerTimeline(userId, latest);
+    if (timeline) return { reply: timeline.reply, contextUsed: { eventsCount: timeline.count, visionsCount: 0, entitiesCount: 0 } };
+  }
   // "Which properties do I own?": listed by code from the saved records, no model call.
   if (isPropertyListQuestion(latest)) {
     const holdings = await loadHoldings(userId);

@@ -14,6 +14,26 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: real-use 6, timeline and progress questions.
+  - services/timeline.js: "days until", "on track", "how is … going",
+    "status of", "where am I with", "ready for". Subjects = names in the
+    question (records whose title has the name; a trip question keeps only
+    trip records, not ones long past) or its topic word. Per subject:
+    next recorded date with days left, the records (date, amount),
+    recorded progress (completed/started/paid/… in a past or undated
+    record) or "none", and a not-recorded checklist (trip: flights,
+    accommodation, return date, local transport, budget; building work:
+    contractor, cost estimate, payments, materials, start or finish date).
+    Code only, no model call, so "on track" is never said. Nothing on
+    record matches → normal chat.
+  - Golden: seed "Trip to Tanzania: I fly to Dar es Salaam on 10 December
+    2026." and case trip-timeline (14 cases).
+  - On the dira_dev copy of prod: the trip record "Trip to Tanzania" has
+    no date (saved 18 Nov, before dates were kept); the answer uses the
+    dated "Travel and Project Update" (15 Dec) and lists the trip as no
+    date.
+  - test/timeline.test.js. npm test 75/75; golden fixture 14/14 + reset
+    gate; live readonly on dira_dev 14/14 (logs/golden-timeline-*.log).
 - 2026-11-19: real-use 5, compound people questions.
   - peopleGrounding.compoundPeopleAnswer: a question naming two or more
     relations (spouse, parents, father, mother, children, siblings;
@@ -524,6 +544,8 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
+- Prod "Trip to Tanzania" has no date (and no return date): set them in
+  the UI, or approve a one-off fix (backup, dry run first).
 - "who is my father's wife?" answers with your own wife (the wife rule
   matches first). Older than item 5; fix it to name the mother?
 - Backfill: link confirmed people in the 44 existing dira_dev events
