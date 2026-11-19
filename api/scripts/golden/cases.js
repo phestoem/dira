@@ -79,6 +79,23 @@ export const CASES = [
     check: ({ answer }) => [...has("Froidah Biniala Kyando")(answer), ...lacks("Zelda", "Hermes")(answer)],
   },
   {
+    // A chain read left to right: your parents' children are you and your four sisters, not your own children.
+    id: "parents-children",
+    turns: ["who are my parents' children?"],
+    check: ({ answer }) => [
+      ...has("Jeni Enock Mwakyusa", "Leah Enock Mwakyusa", "Neema Enock Mwakyusa", "Zenah Enock Mwakyusa", "Phesto Enock Mwakyusa")(answer),
+      ...lacks("Careen", "Patrick", "Presley", "Powell", "Prisha", "Zelda", "Hermes")(answer),
+    ],
+  },
+  {
+    id: "parents-children-count",
+    turns: ["how many children do my parents have?"],
+    check: ({ answer }) => [
+      ...(/\b(5|five)\b/i.test(answer) ? [] : ["does not say 5"]),
+      ...lacks("Careen", "Patrick", "Presley", "Powell", "Prisha", "Zelda")(answer),
+    ],
+  },
+  {
     // One question, several relations: every one answered from records, in one reply.
     id: "wife-and-parents",
     turns: ["my wife and parents?"],

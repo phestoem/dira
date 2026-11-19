@@ -14,6 +14,20 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: possessive chains resolved left to right, any depth.
+  - Real use: "who are my parents' children?" listed the parents plus the
+    user's own children (the compound path took "parents" and "children"
+    as two questions). peopleGrounding.parseChain reads "my A's B's C",
+    plural possessives (parents', sisters') and "how many C do my A have";
+    each step from records: the person's recorded connections first, then
+    only what follows from the user's own (a parent's children = you and
+    your siblings; a parent's spouse = the other parent; a sibling's
+    parents = your parents; a sibling's siblings = you and the others; a
+    child's parent = you). Gendered words filter by gender, preferring
+    people of known gender. "how many" gives the count.
+  - Golden: parents-children and parents-children-count (17 cases).
+  - test/chained-people.test.js. npm test 86/86; golden fixture 17/17 +
+    reset gate; live readonly 17/17 (logs/golden-chains-*.log).
 - 2026-11-19 23:07: redeployed 31674a6 (timeline sort fix) to prod. main
   fast-forwarded 65d07c7..31674a6, pushed; prod merged it as 2b7383e.
   Backup first (dira_20261119_230610.dump); no migration; both services

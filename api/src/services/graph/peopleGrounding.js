@@ -211,31 +211,39 @@ export function compoundPeopleAnswer(question, context) {
   return [...new Set(body)].concat(fromEvents ? [RECORD_LINE] : []).join("\n");
 }
 
-// "my father's wife", "my wife's parents", "my sister's children": the relation of one of your relatives, from
-// records. A recorded connection of that person comes first. Without one, only two things follow from your own
-// connections: a parent's spouse is your other parent, and a parent's children are you and your siblings. Anything
-// else unrecorded says so; nothing is guessed (your children are not assumed to be your spouse's).
-const BASE_KINDS = {
-  father: ["father"], dad: ["father"], baba: ["father"],
-  mother: ["mother"], mum: ["mother"], mom: ["mother"], mama: ["mother"],
-  wife: ["wife", "spouse"], husband: ["husband", "spouse"], spouse: ["wife", "husband", "spouse"],
-  sister: ["sister"], brother: ["brother"], son: ["son"], daughter: ["daughter"],
+// Possessive chains, read left to right to any depth: "my father's wife", "my parents' children", "my wife's
+// mother's sisters", "how many kids do my parents have?". Each step works from records: the person's own
+// recorded connections first; then only what follows from your own connections (a parent's children are you and
+// your siblings, a parent's spouse is your other parent, a sibling's parents are your parents, a sibling's siblings
+// are you and your other siblings, a child's parent is you). Nothing else is guessed: your children are not assumed
+// to be your spouse's.
+const STEP_WORDS = {
+  father: ["parent", "father"], dad: ["parent", "father"], baba: ["parent", "father"],
+  mother: ["parent", "mother"], mum: ["parent", "mother"], mom: ["parent", "mother"], mama: ["parent", "mother"],
+  parent: ["parent", null], parents: ["parent", null],
+  wife: ["spouse", "wife"], husband: ["spouse", "husband"], spouse: ["spouse", null], partner: ["spouse", null],
+  sister: ["sibling", "sister"], sisters: ["sibling", "sister"], brother: ["sibling", "brother"], brothers: ["sibling", "brother"],
+  sibling: ["sibling", null], siblings: ["sibling", null],
+  son: ["child", "son"], sons: ["child", "son"], daughter: ["child", "daughter"], daughters: ["child", "daughter"],
+  child: ["child", null], children: ["child", null], kid: ["child", null], kids: ["child", null],
 };
-const CHAIN = new RegExp(`\\bmy\\s+(${Object.keys(BASE_KINDS).join("|")})(?:\\s+([\\p{Lu}][\\p{L}'’-]+))?['’]s\\s+(wife|husband|spouse|partner|children|kids|sons|daughters|parents|father|mother|sisters|brothers|siblings)\\b`, "iu");
+const STEP = Object.keys(STEP_WORDS).sort((a, b) => b.length - a.length).join("|");
+const POSSESSIVE = "(?:['’]s|s['’]|['’])";
+// "my sister Jeni's husband": a name right after a step narrows it to that person.
+const LINK = `(?:${STEP})(?:\\s+[\\p{Lu}][\\p{L}'’-]+?)?${POSSESSIVE}`;
+const CHAIN_FORWARD = new RegExp(`\\bmy\\s+((?:${LINK}\\s+)+)(${STEP})\\b`, "iu");
+const CHAIN_HAVE = new RegExp(`\\b(${STEP})\\s+(?:do|does|did)\\s+my\\s+((?:${LINK}\\s+)*(?:${STEP})(?:\\s+[\\p{Lu}][\\p{L}'’-]+)?)\\s+have\\b`, "iu");
 
-function chainBases(word, name, context) {
-  const kinds = BASE_KINDS[word.toLowerCase()];
-  let found;
-  if (kinds.includes("father") || kinds.includes("mother")) {
-    found = relatives(context, ["father", "mother", "parent"]).all.filter((person) => kinds.includes(kindOf(person, context, ["father", "mother"])));
-  } else if (kinds.includes("sister") || kinds.includes("brother")) {
-    found = siblingsFor(kinds.includes("sister") ? "sisters" : "brothers", context).people;
-  } else if (kinds.includes("son") || kinds.includes("daughter")) {
-    found = relatives(context, ["child", "son", "daughter"]).all.filter((person) => kinds.includes(kindOf(person, context, ["son", "daughter"])));
-  } else {
-    found = (context?.people || []).filter((person) => kinds.includes(person.kind));
-  }
-  return name ? found.filter((person) => namesMatch(person.name, name)) : found;
+// [{ word, name }] from "my wife's mother's sisters" or "how many children do my parents have".
+export function parseChain(question) {
+  const q = String(question || "");
+  const split = (text) => [...text.matchAll(new RegExp(`(${STEP})(?:\\s+([\\p{Lu}][\\p{L}'’-]+?))?(?=${POSSESSIVE}|\\s|$)`, "giu"))]
+    .map((match) => ({ word: match[1].toLowerCase(), name: match[2] && !STEP_WORDS[match[2].toLowerCase()] ? match[2] : null }));
+  let match = q.match(CHAIN_FORWARD);
+  if (match) return [...split(match[1]), { word: match[2].toLowerCase(), name: null }];
+  match = q.match(CHAIN_HAVE);
+  if (match) return [...split(match[2]), { word: match[1].toLowerCase(), name: null }];
+  return null;
 }
 
 function linkedTo(context, personId, wanted) {
@@ -254,46 +262,82 @@ function linkedTo(context, personId, wanted) {
   return out;
 }
 
-export function chainedPeopleAnswer(question, context) {
-  const match = String(question || "").match(CHAIN);
-  if (!match) return null;
-  const [, baseWord, baseName, relationWord] = match;
-  const relation = relationWord.toLowerCase();
-  const wanted = ["wife", "husband", "spouse", "partner"].includes(relation) ? "spouse"
-    : ["parents", "father", "mother"].includes(relation) ? "parent"
-    : ["sisters", "brothers", "siblings"].includes(relation) ? "sibling"
-    : "child";
-  const bases = chainBases(baseWord, baseName, context);
-  const label = `your ${baseWord.toLowerCase()}${baseName ? ` ${baseName}` : ""}`;
-  if (!bases.length) return `${label[0].toUpperCase()}${label.slice(1)} isn't recorded yet.`;
-  const self = (context?.people || []).find((person) => person.kind === "self") || context?.self;
+function chainSteps(context) {
+  const self = (context?.people || []).find((person) => person.kind === "self") || context?.self || { id: "self", name: "you" };
   const parents = relatives(context, ["father", "mother", "parent"]).all;
-  const isParent = (person) => parents.some((parent) => parent.id === person.id);
-  const lines = bases.map((base) => {
-    let found = linkedTo(context, base.id, wanted);
-    let note = "";
-    if (!found.length && isParent(base) && wanted === "spouse") {
-      found = parents.filter((parent) => parent.id !== base.id).map((parent) => ({ id: parent.id, name: parent.name }));
-      const kind = found.length === 1 ? kindOf(parents.find((parent) => parent.id === found[0].id), context, ["father", "mother"]) : null;
-      note = kind ? ` — your ${kind === "parent" ? "other parent" : kind}` : "";
+  const siblings = siblingsFor("siblings", context).people;
+  const children = relatives(context, ["child", "son", "daughter"]).all;
+  const spouses = (context?.people || []).filter((person) => ["wife", "husband", "spouse"].includes(person.kind));
+  const has = (list, node) => list.some((person) => person.id === node.id);
+  const ofSelf = { parent: parents, sibling: siblings, child: children, spouse: spouses };
+  const from = (node, role) => {
+    if (node.id === self.id) return ofSelf[role];
+    const out = [...linkedTo(context, node.id, role)];
+    const add = (list) => list.forEach((person) => out.some((item) => item.id === person.id) || out.push(person));
+    if (has(parents, node) && role === "child") add([self, ...siblings]);
+    if (has(parents, node) && role === "spouse" && !out.length) add(parents.filter((person) => person.id !== node.id));
+    if (has(siblings, node) && role === "parent") add(parents);
+    if (has(siblings, node) && role === "sibling") add([self, ...siblings]);
+    if (has(children, node) && role === "parent") add([self]);
+    return out.filter((person) => person.id !== node.id);
+  };
+  return { self, from };
+}
+
+const GENDER = { mother: "f", sister: "f", daughter: "f", wife: "f", father: "m", brother: "m", son: "m", husband: "m" };
+
+// The kind a person is known by ("mother", "sister"), when their record says; unknown kinds pass any filter.
+function knownKind(person, context) {
+  const record = (context?.people || []).find((item) => item.id === person.id);
+  const kind = record ? kindOf(record, context, ["father", "mother", "sister", "brother", "son", "daughter", "wife", "husband"]) : null;
+  return ["father", "mother", "sister", "brother", "son", "daughter", "wife", "husband"].includes(kind) ? kind : null;
+}
+
+export function chainedPeopleAnswer(question, context) {
+  const chain = parseChain(question);
+  if (!chain || chain.length < 2) return null;
+  const { self, from } = chainSteps(context);
+  let nodes = [self];
+  const label = ["your"];
+  for (const [index, step] of chain.entries()) {
+    const [role, kind] = STEP_WORDS[step.word];
+    let next = [];
+    for (const node of nodes) for (const person of from(node, role)) if (!next.some((item) => item.id === person.id)) next.push(person);
+    // "wife", "mother", "sister": a woman; kinds are relative to you, so compare genders, and keep the unknown.
+    if (kind) {
+      next = next.filter((person) => { const known = GENDER[knownKind(person, context)]; return !known || known === GENDER[kind]; });
+      // Someone known to match ("his mother" is a recorded woman) leaves out the people whose gender is unknown.
+      if (next.some((person) => GENDER[knownKind(person, context)] === GENDER[kind])) next = next.filter((person) => GENDER[knownKind(person, context)]);
     }
-    if (!found.length && isParent(base) && wanted === "child") {
-      found = [self, ...siblingsFor("siblings", context).people].filter((person) => person?.name).map((person) => ({ id: person.id, name: person.id === self?.id ? `${person.name} (you)` : person.name }));
+    if (step.name) next = next.filter((person) => namesMatch(person.name, step.name));
+    const word = `${step.word}${step.name ? ` ${step.name}` : ""}`;
+    if (!next.length) {
+      const said = `${label.join(" ")} ${word}`.replace(/^your/, "Your");
+      const plural = /s$|children/.test(step.word);
+      return `${said} ${plural ? "aren't" : "isn't"} recorded yet.`;
     }
-    if (relation === "father" || relation === "mother") {
-      const narrowed = found.filter((person) => {
-        const record = (context?.people || []).find((item) => item.id === person.id);
-        return !record?.kind || record.kind === relation || ["parent", "person"].includes(record.kind);
-      });
-      found = narrowed;
-    }
-    const whose = `${base.name}'s ${relation}`;
-    const plural = ["children", "kids", "sons", "daughters", "parents", "sisters", "brothers", "siblings"].includes(relation);
-    if (!found.length) return `${whose} ${plural ? "aren't" : "isn't"} recorded yet.`;
-    if (found.length === 1 && note) return `${whose}: ${found[0].name}${note}.`;
-    return `${whose}: ${found.map((person) => person.name).join(", ")}.`;
-  });
-  return lines.join("\n");
+    const last = index === chain.length - 1;
+    label.push(last ? word : `${word}${/s$/.test(step.word) ? "'" : "'s"}`);
+    nodes = next;
+  }
+  const names = nodes.map((person) => (person.id === self.id ? `${person.name} (you)` : person.name));
+  const whose = label.slice(0, -1).join(" ");
+  const asked = label.at(-1);
+  if (/\bhow many\b/i.test(question)) {
+    const subject = whose.replace(/^your /, "your ").replace(/['’]s?$/, "");
+    return `${subject[0].toUpperCase()}${subject.slice(1)} have ${names.length} ${asked}: ${names.join(", ")}.`.replace(/ have (\d+) /, (all, n) => (subject.endsWith("s") ? ` have ${n} ` : ` has ${n} `));
+  }
+  // A single person who is also your own relative says how ("— your mother").
+  const note = nodes.length === 1 && nodes[0].id !== self.id ? relationToYou(nodes[0], context) : "";
+  return `${whose[0].toUpperCase()}${whose.slice(1)} ${asked}: ${names.join(", ")}${note}.`;
+}
+
+function relationToYou(person, context) {
+  const known = knownKind(person, context);
+  const people = context?.people || [];
+  const record = people.find((item) => item.id === person.id);
+  if (!record || record.kind === "self") return "";
+  return known ? ` — your ${known}` : "";
 }
 
 export function answerPeopleQuestion(question, context) {
