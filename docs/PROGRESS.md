@@ -14,6 +14,26 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: prod family tree showed the father born on his death day.
+  - Cause (read-only queries on dira, Phesto's go): his entity has no
+    birthDate and is unchanged since 16 Oct; the endsAt migration only adds
+    a column to events. Two review items (queued 15 Oct) confirmed on
+    18 Nov 23:18 became new events; one summary reads "the passing of the
+    father, <name>, on <date>". The "<name>, (on) <date>" pattern in
+    collectDatedNames skipped only "passed away|died" before the name, so
+    "passing" let the death date through as a birth claim, and birthOf
+    takes the newest event's claim first. Not the people linking.
+  - Fix: that pattern skips dates with a death word before the name
+    (passing, late, funeral, buried, death, …) or "passed/died" right
+    after the date; birthOf never returns a birth date on or after the
+    death date. No prod data fix needed: the new code on prod records
+    (read-only) gives the right dates.
+  - Golden family-tree: the father's two dates, plus the rule that no
+    person's birth date is on or after their death date (answer and
+    person records).
+  - test/death-dates.test.js (synthetic). npm test 60/60; golden fixture
+    12/12 + reset gate; live readonly 11/12 twice, `properties` flake
+    (logs/golden-deathdate-*.log).
 - 2026-11-19 18:35: deployed to prod. personal fast-forwarded into main
   (8698d0e..e49c70b, Phesto's go), pushed; prod merged it as 86cbe62.
   Backup first (dira_20261119_183327.dump). Migration
@@ -355,9 +375,6 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- Prod family tree: father's birth date shows as his death date since
-  today. May I read the dira database (read-only) to find which record
-  gives it? Then add the date to the golden check.
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);

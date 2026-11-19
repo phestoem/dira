@@ -34,6 +34,20 @@ export function mentionsDate(text, iso) {
 }
 
 const has = (...names) => (answer) => names.filter((name) => !new RegExp(`\\b${name}\\b`, "i").test(answer)).map((name) => `missing "${name}"`);
+const MONTH_NUMBER = { jan: 1, feb: 2, mar: 3, apr: 4, may: 5, jun: 6, jul: 7, aug: 8, sep: 9, oct: 10, nov: 11, dec: 12 };
+const dayValue = (text) => {
+  const [day, month, year] = text.split(/\s+/);
+  return Number(year) * 10000 + MONTH_NUMBER[month.slice(0, 3).toLowerCase()] * 100 + Number(day);
+};
+// No person in the answer may be born on or after the day they died.
+export const birthAfterDeath = (answer) => {
+  const failures = [];
+  for (const match of String(answer).matchAll(/([\p{L}' -]+?)\s*\([^)]*?\bb\. (\d{1,2} \w{3,} \d{4})[^)]*?\bpassed (\d{1,2} \w{3,} \d{4})/gu)) {
+    if (dayValue(match[2]) >= dayValue(match[3])) failures.push(`${match[1].trim()}: birth date ${match[2]} is not before death date ${match[3]}`);
+  }
+  return failures;
+};
+
 const lacks = (...names) => (answer) => names.filter((name) => new RegExp(`\\b${name}\\b`, "i").test(answer)).map((name) => `must not mention "${name}"`);
 const ANSWER_INTENTS = new Set(["question", "graph_query"]);
 
@@ -106,6 +120,10 @@ export const CASES = [
       if (/\bCareen\b[^\n]*\bZelda\b|\bZelda\b[^\n]*\bCareen\b/i.test(answer) && /\b(Zelda'?s (daughter|child)|children with Zelda|mother:?\s*Zelda)\b/i.test(answer)) {
         failures.push("answer shows Careen as Zelda's child");
       }
+      const father = answer.split("\n").find((line) => /\bEnock Mwakyusa \(father\b/.test(line)) || "";
+      if (!/\bEnock Mwakyusa \(father[^)]*\bb\. 19 Feb 1956\b/.test(father)) failures.push("father's birth date is not 19 Feb 1956");
+      if (!/\bEnock Mwakyusa \(father[^)]*\bpassed 25 Apr 2004\b/.test(father)) failures.push("father's death date is not 25 Apr 2004");
+      failures.push(...birthAfterDeath(answer));
       failures.push(...(await db.treeProblems()));
       return failures;
     },

@@ -429,6 +429,8 @@ function splitNameList(text) {
     .filter(Boolean);
 }
 
+const DEATH_WORDS = /\b(passed away|passing|passed|died|death|deceased|late|funeral|buried|burial|memorial)\b/i;
+
 function collectDatedNames(text, eventId, people, records) {
   const aboutBirth = /\b(born|birth|birthdays?|welcomed)\b/i.test(text);
   if (aboutBirth) {
@@ -444,7 +446,11 @@ function collectDatedNames(text, eventId, people, records) {
   // "… Kari on 3 November 2013 and Brynja on 8 January 2019"; a bare "Thora 22 Jan 1982" only for someone known.
   for (const match of text.matchAll(new RegExp(`(${NAME}),?\\s+(?:on\\s+)?(${DATE})`, "gu"))) {
     const lead = text.slice(Math.max(0, match.index - 40), match.index);
-    if (/\b(marriage|married|engagement|engaged|passed away|died|registered)\b/i.test(lead)) continue;
+    const trail = text.slice(match.index + match[0].length, match.index + match[0].length + 30);
+    if (/\b(marriage|married|engagement|engaged|registered)\b/i.test(lead)) continue;
+    // A date next to a passing ("the passing of the father, X, on …", "late father X, …", "X on … passed away")
+    // dates the death, not the birth.
+    if (DEATH_WORDS.test(lead) || /^\W{0,3}(?:he |she |they )?(passed|died|was buried)\b/i.test(trail)) continue;
     if (!aboutBirth && !resolveRecord(match[1], people)?.personId) continue;
     addDate(records, people, match[1], eventId, { birthDate: spokenDate(match[2]) });
   }
@@ -730,10 +736,13 @@ function familyTreeAnswer(context) {
   return lines.join("\n");
 }
 
+// A birth date on or after the person's death date is never shown.
 function birthOf(person, context) {
+  const death = deathOf(person, context);
+  const usable = (iso) => iso && /^\d{4}-\d{2}-\d{2}$/.test(iso) && !(death && iso >= death);
   const own = normalizeDate(person?.birthDate);
-  if (own && /^\d{4}-\d{2}-\d{2}$/.test(own)) return { iso: own, fromEvent: false };
-  const record = (context?.records || []).find((item) => item.birthDate && /^\d{4}-\d{2}-\d{2}$/.test(item.birthDate) && samePerson(item, person));
+  if (usable(own)) return { iso: own, fromEvent: false };
+  const record = (context?.records || []).find((item) => usable(item.birthDate) && samePerson(item, person));
   return record ? { iso: record.birthDate, fromEvent: true } : null;
 }
 

@@ -344,7 +344,7 @@ function graphReader(userId) {
   return {
     async treeProblems() {
       const [people, edges] = await Promise.all([
-        prisma.entity.findMany({ where: { userId, entityType: "person", status: { not: "archived" } }, select: { id: true, name: true, isSelf: true } }),
+        prisma.entity.findMany({ where: { userId, entityType: "person", status: { not: "archived" } }, select: { id: true, name: true, isSelf: true, birthDate: true, deathDate: true } }),
         prisma.relationship.findMany({ where: { userId, category: "family", status: "confirmed", validTo: null } }),
       ]);
       const name = new Map(people.map((person) => [person.id, person.name]));
@@ -358,6 +358,11 @@ function graphReader(userId) {
         if (edge.type === "sibling_of" && (is(edge.fromId, /zelda/i) || is(edge.toId, /zelda/i))) problems.push(`graph: Zelda is a sibling (${from} sibling_of ${to})`);
         if (edge.type === "parent_of" && is(edge.toId, /zelda/i)) problems.push(`graph: Zelda is a child of ${from}`);
         if (edge.type === "parent_of" && is(edge.fromId, /zelda/i) && is(edge.toId, /careen/i)) problems.push("graph: Careen is Zelda's child");
+      }
+      for (const person of people) {
+        if (person.birthDate && person.deathDate && person.birthDate >= person.deathDate) {
+          problems.push(`graph: ${person.name} birth date ${person.birthDate.toISOString().slice(0, 10)} is not before death date ${person.deathDate.toISOString().slice(0, 10)}`);
+        }
       }
       if (!self) problems.push("graph: no self entity");
       return problems;
