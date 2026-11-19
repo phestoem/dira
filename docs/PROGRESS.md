@@ -14,6 +14,12 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 19:36: deployed 8225d06 (death-date fix) to prod. main
+  fast-forwarded e49c70b..8225d06 (Phesto's go), pushed; prod merged it as
+  a379352. Backup first (dira_20261119_193447.dump); no migration; both
+  services active; /health ok. Readonly golden against prod 12/12 with
+  the new date checks, father's dates right, no rows changed
+  (logs/deploy-20261119b.log, logs/golden-prod-readonly-20261119b.log).
 - 2026-11-19: prod family tree showed the father born on his death day.
   - Cause (read-only queries on dira, Phesto's go): his entity has no
     birthDate and is unchanged since 16 Oct; the endsAt migration only adds
