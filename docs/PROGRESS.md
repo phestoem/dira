@@ -522,6 +522,8 @@ For comparison, `fix/people-answers` today: fixture 10/13 (children
 missing after the introduction), the same without its last change.
 
 ## Decisions made and why
+- 2026-11-19 (Phesto): Kisarawe amounts are EUR, including the two 500
+  installments (October, November) that name no currency.
 - 2026-11-19 (Phesto): restores into dev always go through
   ops/backup/restore-into-dev.sh (sessions cleared, own JWT secret, nothing
   leaves dev).
