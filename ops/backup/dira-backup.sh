@@ -5,6 +5,8 @@
 # setting is empty is skipped. One destination failing does not stop the others; the script then exits 1.
 # Writes $BACKUP_ROOT/last_status.json for monitoring.
 set -uo pipefail
+# Dumps hold personal data: new files 600 and directories 700, readable only by the backup user.
+umask 077
 
 ENV_FILE=${DIRA_BACKUP_ENV:-/etc/qusaz/dira-backup.env}
 [ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a
@@ -23,6 +25,7 @@ export RESTIC_REPOSITORY RESTIC_PASSWORD_FILE AWS_ACCESS_KEY_ID AWS_SECRET_ACCES
 
 log() { echo "$(date -Is) [dira-backup] $*"; }
 mkdir -p "$BACKUP_ROOT/daily" "$BACKUP_ROOT/weekly"
+chmod 700 "$BACKUP_ROOT" "$BACKUP_ROOT/daily" "$BACKUP_ROOT/weekly"
 exec 9>"$BACKUP_ROOT/.lock"
 flock -n 9 || { log "another backup is running"; exit 1; }
 

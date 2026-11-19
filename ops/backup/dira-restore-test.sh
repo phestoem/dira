@@ -5,6 +5,8 @@
 # Row counts may trail the live database by a day of saves; they are reported, not required to match.
 # Writes $BACKUP_ROOT/last_restore_test.json. Reads the live database only.
 set -uo pipefail
+# Dumps hold personal data: new files 600 and directories 700, readable only by the backup user.
+umask 077
 
 ENV_FILE=${DIRA_BACKUP_ENV:-/etc/qusaz/dira-backup.env}
 [ -f "$ENV_FILE" ] && set -a && . "$ENV_FILE" && set +a

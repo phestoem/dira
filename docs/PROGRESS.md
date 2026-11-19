@@ -14,6 +14,14 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 21:36: backup permissions. /opt/qusaz/backups/dira/ was
+  775 (dirs) and 664 (every dump, checksum, log and status file):
+  readable by any local user. Now dirs 700, files 600, all qusaz (the
+  cron user). /opt/qusaz/backups/dira_dev/ was already 700/600.
+  dira-backup.sh and dira-restore-test.sh set umask 077 (backup also
+  chmods its dirs 700); installed copies updated and set 755 (were
+  group-writable 775). A test backup wrote dira_20261119_213619.dump at
+  600.
 - 2026-11-19 21:25: archived October test noise on prod (Phesto chose
   12 queue items, option a: queue item dismissed, its event archived,
   nothing deleted). Backup first (dira_20261119_212423.dump); dry run
