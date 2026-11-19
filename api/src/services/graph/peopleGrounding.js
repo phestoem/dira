@@ -46,6 +46,13 @@ export async function loadPeopleContext(userId) {
     }),
   ]);
   const people = peopleFromTree(tree);
+  // Connections between other people ("<spouse> parent_of …") can reach records outside the tree; name them too.
+  const known = new Set(people.map((person) => person.id));
+  const outside = [...new Set(edges.flatMap((edge) => [edge.fromId, edge.toId]).filter((id) => !known.has(id)))];
+  const others = outside.length
+    ? await prisma.entity.findMany({ where: { userId, id: { in: outside }, status: { not: "archived" } }, select: { id: true, name: true } })
+    : [];
+  const nameOf = (id) => people.find((person) => person.id === id)?.name || others.find((person) => person.id === id)?.name || "";
   const namedEdges = edges.map((edge) => ({
     id: edge.id,
     type: edge.type,
@@ -53,8 +60,8 @@ export async function loadPeopleContext(userId) {
     fromId: edge.fromId,
     toId: edge.toId,
     validFrom: edge.validFrom || null,
-    fromName: people.find((person) => person.id === edge.fromId)?.name || "",
-    toName: people.find((person) => person.id === edge.toId)?.name || "",
+    fromName: nameOf(edge.fromId),
+    toName: nameOf(edge.toId),
   }));
   return buildPeopleContext({ self: tree.self, people, edges: namedEdges, events });
 }
@@ -204,8 +211,95 @@ export function compoundPeopleAnswer(question, context) {
   return [...new Set(body)].concat(fromEvents ? [RECORD_LINE] : []).join("\n");
 }
 
+// "my father's wife", "my wife's parents", "my sister's children": the relation of one of your relatives, from
+// records. A recorded connection of that person comes first. Without one, only two things follow from your own
+// connections: a parent's spouse is your other parent, and a parent's children are you and your siblings. Anything
+// else unrecorded says so; nothing is guessed (your children are not assumed to be your spouse's).
+const BASE_KINDS = {
+  father: ["father"], dad: ["father"], baba: ["father"],
+  mother: ["mother"], mum: ["mother"], mom: ["mother"], mama: ["mother"],
+  wife: ["wife", "spouse"], husband: ["husband", "spouse"], spouse: ["wife", "husband", "spouse"],
+  sister: ["sister"], brother: ["brother"], son: ["son"], daughter: ["daughter"],
+};
+const CHAIN = new RegExp(`\\bmy\\s+(${Object.keys(BASE_KINDS).join("|")})(?:\\s+([\\p{Lu}][\\p{L}'’-]+))?['’]s\\s+(wife|husband|spouse|partner|children|kids|sons|daughters|parents|father|mother|sisters|brothers|siblings)\\b`, "iu");
+
+function chainBases(word, name, context) {
+  const kinds = BASE_KINDS[word.toLowerCase()];
+  let found;
+  if (kinds.includes("father") || kinds.includes("mother")) {
+    found = relatives(context, ["father", "mother", "parent"]).all.filter((person) => kinds.includes(kindOf(person, context, ["father", "mother"])));
+  } else if (kinds.includes("sister") || kinds.includes("brother")) {
+    found = siblingsFor(kinds.includes("sister") ? "sisters" : "brothers", context).people;
+  } else if (kinds.includes("son") || kinds.includes("daughter")) {
+    found = relatives(context, ["child", "son", "daughter"]).all.filter((person) => kinds.includes(kindOf(person, context, ["son", "daughter"])));
+  } else {
+    found = (context?.people || []).filter((person) => kinds.includes(person.kind));
+  }
+  return name ? found.filter((person) => namesMatch(person.name, name)) : found;
+}
+
+function linkedTo(context, personId, wanted) {
+  const out = [];
+  for (const edge of context?.edges || []) {
+    if (edge.fromId !== personId && edge.toId !== personId) continue;
+    const otherId = edge.fromId === personId ? edge.toId : edge.fromId;
+    const otherName = edge.fromId === personId ? edge.toName : edge.fromName;
+    if (!otherName || otherId === context?.self?.id) continue;
+    const role = edge.type === "spouse_of" ? "spouse"
+      : edge.type === "sibling_of" ? "sibling"
+      : edge.type === "parent_of" ? (edge.fromId === personId ? "child" : "parent")
+      : null;
+    if (role === wanted && !out.some((item) => item.id === otherId)) out.push({ id: otherId, name: otherName });
+  }
+  return out;
+}
+
+export function chainedPeopleAnswer(question, context) {
+  const match = String(question || "").match(CHAIN);
+  if (!match) return null;
+  const [, baseWord, baseName, relationWord] = match;
+  const relation = relationWord.toLowerCase();
+  const wanted = ["wife", "husband", "spouse", "partner"].includes(relation) ? "spouse"
+    : ["parents", "father", "mother"].includes(relation) ? "parent"
+    : ["sisters", "brothers", "siblings"].includes(relation) ? "sibling"
+    : "child";
+  const bases = chainBases(baseWord, baseName, context);
+  const label = `your ${baseWord.toLowerCase()}${baseName ? ` ${baseName}` : ""}`;
+  if (!bases.length) return `${label[0].toUpperCase()}${label.slice(1)} isn't recorded yet.`;
+  const self = (context?.people || []).find((person) => person.kind === "self") || context?.self;
+  const parents = relatives(context, ["father", "mother", "parent"]).all;
+  const isParent = (person) => parents.some((parent) => parent.id === person.id);
+  const lines = bases.map((base) => {
+    let found = linkedTo(context, base.id, wanted);
+    let note = "";
+    if (!found.length && isParent(base) && wanted === "spouse") {
+      found = parents.filter((parent) => parent.id !== base.id).map((parent) => ({ id: parent.id, name: parent.name }));
+      const kind = found.length === 1 ? kindOf(parents.find((parent) => parent.id === found[0].id), context, ["father", "mother"]) : null;
+      note = kind ? ` — your ${kind === "parent" ? "other parent" : kind}` : "";
+    }
+    if (!found.length && isParent(base) && wanted === "child") {
+      found = [self, ...siblingsFor("siblings", context).people].filter((person) => person?.name).map((person) => ({ id: person.id, name: person.id === self?.id ? `${person.name} (you)` : person.name }));
+    }
+    if (relation === "father" || relation === "mother") {
+      const narrowed = found.filter((person) => {
+        const record = (context?.people || []).find((item) => item.id === person.id);
+        return !record?.kind || record.kind === relation || ["parent", "person"].includes(record.kind);
+      });
+      found = narrowed;
+    }
+    const whose = `${base.name}'s ${relation}`;
+    const plural = ["children", "kids", "sons", "daughters", "parents", "sisters", "brothers", "siblings"].includes(relation);
+    if (!found.length) return `${whose} ${plural ? "aren't" : "isn't"} recorded yet.`;
+    if (found.length === 1 && note) return `${whose}: ${found[0].name}${note}.`;
+    return `${whose}: ${found.map((person) => person.name).join(", ")}.`;
+  });
+  return lines.join("\n");
+}
+
 export function answerPeopleQuestion(question, context) {
   const q = String(question || "");
+  const chained = chainedPeopleAnswer(q, context);
+  if (chained) return chained;
   const compound = compoundPeopleAnswer(q, context);
   if (compound) return compound;
   if (/\bfamily tree\b/i.test(q) && !/\b(father|mother)'s\b/i.test(q)) return familyTreeAnswer(context);

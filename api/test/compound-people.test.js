@@ -57,6 +57,6 @@ test("a relation with no record says so; single and possessive questions are unc
   const noKids = buildPeopleContext({ self, people: people.filter((person) => !["einar", "kari"].includes(person.id)), edges: edges.slice(0, 4), events: [] });
   assert.match(answerPeopleQuestion("my wife and kids?", noKids), /Asta Kristin Jonsdottir — your wife[\s\S]*\nYour children aren't recorded yet\.$/);
   assert.equal(answerPeopleQuestion("who is my wife?", context), "Asta Kristin Jonsdottir — your wife (married 5 Aug 2003).");
-  assert.equal(compoundPeopleAnswer("who is my father's wife?", context), null, "someone else's relation is not a compound question");
+  assert.equal(compoundPeopleAnswer("who's my father's wife?", context), null, "someone else's relation is not a compound question");
   assert.equal(compoundPeopleAnswer("my mother's sisters and brothers?", context), null);
 });

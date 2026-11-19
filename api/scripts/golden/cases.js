@@ -73,6 +73,12 @@ export const CASES = [
     check: ({ answer }) => [...has("Enock Mwakyusa", "Froidah Biniala Kyando")(answer), ...lacks("Hermes")(answer)],
   },
   {
+    // A relative's relation, from records: your father's wife is your mother, never your own wife.
+    id: "fathers-wife",
+    turns: ["who is my father's wife?"],
+    check: ({ answer }) => [...has("Froidah Biniala Kyando")(answer), ...lacks("Zelda", "Hermes")(answer)],
+  },
+  {
     // One question, several relations: every one answered from records, in one reply.
     id: "wife-and-parents",
     turns: ["my wife and parents?"],

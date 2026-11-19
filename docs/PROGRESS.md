@@ -14,6 +14,18 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: chained relations from records ("my father's wife",
+  "my wife's …", "my sister's …", "my sister Jeni's husband").
+  - peopleGrounding.chainedPeopleAnswer: the base relative(s), then that
+    person's recorded connection of the asked kind; without one only two
+    things follow from your own connections: a parent's spouse is your
+    other parent, a parent's children are you and your siblings. Anything
+    else unrecorded says "not recorded yet" (your children are not assumed
+    to be your spouse's). loadPeopleContext now names connection ends
+    outside the tree.
+  - Golden: new case fathers-wife (Froidah, never Zelda): 15 cases.
+  - test/chained-people.test.js. npm test 83/83; golden fixture 15/15 +
+    reset gate; live readonly 15/15 (logs/golden-chain-*.log).
 - 2026-11-19: month-precision dates (needed before the prod fix of the
   two invented "15 Dec" events).
   - Migration 20261119230000_event_date_precision: Event.datePrecision
@@ -562,8 +574,6 @@ Checked 2026-11-18 (read-only, earlier):
 ## Open questions for Phesto
 - Prod "Trip to Tanzania" has no date (and no return date): set them in
   the UI, or approve a one-off fix (backup, dry run first).
-- "who is my father's wife?" answers with your own wife (the wife rule
-  matches first). Older than item 5; fix it to name the mother?
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
