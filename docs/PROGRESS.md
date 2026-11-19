@@ -14,6 +14,15 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 20:4x: one-off prod family backfill (Phesto approved the
+  dry run, with one date he corrected). Backup first
+  (dira_20261119_203734.dump). One transaction, empty fields only, records
+  matched by id: 1 confirmed mother connection (her person record existed;
+  the connection was missing, so she was not in the tree), 11 birth
+  dates, 1 marriage date on the spouse connection. Second dry run: 0
+  changes. Script kept outside the repo (personal data); log in
+  logs/backfill-family-20261119.log (gitignored).
+  - Mbeya stays on the properties list (Phesto).
 - 2026-11-19: properties answered by code from records.
   - services/holdings.js: holdings found in saved events' text (plot
     numbers; "<kind> in <Place>"; "<Place> land/house"; "<Name> is our
@@ -417,9 +426,8 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- Missing family dates (report in chat): fill them in the UI on prod;
-  until then the tree says "not recorded". dira_dev has no father
-  record, so its live family-tree golden fails on his dates.
+- dira_dev has no father record, so its live family-tree golden fails
+  on his dates (prod is backfilled). Backfill dira_dev the same way?
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
