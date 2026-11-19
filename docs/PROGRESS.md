@@ -14,6 +14,18 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: properties answered by code from records.
+  - services/holdings.js: holdings found in saved events' text (plot
+    numbers; "<kind> in <Place>"; "<Place> land/house"; "<Name> is our
+    place"), one per plot or place ("<Place> <Region>" merges into
+    "<Place>"), each with its earliest dated record and a count of more
+    records. List questions ("what/which/list/how many … properties/
+    plots/lands/houses", "do I own …") get this answer with no model call;
+    other property questions keep the model with the property records.
+  - test/holdings.test.js. npm test 65/65; golden fixture 12/12 + reset
+    gate; live readonly on dira_dev 11/12, `properties` passes (7
+    holdings), family-tree fails only because dira_dev has no father
+    record (logs/golden-holdings-*.log).
 - 2026-11-19: people answers read dates only from records.
   - Report for Phesto (read-only, prod dira, details in chat only): on
     records = own birth date, father's death date; nothing else. Only in
@@ -405,6 +417,9 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
+- Missing family dates (report in chat): fill them in the UI on prod;
+  until then the tree says "not recorded". dira_dev has no father
+  record, so its live family-tree golden fails on his dates.
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);

@@ -1,3 +1,4 @@
+import { holdingsAnswer, isPropertyListQuestion, loadHoldings } from "./holdings.js";
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { flagOn } from "./flags.js";
@@ -123,6 +124,11 @@ export async function chat(messages, userId) {
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
   }
   if (isFocusQuestion(latest)) return answerFocus(userId, history, latest);
+  // "Which properties do I own?": listed by code from the saved records, no model call.
+  if (isPropertyListQuestion(latest)) {
+    const holdings = await loadHoldings(userId);
+    return { reply: holdingsAnswer(holdings, latest), contextUsed: { eventsCount: holdings.reduce((sum, holding) => sum + holding.count, 0), visionsCount: 0, entitiesCount: 0 } };
+  }
   const context = await loadContext(userId);
   const graph = await graphContext(userId, latest);
   context.graphLines = graph.lines;
