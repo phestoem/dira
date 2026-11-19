@@ -14,6 +14,17 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 18:35: deployed to prod. personal fast-forwarded into main
+  (8698d0e..e49c70b, Phesto's go), pushed; prod merged it as 86cbe62.
+  Backup first (dira_20261119_183327.dump). Migration
+  20261118233000_event_ends_at applied; dira-api and dira-web active;
+  /health ok. Readonly golden against prod 12/12, no rows changed
+  (logs/deploy-20261119.log, logs/golden-prod-readonly-20261119.log).
+  - Found: the prod family-tree line now gives the father's birth date as
+    his death date; yesterday's prod run and dev live (same code) give the
+    right one, so it comes from prod data (own birthDate or a dated record
+    matched to him). Golden does not check that date. Not investigated:
+    needs a read of the dira database (Open questions).
 - 2026-11-19: real-use 4/4, "what should I focus on" answers from dates.
   - services/focus.js: isFocusQuestion (focus on / prioritise / what's
     coming up / next steps / plan my week, two Swahili phrases; code, no
@@ -344,6 +355,9 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
+- Prod family tree: father's birth date shows as his death date since
+  today. May I read the dira database (read-only) to find which record
+  gives it? Then add the date to the golden check.
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
