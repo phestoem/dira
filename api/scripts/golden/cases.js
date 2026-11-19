@@ -72,6 +72,18 @@ export const CASES = [
     check: ({ answer }) => [...has("Enock Mwakyusa", "Froidah Biniala Kyando")(answer), ...lacks("Hermes")(answer)],
   },
   {
+    // One question, several relations: every one answered from records, in one reply.
+    id: "wife-and-parents",
+    turns: ["my wife and parents?"],
+    check: ({ answer }) => {
+      const failures = [...has("Zelda Goodluck Mambosho", "Enock Mwakyusa", "Froidah Biniala Kyando")(answer), ...lacks("Hermes")(answer)];
+      if (!/Zelda Goodluck Mambosho — your wife/.test(answer)) failures.push("Zelda not named as wife");
+      if (!/Enock Mwakyusa — your father/.test(answer)) failures.push("Enock not named as father");
+      if (!/Froidah Biniala Kyando — your mother/.test(answer)) failures.push("Froidah not named as mother");
+      return failures;
+    },
+  },
+  {
     id: "sisters",
     turns: ["list my sisters"],
     check: ({ answer, turn }) => [...answered(turn), ...has("Jeni", "Leah", "Neema", "Zenah")(answer), ...lacks("Zelda")(answer)],

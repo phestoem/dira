@@ -14,6 +14,20 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: real-use 5, compound people questions.
+  - peopleGrounding.compoundPeopleAnswer: a question naming two or more
+    relations (spouse, parents, father, mother, children, siblings;
+    "parents" covers father and mother) answers each from records, in
+    the order asked, in one reply; birth questions give each person's
+    recorded date or "not recorded yet". Possessive questions ("my
+    father's wife") stay on the single-relation path. No model call.
+  - Golden: new case wife-and-parents (13 cases now).
+  - journal-share test sets DIRA_BRIDGE/DIRA_BRIDGE_JOURNAL "on"
+    explicitly: Prisma loads api/.env into unset variables, and dev's
+    .env now has DIRA_BRIDGE=off.
+  - test/compound-people.test.js. npm test 70/70; golden fixture 13/13 +
+    reset gate; live readonly on dira_dev 13/13
+    (logs/golden-compound-*.log).
 - 2026-11-19 21:51: deployed 57429be (docs and ops scripts only, no app
   code) to prod. main fast-forwarded 7a26f50..57429be, pushed; prod
   merged it as 0f0532d. Backup first (dira_20261119_215049.dump, 600);
@@ -510,6 +524,8 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
+- "who is my father's wife?" answers with your own wife (the wife rule
+  matches first). Older than item 5; fix it to name the mother?
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);

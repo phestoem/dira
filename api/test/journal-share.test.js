@@ -68,8 +68,9 @@ test("journal: sealed by default, shared per entry", async (t) => {
     ALTIMETRIX_URL: `${base}/alt`,
     ALTIMETRIX_BRIDGE_SECRET: "test-secret",
     ALTIMETRIX_RETRY_MS: "10",
-    DIRA_BRIDGE: undefined,
-    DIRA_BRIDGE_JOURNAL: undefined,
+    // Explicit, not unset: Prisma loads api/.env into missing variables, and dev's .env turns the bridge off.
+    DIRA_BRIDGE: "on",
+    DIRA_BRIDGE_JOURNAL: "on",
     DIRA_AUTO_EXTRACT: undefined,
   });
   t.after(() => server.close());

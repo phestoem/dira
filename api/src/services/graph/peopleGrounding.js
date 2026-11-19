@@ -169,8 +169,45 @@ export function usesRecordedAnswer(question) {
   return false;
 }
 
+// Each relation a question can ask about, with the code answer for it. "parents" covers father and mother.
+const RELATIONS = [
+  { key: "spouse", pattern: /\b(wife|husband|spouse|mke|mume)\b/i, answer: (q, context) => spouseAnswer(q, context), people: (context) => (context?.people || []).filter((person) => ["wife", "husband", "spouse"].includes(person.kind)) },
+  { key: "parents", pattern: /\bparents?\b/i, answer: (q, context) => parentsAnswer(context), people: (context) => relatives(context, ["father", "mother", "parent"]).all },
+  { key: "father", pattern: /\b(father|dad|baba)\b/i, answer: (q, context) => parentRoleAnswer("father", context), people: (context) => relatives(context, ["father", "parent"]).all.filter((person) => kindOf(person, context, ["father", "mother"]) === "father") },
+  { key: "mother", pattern: /\b(mother|mum|mom|mama)\b/i, answer: (q, context) => parentRoleAnswer("mother", context), people: (context) => relatives(context, ["mother", "parent"]).all.filter((person) => kindOf(person, context, ["father", "mother"]) === "mother") },
+  { key: "children", pattern: /\b(kids|children|sons|daughters|watoto)\b/i, answer: (q, context) => childrenAnswer(q, context), people: (context) => relatives(context, ["child", "son", "daughter"]).all },
+  { key: "siblings", pattern: /\b(sisters?|brothers?|siblings?)\b/i, answer: (q, context) => (BIRTH_WORDS.test(q) ? siblingBirthAnswer(q, context) : siblingAnswer(q, context)), people: (context) => siblingsFor("siblings", context).people },
+];
+const BIRTH_WORDS = /\b(born|birth|birthdays?|birth dates?)\b/i;
+
+// "my wife and parents?", "who are my sisters and children": every relation asked, from records, in the order
+// asked, one reply. Null when the question names fewer than two relations, or asks about someone else's
+// ("my father's wife"), which the single-relation answers handle.
+export function compoundPeopleAnswer(question, context) {
+  const q = String(question || "");
+  if (/\bfamily tree\b/i.test(q) || /\b(father|mother|dad|mum|mom|wife|husband|spouse|sisters?|brothers?|parents?)'s?\s+(?:wife|husband|spouse|family|parents|children|kids|sisters|brothers|siblings|father|mother)\b/i.test(q)) return null;
+  let asked = RELATIONS.map((relation) => ({ relation, at: q.search(relation.pattern) })).filter((item) => item.at >= 0);
+  if (asked.some((item) => item.relation.key === "parents")) asked = asked.filter((item) => !["father", "mother"].includes(item.relation.key));
+  if (asked.length < 2) return null;
+  asked.sort((a, b) => a.at - b.at);
+  const births = BIRTH_WORDS.test(q);
+  const parts = asked.map(({ relation }) => {
+    if (!births || relation.key === "siblings") return relation.answer(q, context);
+    const people = relation.people(context);
+    const label = { spouse: "spouse", parents: "parents", father: "father", mother: "mother", children: "children" }[relation.key];
+    if (!people.length) return `Your ${label} ${relation.key === "spouse" || relation.key === "father" || relation.key === "mother" ? "isn't" : "aren't"} recorded yet.`;
+    return people.map((person) => `${person.name} — ${birthOf(person) ? prettyDate(birthOf(person).iso) : "birth date not recorded yet"}`).join("\n");
+  });
+  const lines = parts.join("\n").split("\n");
+  const fromEvents = lines.includes(RECORD_LINE);
+  const body = lines.filter((line) => line !== RECORD_LINE);
+  return [...new Set(body)].concat(fromEvents ? [RECORD_LINE] : []).join("\n");
+}
+
 export function answerPeopleQuestion(question, context) {
   const q = String(question || "");
+  const compound = compoundPeopleAnswer(q, context);
+  if (compound) return compound;
   if (/\bfamily tree\b/i.test(q) && !/\b(father|mother)'s\b/i.test(q)) return familyTreeAnswer(context);
   if (/\b(wife|husband|spouse)\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return spouseAnswer(q, context);
   if (/\bparents?\b/i.test(q) && !/\bfamily tree\b/i.test(q)) return parentsAnswer(context);
