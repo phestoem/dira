@@ -14,6 +14,12 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 21:51: deployed 57429be (docs and ops scripts only, no app
+  code) to prod. main fast-forwarded 7a26f50..57429be, pushed; prod
+  merged it as 0f0532d. Backup first (dira_20261119_215049.dump, 600);
+  no migration; both services active; /health ok; prod .env still 600.
+  Prod golden readonly 12/12, no rows changed
+  (logs/deploy-20261119d.log, logs/golden-prod-readonly-20261119f.log).
 - 2026-11-19 21:40: prod JWT rotated by Phesto (ops/rotate-prod-jwt.md);
   verified read-only, no secret printed: JWT_SECRET once in prod .env,
   64 hex chars; prod .env 600 qusaz:qusaz (= dira-api User=qusaz), old
