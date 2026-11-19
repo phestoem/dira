@@ -14,6 +14,26 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: stated parent connections ("X is the mother of my
+  children, except Y") give a confirm card; only the confirm writes.
+  - Routing on prod: relationship_add, but the router model also marked
+    the message as accepting an offer from the previous turn
+    (followUp accept), so home saved that offer as an event. Now a message
+    that itself states a relationship is never a follow-up accept
+    (intentRouter).
+  - services/graph/statedConnections.js (code, no model): the parent must
+    be a confirmed person; "my children" = the user's confirmed children,
+    or a named list; exceptions left out; unknown names reported. The card
+    (relationship_preview, "mother of …") holds the proposals in the
+    session only; confirm upserts the ticked ones as confirmed, source
+    user, parentRole kept; already-confirmed ones are not proposed again
+    ("Already recorded" when nothing is new).
+  - contamination.test.js: a personal name removed from its ordinary-word
+    list (it became a personal word through the new golden case).
+  - Golden: mother-of-children-statement (18 cases).
+  - test/stated-connections.test.js. npm test 90/90; golden fixture
+    18/18 + reset gate; live readonly 18/18, no rows changed
+    (logs/golden-statement-*.log). Not deployed: shown to Phesto first.
 - 2026-11-19: possessive chains resolved left to right, any depth.
   - Real use: "who are my parents' children?" listed the parents plus the
     user's own children (the compound path took "parents" and "children"

@@ -21,6 +21,7 @@ import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 import { describeRelationshipLine, parseFamilyStatement } from "../services/graph/familyStatement.js";
 import { applyStatedDates, recordedLine, statedDates, statedDatesLine } from "../services/graph/statedDates.js";
+import { applyProposedConnections, proposalEdges, proposeParentConnections } from "../services/graph/statedConnections.js";
 import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
 import { commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
@@ -128,6 +129,11 @@ async function takeInput(request, reply) {
 
 async function executeIntent(userId, routing, payload) {
   if (routing.intent === "intake_file") return runIntakeFile(userId, routing, payload);
+  // "X is the mother of my children, except Y": a card of the connections to add; written only on confirm.
+  if (["relationship_add", "intake_text"].includes(routing.intent) && !payload.file) {
+    const proposal = await proposeParentConnections(userId, payload.message);
+    if (proposal) return proposedConnectionsCard(userId, routing, proposal, payload.message);
+  }
   if (routing.intent === "intake_text") return runIntakeText(userId, routing, payload);
   if (routing.intent === "question") return runQuestion(userId, routing, payload);
   if (routing.intent === "command") return runCommand(userId, routing, payload);
@@ -775,10 +781,38 @@ async function runGraphQuery(userId, routing, payload) {
   };
 }
 
+async function proposedConnectionsCard(userId, routing, proposal, message) {
+  const edges = await proposalEdges(userId, proposal);
+  const notes = [];
+  if (proposal.excepted.length) notes.push(`Left out, as you said: ${proposal.excepted.join(", ")}.`);
+  if (proposal.unknown.length) notes.push(`Not found among your records: ${proposal.unknown.join(", ")}.`);
+  if (!edges.length) {
+    const already = proposal.children.length ? `Already recorded: ${proposal.parent.name} is the ${proposal.kind} of ${proposal.children.map((child) => child.name).join(", ")}.` : `I found none of those children among your records.`;
+    return answerResponse(routing, [already, ...notes].join(" "), false);
+  }
+  const sessionId = remember(userId, { kind: "relationships", mode: "propose", proposals: edges, edgeIds: edges.map((edge) => edge.id), message, routing });
+  return {
+    sessionId,
+    routing: publicRouting(routing),
+    action: "confirm",
+    result: {
+      type: "relationship_preview",
+      content: { edges: (await labelEdges(userId, edges)).map((edge) => ({ ...edge, line: edge.line.replace(/ — parent of /, ` — ${proposal.kind} of `) })), mode: "add" },
+      confirmationRequired: true,
+      confirmationText: [`Save these ${edges.length} connection${edges.length === 1 ? "" : "s"}?`, ...notes].join(" "),
+    },
+    clarificationOptions: null,
+  };
+}
+
 async function confirmRelationships(userId, entry, body) {
   const selected = Array.isArray(body.selectedEdgeIds) && body.selectedEdgeIds.length
     ? body.selectedEdgeIds
     : entry.edgeIds;
+  if (entry.mode === "propose") {
+    const written = await applyProposedConnections(userId, entry.proposals || [], new Set(selected), entry.message);
+    return doneResponse(entry.routing, "saved", { message: written ? `Connections saved: ${written}.` : "Nothing saved." }, null);
+  }
   const chosen = new Set(selected);
   for (const id of entry.edgeIds || []) {
     if (entry.mode === "change") {

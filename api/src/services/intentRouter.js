@@ -251,6 +251,9 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
   if (!conversationItems(history).some((item) => item.role === "assistant")) {
     classified.followUp = { action: "none", fact: "" };
   }
+  // A message that itself states a relationship ("X is the mother of my children") is new information, not a yes to
+  // something offered before: it goes to the connection card, never to saving the earlier offer as an event.
+  if (!fileAttached && isRelationshipStatement(text)) classified.followUp = { action: "none", fact: "" };
   if (!fileAttached && rejectsCorrection(text) && classified.intent === "correction") {
     classified.intent = isPeopleQuestion(text) ? "graph_query" : "question";
     classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);

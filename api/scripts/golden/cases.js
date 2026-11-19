@@ -177,6 +177,25 @@ export const CASES = [
     },
   },
   {
+    // A stated connection with an exception: a card of the connections to add (or, once confirmed, "already
+    // recorded"), covering the four children and never the excepted one. Nothing is written by asking.
+    id: "mother-of-children-statement",
+    turns: ["Zelda Goodluck Mambosho is the mother of my children, except Careen."],
+    countsEvents: true,
+    check: ({ eventsCreated, turn, answer }) => {
+      const failures = eventsCreated ? [`${eventsCreated} new event(s) created`] : [];
+      const result = turn.response.result || {};
+      const text = result.type === "relationship_preview"
+        ? (result.content?.edges || []).map((edge) => edge.line).join("\n")
+        : /Already recorded/.test(answer) ? answer : "";
+      if (!text) failures.push(`no connection card (got ${result.type})`);
+      for (const name of ["Patrick", "Presley", "Powell", "Prisha"]) if (text && !new RegExp(`\\b${name}\\b`).test(text)) failures.push(`${name} missing`);
+      if (/\bCareen\b/.test(text)) failures.push("Careen included despite the exception");
+      if (result.type === "relationship_preview" && !/mother of/.test(text)) failures.push("lines do not say mother of");
+      return failures;
+    },
+  },
+  {
     id: "four-sisters-statement",
     turns: ["I have four sisters"],
     countsEvents: true,

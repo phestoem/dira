@@ -13,7 +13,7 @@ import { PERSONAL } from "../scripts/golden/personal.js";
 const ROOTS = [fileURLToPath(new URL("../src", import.meta.url)), fileURLToPath(new URL(".", import.meta.url)), fileURLToPath(new URL("../../web", import.meta.url))];
 const SKIP_DIRS = new Set(["node_modules", ".next", "public", "out", "dist"]);
 // Capitalised words in the cases that are ordinary words, months, brands or units.
-const ORDINARY = new Set(["my", "i", "i'm", "she", "he", "her", "his", "our", "we", "is", "in", "after", "careen's", "the", "and", "tsh", "toyota", "suzuki", "prado", "jimny", "dar", "es", "salaam", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "who", "what", "when", "how", "list", "show", "tell", "do", "does", "which", "where"]);
+const ORDINARY = new Set(["my", "i", "i'm", "she", "he", "her", "his", "our", "we", "is", "in", "after", "the", "and", "tsh", "toyota", "suzuki", "prado", "jimny", "dar", "es", "salaam", "january", "february", "march", "april", "may", "june", "july", "august", "september", "october", "november", "december", "who", "what", "when", "how", "list", "show", "tell", "do", "does", "which", "where"]);
 
 function files(dir) {
   return readdirSync(dir).flatMap((name) => {
