@@ -67,3 +67,14 @@ kept. The NUC and R2 steps are untested here: no access from this session.
 
 `last_status.json` and `last_restore_test.json` carry `ok` and `at`. The graceful-failure item can show their age
 on `/health`, and the digest can mention a backup older than 36 hours.
+
+## Restoring prod into dev
+
+Every restore of a dira dump into dira_dev goes through `restore-into-dev.sh`:
+
+    ops/backup/restore-into-dev.sh /opt/qusaz/backups/dira/daily/dira_YYYYMMDD_HHMMSS.dump
+
+It stops the dev API, saves dira_dev to /opt/qusaz/backups/dira_dev/, restores the dump, clears refresh_tokens,
+gives dev its own JWT_SECRET if it matches prod's (fingerprints compared, never printed), sets
+DIRA_DISABLE_CRON=true and DIRA_BRIDGE=off, refuses to finish if dev has a Resend key or a bridge secret, restarts
+the dev API and prints row counts against prod. Then run the golden live readonly check on dev.

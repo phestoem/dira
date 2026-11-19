@@ -14,6 +14,16 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 21:10: dev auth after the restore. dev and prod had the same
+  JWT_SECRET (fingerprints compared, not printed): a token signed by
+  either worked on both. Dev got its own (96 hex chars; old dev .env kept
+  in /opt/qusaz/backups/dira_dev/); refresh_tokens cleared in dira_dev.
+  Checked: a token signed with prod's secret gets 401 on dev, dev's 200.
+  - ops/backup/restore-into-dev.sh: every future restore into dev (stop
+    dev API, save dira_dev, restore, clear refresh_tokens, own JWT secret
+    if it matches prod, cron/bridge off, refuse with a Resend key or
+    bridge secret, restart, row counts). Ran twice on the same dump:
+    0.45-0.46 s restore, counts match (logs/restore-into-dev-20261119.log).
 - 2026-11-19 20:55: first restore test: prod dump into dira_dev
   (Phesto, instead of a second backfill).
   - Dev API stopped; dira_dev dumped first to
@@ -404,6 +414,9 @@ For comparison, `fix/people-answers` today: fixture 10/13 (children
 missing after the introduction), the same without its last change.
 
 ## Decisions made and why
+- 2026-11-19 (Phesto): restores into dev always go through
+  ops/backup/restore-into-dev.sh (sessions cleared, own JWT secret, nothing
+  leaves dev).
 - 2026-11-18 (Phesto): off-site backup parked: no NUC mirror, no R2 for
   now. The local nightly backup + monthly SOURCE=local restore test stay.
   The unused key ~/.ssh/dira_backup_ed25519 is kept. To resume: NUC host +
@@ -451,6 +464,8 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
+- Prod JWT_SECRET is short (15 chars) and was shared with dev until
+  today. Rotate it on prod? Everyone gets logged out once.
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
