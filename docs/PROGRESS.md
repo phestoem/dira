@@ -14,6 +14,21 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 21:25: archived October test noise on prod (Phesto chose
+  12 queue items, option a: queue item dismissed, its event archived,
+  nothing deleted). Backup first (dira_20261119_212423.dump); dry run
+  matched; one transaction, 18 changes (12 queue, 8 events). Before:
+  47 active / 9 archived events; queue 51 understood, 25 dismissed,
+  1 failed, 0 open. After: 39 active / 17 archived; 42 understood,
+  35 dismissed, 0 failed, 0 open. Prod golden readonly 12/12, no rows
+  changed (logs/archive-queue-20261119.log,
+  logs/golden-prod-readonly-20261119d.log). The list itself was read
+  from dira_dev (restored from the 20:43 prod dump; a direct prod read
+  was blocked by the permission check).
+- 2026-11-19: ops/rotate-prod-jwt.md for Phesto: new 64-char prod
+  JWT_SECRET, clear prod refresh_tokens (random strings in the DB, so a
+  new secret alone keeps sessions alive), chmod 600 on prod .env (664
+  today), restart. Not applied yet.
 - 2026-11-19 21:10: dev auth after the restore. dev and prod had the same
   JWT_SECRET (fingerprints compared, not printed): a token signed by
   either worked on both. Dev got its own (96 hex chars; old dev .env kept
@@ -464,8 +479,9 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- Prod JWT_SECRET is short (15 chars) and was shared with dev until
-  today. Rotate it on prod? Everyone gets logged out once.
+- Prod JWT rotation: steps in ops/rotate-prod-jwt.md, Phesto applies.
+  dira_dev pre-restore dumps in /opt/qusaz/backups/dira_dev/ hold copies
+  of prod refresh tokens; harmless once prod's are cleared (step 4).
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
