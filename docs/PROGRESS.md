@@ -14,6 +14,13 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19 23:07: redeployed 31674a6 (timeline sort fix) to prod. main
+  fast-forwarded 65d07c7..31674a6, pushed; prod merged it as 2b7383e.
+  Backup first (dira_20261119_230610.dump); no migration; both services
+  active; /health ok. Prod golden readonly 15/15, no rows changed; the
+  trip answer counts to the exact start date (21 days) and no longer
+  lists the return date as missing (logs/deploy-20261119f.log,
+  logs/golden-prod-readonly-20261119i.log).
 - 2026-11-19 22:56: prod deploy of 65d07c7 (month precision, chained
   relations, compound people, timeline) and the approved date fix.
   Backups dira_20261119_225345.dump (before deploy) and _225425 (before
