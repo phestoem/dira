@@ -1,6 +1,6 @@
 # personal — progress
 
-Last updated: 2026-11-18 (evening)
+Last updated: 2026-11-19
 
 ## Current goal
 Now (Phesto, 2026-11-18, from real use): 1 follow-ups attach to the last
@@ -14,6 +14,27 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: real-use 4/4, "what should I focus on" answers from dates.
+  - services/focus.js: isFocusQuestion (focus on / prioritise / what's
+    coming up / next steps / plan my week, two Swahili phrases; code, no
+    router call). focusContext: overdue or due (dueAt, not completed),
+    under way (started, endsAt ahead), coming up (next 60 days), last 14
+    days, each record once in its most urgent section; queue items
+    waiting; active visions. Each line is the saved summary + "starts in
+    20 days" / "overdue, was due 3 days ago".
+  - lifeAdvisor.chat: a focus question gets one model call with that
+    context (last 4 turns, temperature 0.3); rules: 3–5 numbered actions,
+    each naming the record and its date with days left, no invented
+    dates, no generic advice, under 130 words. Without a model, code lists
+    the same items as numbered actions.
+  - dira_dev check: dated, concrete actions, no generic advice.
+  - test/focus.test.js. npm test 57/57; golden fixture 12/12 + reset
+    gate; live readonly 12/12.
+  - Test hygiene: an earlier npm test run had hung for 18 h and orphaned
+    Prisma engines held 50 dira_dev connections (half of the shared
+    server's 100); killed (only PPID-1 dev engines), now 6.
+  - Real dates from Phesto's examples taken out of src, tests and this
+    file (contamination test caught one); the 973dc34 message reworded.
 - 2026-11-18: real-use 3/4, confirmed people linked by name, no model.
   - services/peopleLinks.js: confirmed = person record (not self, not
     archived/merged) with a confirmed entity–entity relationship (the
@@ -32,7 +53,7 @@ plan. One item per commit, family golden test before each commit.
     property; answer path untouched) (logs/golden-links-*.log).
 - 2026-11-18 `973dc34`: real-use 2/4, save confirmations show key fields.
   - services/savedSummary.js reads the stored event back: "Saved: <title>,
-    10 Dec 2026 → 17 Jan 2027, with A and B, 1,200 EUR." People = names +
+    22 Dec 2026 → 5 Jan 2027, with A and B, 1,200 EUR." People = names +
     linked person records (projects/vehicles left out). Used by home
     confirm, the follow-up attach ("Added to <title> (…). Now: …"), the
     preview line ("This looks like …. Save it?") and /queue/:id/confirm
@@ -43,7 +64,7 @@ plan. One item per commit, family golden test before each commit.
   - snapYearless (code): text without any year → start = occurrence
     nearest today, end = first on/after start. Real model before: "3
     November" → 2023, "4 March" appointment → past; after: all 5 checks
-    right (trip 10 Dec → 17 Jan, roof 3 Nov 2026, dentist 4 Mar 2027,
+    right (a Dec→Jan trip, a November payment, a March appointment,
     visit 2–5 Oct 2026, a stated 2019 kept).
   - npm test 49/49; golden fixture 12/12 + reset gate; live 11/12
     (`properties` flake) then 12/12 (logs/golden-summary-*.log).

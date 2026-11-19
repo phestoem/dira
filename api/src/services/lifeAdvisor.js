@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import { prisma } from "../prisma.js";
 import { flagOn } from "./flags.js";
+import { focusContext, focusCount, focusFallback, focusPrompt, isFocusQuestion } from "./focus.js";
 import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 import { isNoiseReply } from "./intentRouter.js";
@@ -121,6 +122,7 @@ export async function chat(messages, userId) {
     const answered = await answerPeople(userId, question);
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
   }
+  if (isFocusQuestion(latest)) return answerFocus(userId, history, latest);
   const context = await loadContext(userId);
   const graph = await graphContext(userId, latest);
   context.graphLines = graph.lines;
@@ -216,6 +218,22 @@ export async function detectSignificantFacts(userMessage, userId) {
     .slice(0, 3);
   console.log("[advisor] facts", userId, facts.length);
   return facts;
+}
+
+// "What should I focus on?": dated records only, one model call with a compact context; code lists them without one.
+async function answerFocus(userId, history, latest) {
+  const context = await focusContext(userId);
+  // The last 4 turns (the question is the last one), never the full history.
+  const messages = history.slice(-4);
+  let reply;
+  try {
+    reply = await completeChat(messages, focusPrompt(context), { temperature: 0.3 });
+  } catch (err) {
+    if (!err.modelUnavailable) throw err;
+    reply = focusFallback(context, modelErrorMessage(err.modelKind));
+  }
+  console.log("[advisor] focus", context.upcoming.length, "upcoming", context.ongoing.length, "ongoing", context.due.length, "due", context.recent.length, "recent", context.waiting, "waiting");
+  return { reply, contextUsed: { eventsCount: focusCount(context), visionsCount: context.visions.length, entitiesCount: 0 } };
 }
 
 export async function suggest(userId) {

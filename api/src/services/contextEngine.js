@@ -81,9 +81,9 @@ Rules:
 - People are proper nouns that look like names
 - occurredAt is the date the event happened, never the date the file was read
 - Use YYYY-MM-DD only when the document states that date. If only a month or year is clear, or the document is a profile, return null
-- Dates written without a year ("10 Dec", "3 November") are real dates: give them as YYYY-MM-DD, choosing the year
+- Dates written without a year ("22 Dec", "3 November") are real dates: give them as YYYY-MM-DD, choosing the year
   from today's date (below): the next such date for plans, the most recent one for things that already happened
-- Something that spans days ("10 Dec to 17 Jan", "from Monday until Friday"): occurredAt is the first day, endDate the
+- Something that spans days ("22 Dec to 5 Jan", "from Monday until Friday"): occurredAt is the first day, endDate the
   last day
 - endDate only when an end is stated, and never before occurredAt
 - Keep needsClarification null if you understand enough
@@ -458,7 +458,7 @@ function todayIso() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: process.env.DIRA_TIME_ZONE || "Europe/Helsinki", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
 }
 
-// When the text names no year at all ("10 Dec", "4 March"), the model's year is a guess: the start becomes the
+// When the text names no year at all ("22 Dec", "4 March"), the model's year is a guess: the start becomes the
 // occurrence of that day nearest today, the end the first occurrence on or after the start. Text with a year is
 // left as the model read it.
 export function snapYearless(understood, rawText, today = todayIso()) {

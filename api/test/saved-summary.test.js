@@ -7,8 +7,8 @@ import { amountText, dateRange, joinNames, summaryLine } from "../src/services/s
 
 test("summaryLine: title, date range, people and amount, leaving out what is missing", () => {
   assert.equal(
-    summaryLine({ title: "Trip to Lakeview", start: "2026-12-10", end: "2027-01-17", people: ["Bo Linden"], financials: { amount: 1200, currency: "EUR" } }),
-    "Trip to Lakeview, 10 Dec 2026 → 17 Jan 2027, with Bo Linden, 1,200 EUR",
+    summaryLine({ title: "Trip to Lakeview", start: "2026-12-22", end: "2027-01-05", people: ["Bo Linden"], financials: { amount: 1200, currency: "EUR" } }),
+    "Trip to Lakeview, 22 Dec 2026 → 5 Jan 2027, with Bo Linden, 1,200 EUR",
   );
   assert.equal(summaryLine({ title: "Roof repair", start: new Date("2027-03-02T00:00:00Z") }), "Roof repair, 2 Mar 2027");
   assert.equal(summaryLine({ title: "Call the bank" }), "Call the bank");
@@ -40,7 +40,7 @@ test("dates without a year snap to the occurrence nearest today; a stated year i
   };
   assert.deepEqual(snap("2026-03-04", null), ["2027-03-04", null], "4 March: next March is nearer than last");
   assert.deepEqual(snap("2023-11-03", null), ["2026-11-03", null], "3 November: two weeks ago");
-  assert.deepEqual(snap("2026-12-10", "2026-01-17"), ["2026-12-10", "2027-01-17"], "the end follows the start into the next year");
+  assert.deepEqual(snap("2026-12-22", "2026-01-05"), ["2026-12-22", "2027-01-05"], "the end follows the start into the next year");
   assert.deepEqual(snap("2026-10-02", "2026-10-05"), ["2026-10-02", "2026-10-05"]);
   assert.deepEqual(snap("2023-11-03", null, "Paid on 3 November 2023"), ["2023-11-03", null], "a stated year is kept");
 });
