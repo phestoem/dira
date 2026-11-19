@@ -18,8 +18,14 @@ plan. One item per commit, family golden test before each commit.
   code) to prod. main fast-forwarded 7a26f50..57429be, pushed; prod
   merged it as 0f0532d. Backup first (dira_20261119_215049.dump, 600);
   no migration; both services active; /health ok; prod .env still 600.
-  Prod golden readonly 12/12, no rows changed
-  (logs/deploy-20261119d.log, logs/golden-prod-readonly-20261119f.log).
+  Prod golden readonly: first run 11/12, `sisters` flagged "readonly
+  violated: updated event" (answer itself right). The write was a PATCH
+  /events/<id> from the web app at 21:52:09, after a GET of that event at
+  21:51:40 (Phesto editing during the run); the harness only calls
+  /home/input and /home/confirm. Rerun 12/12, no rows changed
+  (logs/deploy-20261119d.log, logs/golden-prod-readonly-20261119f.log
+  and -g.log). Commit 3ccdd94 said 12/12 before the first result was
+  read; corrected here.
 - 2026-11-19 21:40: prod JWT rotated by Phesto (ops/rotate-prod-jwt.md);
   verified read-only, no secret printed: JWT_SECRET once in prod .env,
   64 hex chars; prod .env 600 qusaz:qusaz (= dira-api User=qusaz), old
