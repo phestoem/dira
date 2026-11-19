@@ -14,6 +14,22 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-19: month-precision dates (needed before the prod fix of the
+  two invented "15 Dec" events).
+  - Migration 20261119230000_event_date_precision: Event.datePrecision
+    (null = the day, "month" = only the month; occurredAt is its 1st).
+    Applied to dira_dev; prod gets it with the next deploy.
+  - Intake: the prompt asks for YYYY-MM when only the month is clear and
+    never an invented day; normalizeUnderstood keeps it as month; yearless
+    months snap to the nearest; kept as month at confirm unless a day is
+    picked.
+  - Shown without a day ("Dec 2026") in saved/preview lines, focus,
+    timeline, the properties list, the model's event context and the web
+    events/library pages; days-left says "no day recorded" instead of
+    counting to an invented day; a month-only date this month still counts
+    as coming up.
+  - test/date-precision.test.js. npm test 79/79; golden fixture 14/14 +
+    reset gate; live readonly 14/14 (logs/golden-precision-*.log).
 - 2026-11-19: real-use 6, timeline and progress questions.
   - services/timeline.js: "days until", "on track", "how is … going",
     "status of", "where am I with", "ready for". Subjects = names in the

@@ -269,6 +269,8 @@ export type LifeEvent = {
   places: Array<{ name?: string; entityId?: string; role?: string }>;
   notes: string | null;
   occurredAt?: string | null;
+  // "month": only the month is known; show no day.
+  datePrecision?: "month" | null;
   whenLabel?: "Date" | "Added";
   displayDate?: string;
   fullText?: string | null;

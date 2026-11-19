@@ -182,7 +182,7 @@ function EventCard({ event }: { event: LifeEvent }) {
         <span className="rounded-full border border-[#2A2A28] px-2 py-0.5 uppercase tracking-wide">{event.eventType.replaceAll("_", " ")}</span>
         <span className="rounded-full border border-[#2A2A28] px-2 py-0.5">{SPACE_LABEL[event.space] ?? event.space}</span>
         <span>
-          {event.occurredAt ? "Date" : "Added"}: {formatWhen(event.occurredAt || event.createdAt)}
+          {event.occurredAt ? "Date" : "Added"}: {formatWhen(event.occurredAt || event.createdAt, event.occurredAt ? event.datePrecision : null)}
         </span>
       </div>
     </Link>
@@ -265,10 +265,11 @@ function timeOf(value?: string | null) {
   return Number.isNaN(date) ? 0 : date;
 }
 
-function formatWhen(value?: string | null) {
+function formatWhen(value?: string | null, precision?: string | null) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
+  if (precision === "month") return date.toLocaleDateString(undefined, { month: "short", year: "numeric", timeZone: "UTC" });
   return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }
 

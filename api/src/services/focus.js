@@ -1,5 +1,5 @@
 import { prisma } from "../prisma.js";
-import { dateRange, summaryLine } from "./savedSummary.js";
+import { dateRange, formatDay, summaryLine } from "./savedSummary.js";
 
 // "What should I focus on?" is answered from dates: what is coming up, what is under way, what is overdue and what
 // is waiting for confirmation, built by code into a short context for one model call. Without a model the same
@@ -30,12 +30,21 @@ export function relativeDay(value, today) {
   return days > 0 ? `in ${days} days` : `${-days} days ago`;
 }
 
+// A date known only to the month ("Dec 2026") has no day to count down to.
+export function whenText(value, today, precision = null) {
+  if (precision !== "month") return relativeDay(value, today);
+  const date = new Date(value);
+  const month = (d) => d.getUTCFullYear() * 12 + d.getUTCMonth();
+  if (month(date) === month(today)) return "this month (no day recorded)";
+  return month(date) > month(today) ? `in ${formatDay(date, "month")} (no day recorded)` : `${formatDay(date, "month")} (no day recorded)`;
+}
+
 function peopleNames(event) {
   return (Array.isArray(event.people) ? event.people : []).map((person) => person?.name).filter(Boolean);
 }
 
 function item(event, when) {
-  const fields = summaryLine({ title: event.title, start: event.occurredAt, end: event.endsAt, people: peopleNames(event), financials: event.financials });
+  const fields = summaryLine({ title: event.title, start: event.occurredAt, end: event.endsAt, people: peopleNames(event), financials: event.financials, precision: event.datePrecision });
   const meaning = event.understoodMeaning ? `. ${String(event.understoodMeaning).slice(0, 160)}` : "";
   return { event, when, text: `${fields} — ${when}${meaning}` };
 }
@@ -44,9 +53,11 @@ export async function focusContext(userId, now = new Date()) {
   const today = new Date(dayStart(now));
   const ahead = new Date(today.getTime() + AHEAD_DAYS * DAY_MS);
   const recent = new Date(today.getTime() - RECENT_DAYS * DAY_MS);
-  const select = { id: true, title: true, occurredAt: true, endsAt: true, dueAt: true, understoodMeaning: true, people: true, financials: true, status: true };
+  const select = { id: true, title: true, occurredAt: true, datePrecision: true, endsAt: true, dueAt: true, understoodMeaning: true, people: true, financials: true, status: true };
+  const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
   const [upcoming, ongoing, due, latest, waiting, visions] = await Promise.all([
-    prisma.event.findMany({ where: { userId, status: { in: OPEN }, occurredAt: { gte: today, lte: ahead } }, orderBy: { occurredAt: "asc" }, take: 12, select }),
+    // A month-only date in this month still counts as coming up.
+    prisma.event.findMany({ where: { userId, status: { in: OPEN }, OR: [{ occurredAt: { gte: today, lte: ahead } }, { datePrecision: "month", occurredAt: { gte: monthStart, lt: today } }] }, orderBy: { occurredAt: "asc" }, take: 12, select }),
     prisma.event.findMany({ where: { userId, status: { in: OPEN }, occurredAt: { lt: today }, endsAt: { gte: today } }, orderBy: { endsAt: "asc" }, take: 6, select }),
     prisma.event.findMany({ where: { userId, status: { in: OPEN }, completedAt: null, dueAt: { not: null, lte: ahead } }, orderBy: { dueAt: "asc" }, take: 8, select }),
     prisma.event.findMany({ where: { userId, status: { in: OPEN }, occurredAt: { gte: recent, lt: today } }, orderBy: { occurredAt: "desc" }, take: 8, select }),
@@ -58,8 +69,8 @@ export async function focusContext(userId, now = new Date()) {
   const once = (events) => events.filter((event) => !shown.has(event.id) && shown.add(event.id));
   const dueItems = once(due).map((event) => item(event, dayStart(event.dueAt) < today.getTime() ? `overdue, was due ${relativeDay(event.dueAt, today)}` : `due ${relativeDay(event.dueAt, today)}`));
   const ongoingItems = once(ongoing).map((event) => item(event, `under way, ends ${relativeDay(event.endsAt, today)}`));
-  const upcomingItems = once(upcoming).map((event) => item(event, `starts ${relativeDay(event.occurredAt, today)}`));
-  const recentItems = once(latest).map((event) => item(event, relativeDay(event.occurredAt, today)));
+  const upcomingItems = once(upcoming).map((event) => item(event, `starts ${whenText(event.occurredAt, today, event.datePrecision)}`));
+  const recentItems = once(latest).map((event) => item(event, whenText(event.occurredAt, today, event.datePrecision)));
   return {
     today,
     upcoming: upcomingItems,
@@ -116,7 +127,7 @@ export function focusFallback(context, reason) {
   const actions = [
     ...context.due.map((entry) => `${entry.event.title}: ${entry.when}.`),
     ...context.ongoing.map((entry) => `${entry.event.title}: ${entry.when}.`),
-    ...context.upcoming.map((entry) => `Get ready for ${entry.event.title}: ${dateRange(entry.event.occurredAt, entry.event.endsAt)} (${relativeDay(entry.event.occurredAt, context.today)}).`),
+    ...context.upcoming.map((entry) => `Get ready for ${entry.event.title}: ${dateRange(entry.event.occurredAt, entry.event.endsAt, entry.event.datePrecision)} (${whenText(entry.event.occurredAt, context.today, entry.event.datePrecision)}).`),
   ];
   if (context.waiting) actions.push(`Confirm the ${context.waiting} saved input${context.waiting === 1 ? "" : "s"} waiting in the queue.`);
   const head = reason ? `${reason} From your records:` : "From your records:";

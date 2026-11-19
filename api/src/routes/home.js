@@ -925,6 +925,7 @@ function publicUnderstanding(result) {
       project: result.understood.project,
       location: result.understood.location,
       occurredAt: result.understood.occurredAt || null,
+      datePrecision: result.understood.datePrecision || null,
       endDate: result.understood.endDate || null,
       people: result.understood.people,
       financial: result.understood.financial,
@@ -971,6 +972,7 @@ function intakeLine(understood) {
     title,
     start: fields.occurredAt,
     end: fields.endDate,
+    precision: fields.datePrecision,
     people: fields.people || [],
     financials: financial?.hasFinancials ? { amount: financial.totalAmount, currency: financial.currency } : null,
   })}. Save it?`;

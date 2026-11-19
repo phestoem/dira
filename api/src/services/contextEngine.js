@@ -80,7 +80,8 @@ Rules:
 - If financial data is in TSH, say TSH
 - People are proper nouns that look like names
 - occurredAt is the date the event happened, never the date the file was read
-- Use YYYY-MM-DD only when the document states that date. If only a month or year is clear, or the document is a profile, return null
+- Use YYYY-MM-DD only when the document states that day. If only the month is clear ("in December", "December 2026"), give
+  YYYY-MM and never invent a day. If only a year is clear, or the document is a profile, return null
 - Dates written without a year ("22 Dec", "3 November") are real dates: give them as YYYY-MM-DD, choosing the year
   from today's date (below): the next such date for plans, the most recent one for things that already happened
 - Something that spans days ("22 Dec to 5 Jan", "from Monday until Friday"): occurredAt is the first day, endDate the
@@ -316,6 +317,9 @@ export async function createEventFromUnderstanding(userId, understoodInput, enti
             ]
           : [],
         occurredAt: document.occurredAt !== undefined ? document.occurredAt : parseTimeframe(understood.occurredAt) || parseTimeframe(understood.timeframe),
+        // "month" when only the month was given and the confirmed date is still that month's first day; a day the
+        // user picked at confirm is a day.
+        datePrecision: monthPrecision(understood, document.occurredAt),
         endsAt: understood.endDate ? new Date(`${understood.endDate}T00:00:00.000Z`) : null,
         notes: understood.timeframe || null,
         fullText: textOrNull(document.fullText),
@@ -463,6 +467,14 @@ function todayIso() {
 // left as the model read it.
 export function snapYearless(understood, rawText, today = todayIso()) {
   if (!understood || /\b(19|20)\d{2}\b/.test(String(rawText || ""))) return understood;
+  if (understood.datePrecision === "month" && understood.occurredAt) {
+    // "in December": the month nearest today, never a day.
+    const year = Number(today.slice(0, 4));
+    const month = understood.occurredAt.slice(5, 7);
+    const candidates = [year - 1, year, year + 1].map((y) => `${y}-${month}-01`);
+    const nearest = candidates.sort((a, b) => Math.abs(Date.parse(a) - Date.parse(today)) - Math.abs(Date.parse(b) - Date.parse(today)))[0];
+    return { ...understood, occurredAt: nearest, endDate: endAfter(understood.endDate, nearest) };
+  }
   const year = Number(today.slice(0, 4));
   const at = (y, monthDay) => {
     const value = `${y}-${monthDay}`;
@@ -525,7 +537,7 @@ function altimetrixTypeFor(eventType) {
   return "pattern";
 }
 
-function normalizeUnderstood(value) {
+export function normalizeUnderstood(value) {
   const source = value && typeof value === "object" ? value : {};
   const financial = source.financial && typeof source.financial === "object" ? source.financial : {};
   const contentType = CONTENT_TYPES.has(source.contentType) ? source.contentType : "other";
@@ -561,7 +573,11 @@ function normalizeUnderstood(value) {
       items,
     },
     timeframe: textOrNull(source.timeframe),
-    occurredAt: isoDay(source.occurredAt),
+    occurredAt: isoDay(source.occurredAt) || isoMonthStart(source.occurredAt),
+    // "2026-12" from the model, or an understanding already marked month (stored as the month's first day).
+    datePrecision: (!isoDay(source.occurredAt) && isoMonthStart(source.occurredAt)) || (source.datePrecision === "month" && /^\d{4}-\d{2}-01$/.test(String(source.occurredAt || "")))
+      ? "month"
+      : null,
     endDate: endAfter(isoDay(source.endDate), isoDay(source.occurredAt)),
     summary: textOr(source.summary, ""),
     confidence: clampConfidence(source.confidence),
@@ -634,6 +650,21 @@ function normalizeCurrency(value) {
   const code = value.trim().toUpperCase();
   if (code === "TZS" || code === "TSH") return "TSH";
   return code;
+}
+
+function monthPrecision(understood, confirmed) {
+  if (understood?.datePrecision !== "month" || !understood.occurredAt) return null;
+  if (confirmed === undefined) return "month";
+  const day = confirmed instanceof Date && !Number.isNaN(confirmed.getTime()) ? confirmed.toISOString().slice(0, 10) : null;
+  return day === understood.occurredAt ? "month" : null;
+}
+
+// "2026-12" (a month, no day) → "2026-12-01".
+function isoMonthStart(value) {
+  if (typeof value !== "string") return null;
+  const match = value.trim().match(/^(\d{4})-(\d{2})$/);
+  if (!match || Number(match[2]) < 1 || Number(match[2]) > 12) return null;
+  return `${match[1]}-${match[2]}-01`;
 }
 
 function isoDay(value) {

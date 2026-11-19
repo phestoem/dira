@@ -1,4 +1,5 @@
 import { prisma } from "../prisma.js";
+import { formatDay } from "./savedSummary.js";
 
 // "Which properties do I own?" is answered by code from the saved records, not by a model list (a model list
 // left places out). Each holding is found in the text of saved events: a plot number, "land/plot/house in
@@ -64,8 +65,6 @@ export function holdingMentions(text) {
   return found.filter((item) => !(item.key.startsWith("place:") && plotPlaces.has(item.place.toLowerCase()) && item.kind === "plot"));
 }
 
-const DAY = new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
-
 export function holdingsFromEvents(events) {
   const holdings = new Map();
   for (const event of events) {
@@ -107,7 +106,7 @@ export async function loadHoldings(userId) {
   const events = await prisma.event.findMany({
     where: { userId, status: { not: "archived" } },
     orderBy: [{ occurredAt: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
-    select: { id: true, title: true, occurredAt: true, understoodMeaning: true, rawInput: true },
+    select: { id: true, title: true, occurredAt: true, datePrecision: true, understoodMeaning: true, rawInput: true },
     take: 500,
   });
   return holdingsFromEvents(events);
@@ -121,7 +120,7 @@ export function holdingsAnswer(holdings, question = "") {
   const sorted = holdings.slice().sort((a, b) => order[a.kind] - order[b.kind] || a.label.localeCompare(b.label));
   const lines = sorted.map((holding) => {
     const label = holding.kind === "plot" || holding.kind === "place" ? holding.label : `${KIND_LABEL[holding.kind]} in ${holding.label}`;
-    const when = holding.first?.occurredAt ? `, ${DAY.format(new Date(holding.first.occurredAt))}` : "";
+    const when = holding.first?.occurredAt ? `, ${formatDay(holding.first.occurredAt, holding.first.datePrecision)}` : "";
     const more = holding.count > 1 ? ` (+${holding.count - 1} more record${holding.count === 2 ? "" : "s"})` : "";
     return `- ${label[0].toUpperCase()}${label.slice(1)} — ${holding.first?.title || "recorded"}${when}${more}`;
   });

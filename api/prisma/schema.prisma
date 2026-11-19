@@ -116,6 +116,8 @@ model Event {
   urgency             Float     @default(0.5)
   emotionalWeight     Float     @default(0.5)
   occurredAt          DateTime?
+  // null = occurredAt is the day; "month" = only the month is known (occurredAt is its first day)
+  datePrecision       String?
   // last day of something that spans days (a trip, a stay); null for a single day
   endsAt              DateTime?
   dueAt               DateTime?

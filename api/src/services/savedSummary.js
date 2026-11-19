@@ -3,15 +3,17 @@ import { prisma } from "../prisma.js";
 // The key fields of a saved event in one line, read back from what was stored: title, dates, people, amount.
 // "Trip to Lakeview, 10 Mar 2027 → 17 Mar 2027, with Bo Linden and Cy Marsh, 1,200 EUR"
 
-export function formatDay(value) {
+// precision "month": only the month is known, so no day is shown ("Dec 2026").
+export function formatDay(value, precision = null) {
   if (!value) return "";
   const date = value instanceof Date ? value : new Date(/^\d{4}-\d{2}-\d{2}$/.test(value) ? `${value}T00:00:00.000Z` : value);
   if (Number.isNaN(date.getTime())) return "";
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(date);
+  const parts = precision === "month" ? { month: "short", year: "numeric" } : { day: "numeric", month: "short", year: "numeric" };
+  return new Intl.DateTimeFormat("en-GB", { ...parts, timeZone: "UTC" }).format(date);
 }
 
-export function dateRange(start, end) {
-  const from = formatDay(start);
+export function dateRange(start, end, precision = null) {
+  const from = formatDay(start, precision);
   const to = formatDay(end);
   if (from && to && from !== to) return `${from} → ${to}`;
   return from || (to ? `until ${to}` : "");
@@ -30,9 +32,9 @@ export function amountText(financials) {
 }
 
 // Plain fields, no database: also used for the preview before saving.
-export function summaryLine({ title, start, end, people = [], financials }) {
+export function summaryLine({ title, start, end, people = [], financials, precision = null }) {
   const names = joinNames(people);
-  return [title || "Untitled", dateRange(start, end), names ? `with ${names}` : "", amountText(financials)].filter(Boolean).join(", ");
+  return [title || "Untitled", dateRange(start, end, precision), names ? `with ${names}` : "", amountText(financials)].filter(Boolean).join(", ");
 }
 
 // People on an event are { name } or { entityId }; linked person records are shown by their record name (a linked
@@ -57,5 +59,6 @@ export async function savedSummary(userId, event) {
     end: event.endsAt,
     people: await eventPeopleNames(userId, event),
     financials: event.financials,
+    precision: event.datePrecision,
   });
 }

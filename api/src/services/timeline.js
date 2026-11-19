@@ -1,6 +1,6 @@
 import { prisma } from "../prisma.js";
-import { relativeDay } from "./focus.js";
-import { amountText } from "./savedSummary.js";
+import { whenText } from "./focus.js";
+import { amountText, formatDay } from "./savedSummary.js";
 
 // Timeline and progress questions ("how many days until my trip?", "how is the renovation going?") are answered by
 // code from the records: the days until the next recorded date, what is recorded for each thing asked about, and
@@ -60,9 +60,6 @@ function kindFrom(topics, records) {
   return null;
 }
 
-function dateText(value) {
-  return new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" }).format(new Date(value));
-}
 
 function missing(kind, records, today) {
   const text = records.map(textOf).join(" ");
@@ -107,8 +104,11 @@ export function timelineSubjects(question, events, now = new Date()) {
   }
   return groups.map((group) => {
     const kind = kindFrom(topics, group.records);
+    const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
     const dated = group.records
-      .flatMap((event) => [["starts", event.occurredAt], ["ends", event.endsAt], ["due", event.dueAt]].filter(([, at]) => at && new Date(at) >= today).map(([what, at]) => ({ event, what, at: new Date(at) })))
+      .flatMap((event) => [["starts", event.occurredAt, event.datePrecision], ["ends", event.endsAt, null], ["due", event.dueAt, null]]
+        .filter(([, at, precision]) => at && new Date(at) >= (precision === "month" ? monthStart : today))
+        .map(([what, at, precision]) => ({ event, what, at: new Date(at), precision })))
       .sort((a, b) => a.at - b.at);
     const progress = group.records.filter((event) => PROGRESS.test(textOf(event)) && (!event.occurredAt || new Date(event.occurredAt) < today));
     const label = names.length && topics.length && groups.length === 1 ? `${group.name} ${topics.join(" ")}` : group.name;
@@ -117,7 +117,7 @@ export function timelineSubjects(question, events, now = new Date()) {
 }
 
 function recordLine(event) {
-  const when = event.occurredAt ? dateText(event.occurredAt) : "no date";
+  const when = event.occurredAt ? formatDay(event.occurredAt, event.datePrecision) : "no date";
   const money = amountText(event.financials);
   return `${event.title} (${when}${money ? `, ${money}` : ""})`;
 }
@@ -128,7 +128,11 @@ export function timelineAnswer(question, subjects) {
     const title = subject.name.replace(/\b\p{L}/gu, (letter) => letter.toUpperCase());
     const lines = [`${title}:`];
     if (subject.next) {
-      lines.push(`- Next date: ${subject.next.event.title} ${subject.next.what} ${dateText(subject.next.at)}, ${relativeDay(subject.next.at, subject.today)}.`);
+      const next = subject.next;
+      const when = next.precision === "month"
+        ? (whenText(next.at, subject.today, "month").startsWith("this month") ? `${formatDay(next.at, "month")}, this month (no day recorded)` : `${formatDay(next.at, "month")} (no day recorded)`)
+        : `${formatDay(next.at)}, ${whenText(next.at, subject.today)}`;
+      lines.push(`- Next date: ${next.event.title} ${next.what} ${when}.`);
     } else {
       lines.push("- No upcoming date recorded.");
     }
@@ -144,7 +148,7 @@ export function timelineAnswer(question, subjects) {
 export async function answerTimeline(userId, question) {
   const events = await prisma.event.findMany({
     where: { userId, status: { not: "archived" } },
-    select: { id: true, title: true, understoodMeaning: true, rawInput: true, occurredAt: true, endsAt: true, dueAt: true, financials: true },
+    select: { id: true, title: true, understoodMeaning: true, rawInput: true, occurredAt: true, datePrecision: true, endsAt: true, dueAt: true, financials: true },
     orderBy: [{ occurredAt: { sort: "asc", nulls: "last" } }, { createdAt: "asc" }],
     take: 500,
   });

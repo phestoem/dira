@@ -176,7 +176,7 @@ export default function EventsPage() {
                       </Link>
                     ) : null}
                     <span>
-                      {event.occurredAt ? "Date" : "Added"}: {formatWhen(event.occurredAt || event.createdAt)}
+                      {event.occurredAt ? "Date" : "Added"}: {formatWhen(event.occurredAt || event.createdAt, event.occurredAt ? event.datePrecision : null)}
                     </span>
                   </div>
                 </Link>
@@ -205,8 +205,9 @@ function formatAmount(amount: number, currency: string | null) {
   return currency ? `${formatted} ${currency}` : formatted;
 }
 
-function formatWhen(value: string) {
+function formatWhen(value: string, precision?: string | null) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "";
+  if (precision === "month") return date.toLocaleDateString(undefined, { month: "short", year: "numeric", timeZone: "UTC" });
   return date.toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
 }

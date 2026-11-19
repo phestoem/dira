@@ -536,7 +536,7 @@ function buildEventContext(event) {
   const fullText = typeof event.fullText === "string" ? event.fullText.replace(/\s+/g, " ").trim() : "";
 
   parts.push(`Title: ${event.title}`);
-  parts.push(`Date: ${formatWhen(event.occurredAt) || "unknown"}`);
+  parts.push(`Date: ${formatWhen(event.occurredAt, event.datePrecision) || "unknown"}`);
   parts.push(`Type: ${event.eventType}`);
   parts.push(`Space: ${event.space}`);
   if (summary) parts.push(`Summary: ${summary.slice(0, 300)}`);
@@ -768,10 +768,11 @@ function firstVisionLocation(visions) {
   return null;
 }
 
-function formatWhen(value) {
+function formatWhen(value, precision = null) {
   if (!value) return null;
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return null;
+  if (precision === "month") return `${date.toLocaleDateString("en-GB", { month: "long", year: "numeric", timeZone: "UTC" })} (day not recorded)`;
   return date.toLocaleDateString("en-GB", { day: "numeric", month: "long", year: "numeric" });
 }
 
