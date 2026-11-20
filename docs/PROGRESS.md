@@ -14,6 +14,14 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-20: singular/plural in counts (real-use 3 of 3).
+  - peopleGrounding.countOf: "1 son", "2 sons", "1 child"; used by the
+    children, sibling and chain counts ("Your mother has 1 son"), list
+    heads ("Your daughter: …" for one) and the properties head.
+  - Golden: parents-sons-count (21 cases).
+  - test/gender-filters.test.js (counts). npm test 96/96; golden fixture
+    21/21 + reset gate; live readonly 21/21 (logs/golden-counts-*.log).
+    Not deployed: shown to Phesto first.
 - 2026-11-20: gender filters on every path (real-use 2 of 3).
   - "how many sons do I have?" listed every child: the children answer
     ignored sons/daughters. Now childrenWanted/childrenOfKind filter by

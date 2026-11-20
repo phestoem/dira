@@ -107,6 +107,16 @@ export const CASES = [
     ],
   },
   {
+    // A count of one is singular: "1 son", never "1 sons".
+    id: "parents-sons-count",
+    turns: ["how many sons do my parents have?"],
+    check: ({ answer }) => [
+      ...(/\b(1|one) son\b/i.test(answer) ? [] : ['does not say "1 son"']),
+      ...(/\b1 sons\b/i.test(answer) ? ['says "1 sons"'] : []),
+      ...lacks("Jeni", "Leah", "Neema", "Zenah", "Patrick", "Presley", "Powell")(answer),
+    ],
+  },
+  {
     id: "parents-children-count",
     turns: ["how many children do my parents have?"],
     check: ({ answer }) => [

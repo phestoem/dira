@@ -124,6 +124,6 @@ export function holdingsAnswer(holdings, question = "") {
     const more = holding.count > 1 ? ` (+${holding.count - 1} more record${holding.count === 2 ? "" : "s"})` : "";
     return `- ${label[0].toUpperCase()}${label.slice(1)} — ${holding.first?.title || "recorded"}${when}${more}`;
   });
-  const head = /\bhow many\b/i.test(question) ? `You have ${holdings.length} properties on record:` : `Your properties on record (${holdings.length}):`;
+  const head = /\bhow many\b/i.test(question) ? `You have ${holdings.length === 1 ? "1 property" : `${holdings.length} properties`} on record:` : `Your ${holdings.length === 1 ? "property" : "properties"} on record (${holdings.length}):`;
   return `${head}\n${lines.join("\n")}`;
 }

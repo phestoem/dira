@@ -45,7 +45,7 @@ test("order follows the question; father and mother asked separately", () => {
   const lines = answer.split("\n");
   assert.match(lines[0], /^Your children: Einar, Kari\.$/);
   assert.match(lines[1], /^Hekla Bjorg Olafsdottir — your mother\.$/);
-  assert.match(lines[2], /^Your sisters: Sigrun Gunnar Arason\.$/);
+  assert.match(lines[2], /^Your sister: Sigrun Gunnar Arason\.$/);
 });
 
 test("birth questions give each person's recorded date or say not recorded", () => {

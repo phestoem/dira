@@ -28,7 +28,7 @@ const context = buildPeopleContext({ self, people, edges, events: [] });
 
 test("own children by gender; unknown gender named apart", () => {
   assert.equal(answerPeopleQuestion("how many sons do I have?", context), "You have 2 sons: Einar, Kari.\nNot recorded as son or daughter: Brynja.");
-  assert.equal(answerPeopleQuestion("list my daughters", context), "Your daughters: Ylfa.\nNot recorded as son or daughter: Brynja.");
+  assert.equal(answerPeopleQuestion("list my daughters", context), "Your daughter: Ylfa.\nNot recorded as son or daughter: Brynja.");
   assert.equal(answerPeopleQuestion("how many kids do I have?", context), "You have 4 children: Ylfa, Einar, Kari, Brynja.");
 });
 
@@ -42,4 +42,18 @@ test("pronoun follow-ups keep the filter", () => {
   const resolved = resolvePronouns("how many daughters does she have?", "who is my mother?");
   assert.equal(resolved.question, "how many daughters does my mother have?");
   assert.equal(answerPeopleQuestion(resolved.question, context), "Your mother has 2 daughters: Sigrun Arason, Thora Arason.");
+});
+
+test("counts agree in number: 1 son, 2 sons", async () => {
+  const { countOf } = await import("../src/services/graph/peopleGrounding.js");
+  assert.equal(countOf(1, "sons"), "1 son");
+  assert.equal(countOf(2, "sons"), "2 sons");
+  assert.equal(countOf(1, "children"), "1 child");
+  assert.equal(countOf(0, "daughters"), "0 daughters");
+  assert.equal(answerPeopleQuestion("how many sons does my mother have?", context), "Your mother has 1 son: Bjorn Arason (you).");
+  assert.equal(answerPeopleQuestion("how many daughters do I have?", context), "You have 1 daughter: Ylfa.\nNot recorded as son or daughter: Brynja.");
+  assert.equal(answerPeopleQuestion("list my daughters", context), "Your daughter: Ylfa.\nNot recorded as son or daughter: Brynja.");
+  assert.equal(answerPeopleQuestion("how many sisters do I have?", context), "You have 2 sisters: Sigrun Arason, Thora Arason.");
+  const one = buildPeopleContext({ self, people: [self, people.find((person) => person.id === "einar")], edges: [edge("c", "parent_of", "self", "einar")], events: [] });
+  assert.equal(answerPeopleQuestion("how many kids do I have?", one), "You have 1 child: Einar.");
 });

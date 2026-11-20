@@ -375,7 +375,8 @@ export function chainedPeopleAnswer(question, context) {
   const asked = label.at(-1);
   if (/\bhow many\b/i.test(question)) {
     const subject = whose.replace(/^your /, "your ").replace(/['’]s?$/, "");
-    return `${subject[0].toUpperCase()}${subject.slice(1)} have ${names.length} ${asked}: ${names.join(", ")}.`.replace(/ have (\d+) /, (all, n) => (subject.endsWith("s") ? ` have ${n} ` : ` has ${n} `));
+    const verb = /s['’]?$/.test(subject) && !/['’]s$/.test(subject) ? "have" : "has";
+    return `${subject[0].toUpperCase()}${subject.slice(1)} ${verb} ${countOf(names.length, asked)}: ${names.join(", ")}.`;
   }
   // A single person who is also your own relative says how ("— your mother").
   const note = nodes.length === 1 && nodes[0].id !== self.id ? relationToYou(nodes[0], context) : "";
@@ -388,6 +389,14 @@ function relationToYou(person, context) {
   const record = people.find((item) => item.id === person.id);
   if (!record || record.kind === "self") return "";
   return known ? ` — your ${known}` : "";
+}
+
+// "1 son", "2 sons", "1 child", "3 children".
+const SINGULAR = { children: "child", kids: "kid", sons: "son", daughters: "daughter", sisters: "sister", brothers: "brother", siblings: "sibling", parents: "parent", properties: "property", wives: "wife", husbands: "husband", spouses: "spouse" };
+export function countOf(n, plural) {
+  const word = String(plural || "").toLowerCase();
+  if (n !== 1) return `${n} ${plural}`;
+  return `1 ${SINGULAR[word] || word.replace(/s$/, "")}`;
 }
 
 export function answerPeopleQuestion(question, context) {
@@ -829,7 +838,7 @@ function siblingsFor(question, context) {
 function siblingAnswer(question, context) {
   const { want, people, fromEvents } = siblingsFor(question, context);
   if (!people.length) return `Your ${want.label} aren't recorded yet.`;
-  const count = /\bhow many\b/i.test(question) ? `You have ${people.length} ${want.label}: ` : `Your ${want.label}: `;
+  const count = /\bhow many\b/i.test(question) ? `You have ${countOf(people.length, want.label)}: ` : `Your ${people.length === 1 ? SINGULAR[want.label] || want.label : want.label}: `;
   const line = `${count}${people.map((person) => person.name).join(", ")}.`;
   return fromEvents ? `${line}\n${RECORD_LINE}` : line;
 }
@@ -873,7 +882,7 @@ function childrenAnswer(question, context) {
   const names = found.people.map((person) => person.name);
   const unknown = found.unknown.length ? `\nNot recorded as son or daughter: ${found.unknown.map((person) => person.name).join(", ")}.` : "";
   if (!names.length) return `No ${want.label} recorded.${unknown}`;
-  const count = /\bhow many\b/i.test(question) ? `You have ${names.length} ${want.label}: ` : `Your ${want.label}: `;
+  const count = /\bhow many\b/i.test(question) ? `You have ${countOf(names.length, want.label)}: ` : `Your ${names.length === 1 ? SINGULAR[want.label] || want.label : want.label}: `;
   const line = `${count}${names.join(", ")}.${unknown}`;
   return found.fromEvents.length ? `${line}\n${RECORD_LINE}` : line;
 }
