@@ -88,6 +88,15 @@ export const CASES = [
     ],
   },
   {
+    // A pronoun refers to the people of the previous answer: "they" = your parents, so you and your four sisters.
+    id: "parents-pronoun-count",
+    turns: ["who are my parents?", "how many children do they have?"],
+    check: ({ answer }) => [
+      ...(/\b(5|five) children\b/i.test(answer) ? [] : ["does not say 5 children"]),
+      ...lacks("Careen", "Patrick", "Presley", "Powell", "Prisha", "Zelda")(answer),
+    ],
+  },
+  {
     id: "parents-children-count",
     turns: ["how many children do my parents have?"],
     check: ({ answer }) => [

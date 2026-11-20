@@ -14,6 +14,17 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-20: pronoun follow-ups (real-use 1 of 3).
+  - peopleGrounding.resolvePronouns: they/them/their/he/him/his/she/her
+    refer to the people of the previous people question (a whole chain,
+    or its relation words), rewritten ("… do my parents have?") so the
+    usual answers apply. "they" after several groups, or a singular
+    pronoun after a plural group, asks who is meant. Questions that name
+    their own people, and follow-ups to non-people questions, are left
+    as they are. Used in lifeAdvisor.chat.
+  - Golden: parents-pronoun-count (19 cases).
+  - test/pronouns.test.js. npm test 92/92; golden fixture 19/19 + reset
+    gate; live readonly 19/19 (logs/golden-pronoun-*.log).
 - 2026-11-20: Phesto confirmed the parent-connection card on prod. Checked
   readonly through the prod API: the spouse's children list the four
   children, the excepted one left out; the statement again answers

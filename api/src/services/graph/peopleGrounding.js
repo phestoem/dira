@@ -159,6 +159,56 @@ export function resolvePeopleFollowUp(latest, prior) {
   return question;
 }
 
+// "list my parents" → "how many kids do they have?": a pronoun refers to the people of the previous people
+// question. Rewritten to "… do my parents have?" so the usual answers apply. { question } when resolved or when
+// there is nothing to resolve; { ask } when the pronoun could mean more than one group, or nobody named before.
+const PRONOUN = /\b(they|them|their|theirs|he|him|his|she|her|hers)\b/i;
+const PRONOUN_NUMBER = { they: "plural", them: "plural", their: "plural", theirs: "plural", he: "m", him: "m", his: "m", she: "f", her: "f", hers: "f" };
+const REFERENT_WORDS = [
+  ["parents", "plural"], ["children", "plural"], ["kids", "plural"], ["sons", "plural"], ["daughters", "plural"], ["sisters", "plural"], ["brothers", "plural"], ["siblings", "plural"],
+  ["father", "m"], ["dad", "m"], ["husband", "m"], ["brother", "m"], ["son", "m"],
+  ["mother", "f"], ["mum", "f"], ["mom", "f"], ["wife", "f"], ["sister", "f"], ["daughter", "f"],
+];
+
+export function resolvePronouns(latest, priorUser) {
+  const question = String(latest || "");
+  const pronoun = question.match(PRONOUN);
+  if (!pronoun) return { question };
+  // A question that names its own people ("my wife and her parents") needs nothing from before.
+  if (/\bmy\s+(?:parents?|children|kids|sons?|daughters?|sisters?|brothers?|siblings?|father|dad|mother|mum|mom|wife|husband|spouse)\b/i.test(question)) return { question };
+  const previous = String(priorUser || "");
+  if (!previous || !isPeopleQuestion(previous)) return { question };
+  const word = pronoun[1].toLowerCase();
+  const wanted = PRONOUN_NUMBER[word];
+  // The referent: a whole chain ("my parents' children") or the relation words of the previous question.
+  const chain = parseChain(previous);
+  let candidates;
+  if (chain) {
+    const last = chain.at(-1).word;
+    const phrase = previous.match(/\bmy\s+[^?.!,]*?\b(?:parents?|children|kids|sons?|daughters?|sisters?|brothers?|siblings?|father|dad|mother|mum|mom|wife|husband|spouse|partner)\b(?=[^']*$|[?.!\s]*$)/i)?.[0] || `my ${last}`;
+    candidates = [{ phrase, number: REFERENT_WORDS.find(([item]) => item === last)?.[1] || "plural" }];
+  } else {
+    candidates = REFERENT_WORDS
+      .map(([item, number]) => ({ item, number, at: previous.search(new RegExp(`\\b${item}\\b`, "i")) }))
+      .filter((entry) => entry.at >= 0)
+      .filter((entry, _, all) => !(entry.item === "sister" && all.some((other) => other.item === "sisters")) && !(entry.item === "brother" && all.some((other) => other.item === "brothers")) && !(entry.item === "son" && all.some((other) => other.item === "sons")) && !(entry.item === "daughter" && all.some((other) => other.item === "daughters")))
+      .sort((a, b) => a.at - b.at)
+      .map((entry) => ({ phrase: `my ${entry.item}`, number: entry.number }));
+  }
+  if (!candidates.length) return { ask: `Who do you mean by “${pronoun[1]}”?` };
+  const your = (entry) => entry.phrase.replace(/^my /, "your ");
+  // "they" after several groups could be any of them, or all together: ask.
+  const fits = wanted === "plural" ? (candidates.length === 1 ? candidates : []) : candidates.filter((entry) => entry.number === wanted);
+  if (fits.length !== 1) {
+    if (wanted !== "plural" && candidates.length === 1 && candidates[0].number === "plural") return { ask: `Which of ${your(candidates[0])} do you mean by “${pronoun[1]}”?` };
+    return { ask: `Who do you mean by “${pronoun[1]}”: ${candidates.map(your).join(" or ")}?` };
+  }
+  const phrase = fits[0].phrase;
+  const possessive = /s$/i.test(phrase) ? `${phrase}'` : `${phrase}'s`;
+  const rewritten = question.replace(new RegExp(`\\b(${Object.keys(PRONOUN_NUMBER).join("|")})\\b`, "gi"), (found) => (["their", "theirs", "his", "her", "hers"].includes(found.toLowerCase()) && !/^her$/i.test(found) ? possessive : found.toLowerCase() === "her" && /\bher\s+\p{L}/iu.test(question) ? possessive : phrase));
+  return { question: rewritten };
+}
+
 export function contextualQuestion(latest, priorUser, priorAnswer) {
   const question = resolvePeopleFollowUp(latest, priorUser);
   const answer = String(priorAnswer || "").trim();

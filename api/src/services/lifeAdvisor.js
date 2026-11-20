@@ -7,7 +7,7 @@ import { focusContext, focusCount, focusFallback, focusPrompt, isFocusQuestion }
 import { resolveEntity } from "./graph/entityResolver.js";
 import { getFamilyTree, getSubgraph, serializeForPrompt } from "./graph/graphQuery.js";
 import { isNoiseReply } from "./intentRouter.js";
-import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts, usesRecordedAnswer } from "./graph/peopleGrounding.js";
+import { answerPeopleQuestion, contextualQuestion, deliverPeopleAnswer, isPeopleQuestion, resolvePronouns, loadPeopleContext, PEOPLE_PROMPT, peopleContextBlock, persistConflicts, usesRecordedAnswer } from "./graph/peopleGrounding.js";
 import { groqChatUrl, modelErrorKind, modelErrorMessage, modelUnavailable, recordModelError, recordModelOk } from "./modelStatus.js";
 
 const GROQ_MODEL = "qwen/qwen3.8-27b";
@@ -119,7 +119,11 @@ export async function chat(messages, userId) {
   const userTurns = history.filter((message) => message.role === "user");
   const latest = userTurns.at(-1)?.content || "";
   const priorAnswer = [...history].reverse().find((message) => message.role === "assistant" && !isNoiseReply(message.content))?.content || "";
-  const question = contextualQuestion(latest, userTurns.at(-2)?.content || "", priorAnswer);
+  // "they", "her", … refer to the people of the previous people question; unclear → ask who is meant.
+  const pronouns = resolvePronouns(latest, userTurns.at(-2)?.content || "");
+  if (pronouns.ask) return { reply: pronouns.ask, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: 0 } };
+  const resolved = isPeopleQuestion(pronouns.question) ? pronouns.question : latest;
+  const question = contextualQuestion(resolved, userTurns.at(-2)?.content || "", priorAnswer);
   if (isPeopleQuestion(question)) {
     const answered = await answerPeople(userId, question);
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
