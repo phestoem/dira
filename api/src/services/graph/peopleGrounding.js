@@ -232,7 +232,7 @@ const RELATIONS = [
   { key: "parents", pattern: /\bparents?\b/i, answer: (q, context) => parentsAnswer(context), people: (context) => relatives(context, ["father", "mother", "parent"]).all },
   { key: "father", pattern: /\b(father|dad|baba)\b/i, answer: (q, context) => parentRoleAnswer("father", context), people: (context) => relatives(context, ["father", "parent"]).all.filter((person) => kindOf(person, context, ["father", "mother"]) === "father") },
   { key: "mother", pattern: /\b(mother|mum|mom|mama)\b/i, answer: (q, context) => parentRoleAnswer("mother", context), people: (context) => relatives(context, ["mother", "parent"]).all.filter((person) => kindOf(person, context, ["father", "mother"]) === "mother") },
-  { key: "children", pattern: /\b(kids|children|sons|daughters|watoto)\b/i, answer: (q, context) => childrenAnswer(q, context), people: (context) => relatives(context, ["child", "son", "daughter"]).all },
+  { key: "children", pattern: /\b(kids|children|sons|daughters|watoto)\b/i, answer: (q, context) => childrenAnswer(q, context), people: (context, q) => childrenOfKind(context, childrenWanted(q).kind).people },
   { key: "siblings", pattern: /\b(sisters?|brothers?|siblings?)\b/i, answer: (q, context) => (BIRTH_WORDS.test(q) ? siblingBirthAnswer(q, context) : siblingAnswer(q, context)), people: (context) => siblingsFor("siblings", context).people },
 ];
 const BIRTH_WORDS = /\b(born|birth|birthdays?|birth dates?)\b/i;
@@ -250,7 +250,7 @@ export function compoundPeopleAnswer(question, context) {
   const births = BIRTH_WORDS.test(q);
   const parts = asked.map(({ relation }) => {
     if (!births || relation.key === "siblings") return relation.answer(q, context);
-    const people = relation.people(context);
+    const people = relation.people(context, q);
     const label = { spouse: "spouse", parents: "parents", father: "father", mother: "mother", children: "children" }[relation.key];
     if (!people.length) return `Your ${label} ${relation.key === "spouse" || relation.key === "father" || relation.key === "mother" ? "isn't" : "aren't"} recorded yet.`;
     return people.map((person) => `${person.name} — ${birthOf(person) ? prettyDate(birthOf(person).iso) : "birth date not recorded yet"}`).join("\n");
@@ -843,12 +843,38 @@ function siblingBirthAnswer(question, context) {
   }).join("\n");
 }
 
+// "sons" or "daughters" alone in the question: only that gender; both, "children" or "kids": all.
+function childrenWanted(question) {
+  const q = String(question || "");
+  const sons = /\bsons?\b/i.test(q);
+  const daughters = /\bdaughters?\b/i.test(q);
+  if (sons && !daughters && !/\b(children|kids)\b/i.test(q)) return { label: "sons", kind: "son" };
+  if (daughters && !sons && !/\b(children|kids)\b/i.test(q)) return { label: "daughters", kind: "daughter" };
+  return { label: "children", kind: null };
+}
+
+// Children of one gender, from records: those recorded as that gender; children recorded as neither are named
+// apart, never counted in.
+function childrenOfKind(context, kind) {
+  const all = relatives(context, ["child", "son", "daughter"]);
+  if (!kind) return { ...all, people: all.all, unknown: [] };
+  const kindOfChild = (person) => kindOf(person, context, ["son", "daughter"]);
+  return {
+    ...all,
+    people: all.all.filter((person) => kindOfChild(person) === kind),
+    unknown: all.all.filter((person) => !["son", "daughter"].includes(kindOfChild(person))),
+  };
+}
+
 function childrenAnswer(question, context) {
-  const found = relatives(context, ["child", "son", "daughter"]);
+  const want = childrenWanted(question);
+  const found = childrenOfKind(context, want.kind);
   if (!found.all.length) return "Your children aren't recorded yet.";
-  const names = found.all.map((person) => person.name);
-  const count = /\bhow many\b/i.test(question) ? `You have ${names.length} children: ` : "Your children: ";
-  const line = `${count}${names.join(", ")}.`;
+  const names = found.people.map((person) => person.name);
+  const unknown = found.unknown.length ? `\nNot recorded as son or daughter: ${found.unknown.map((person) => person.name).join(", ")}.` : "";
+  if (!names.length) return `No ${want.label} recorded.${unknown}`;
+  const count = /\bhow many\b/i.test(question) ? `You have ${names.length} ${want.label}: ` : `Your ${want.label}: `;
+  const line = `${count}${names.join(", ")}.${unknown}`;
   return found.fromEvents.length ? `${line}\n${RECORD_LINE}` : line;
 }
 

@@ -97,6 +97,16 @@ export const CASES = [
     ],
   },
   {
+    // Gender filters hold through a pronoun follow-up: your parents' daughters are your four sisters, not you.
+    id: "parents-pronoun-daughters",
+    turns: ["who are my parents?", "how many daughters do they have?"],
+    check: ({ answer }) => [
+      ...(/\b(4|four) daughters\b/i.test(answer) ? [] : ["does not say 4 daughters"]),
+      ...has("Jeni Enock Mwakyusa", "Leah Enock Mwakyusa", "Neema Enock Mwakyusa", "Zenah Enock Mwakyusa")(answer),
+      ...lacks("Phesto", "Careen", "Prisha", "Zelda")(answer),
+    ],
+  },
+  {
     id: "parents-children-count",
     turns: ["how many children do my parents have?"],
     check: ({ answer }) => [

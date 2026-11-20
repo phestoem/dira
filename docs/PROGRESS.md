@@ -14,6 +14,16 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-20: gender filters on every path (real-use 2 of 3).
+  - "how many sons do I have?" listed every child: the children answer
+    ignored sons/daughters. Now childrenWanted/childrenOfKind filter by
+    the recorded kind (person or event wording); children recorded as
+    neither are named apart ("Not recorded as son or daughter: …"), never
+    counted in. The compound path (births of "my wife and sons") uses the
+    same filter; chains and pronoun follow-ups already filtered by gender.
+  - Golden: parents-pronoun-daughters (20 cases).
+  - test/gender-filters.test.js. npm test 95/95; golden fixture 20/20 +
+    reset gate; live readonly 20/20 (logs/golden-gender-*.log).
 - 2026-11-20: pronoun follow-ups (real-use 1 of 3).
   - peopleGrounding.resolvePronouns: they/them/their/he/him/his/she/her
     refer to the people of the previous people question (a whole chain,
