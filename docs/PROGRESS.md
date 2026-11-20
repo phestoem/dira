@@ -14,6 +14,14 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-20 00:17: deployed 4477cd1 (possessive chains, stated parent
+  connections) to prod. main fast-forwarded 31674a6..4477cd1, pushed;
+  prod merged it as 86355f9. Backup first (dira_20261120_001603.dump); no
+  migration; both services active; /health ok; prod .env 600. Prod golden
+  readonly 18/18, no rows changed: the chain cases answer you and your
+  siblings (5), the statement gives a 4-connection card leaving the
+  exception out (logs/deploy-20261120a.log,
+  logs/golden-prod-readonly-20261120a.log).
 - 2026-11-19: stated parent connections ("X is the mother of my
   children, except Y") give a confirm card; only the confirm writes.
   - Routing on prod: relationship_add, but the router model also marked
@@ -631,6 +639,8 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
+- Send the parent statement once on prod and confirm the card; until
+  then the spouse's children are "not recorded yet".
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
