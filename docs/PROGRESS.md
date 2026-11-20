@@ -14,6 +14,10 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-20: Phesto confirmed the parent-connection card on prod. Checked
+  readonly through the prod API: the spouse's children list the four
+  children, the excepted one left out; the statement again answers
+  "Already recorded".
 - 2026-11-20 00:17: deployed 4477cd1 (possessive chains, stated parent
   connections) to prod. main fast-forwarded 31674a6..4477cd1, pushed;
   prod merged it as 86355f9. Backup first (dira_20261120_001603.dump); no
@@ -639,8 +643,6 @@ Checked 2026-11-18 (read-only, earlier):
    path, deploy script.
 
 ## Open questions for Phesto
-- Send the parent statement once on prod and confirm the card; until
-  then the spouse's children are "not recorded yet".
 - Backfill: link confirmed people in the 44 existing dira_dev events
   (13 would get links) and in prod? A one-off script, dry run first.
 - Two-letter first names ("Bo") do not link alone (false-match guard);
