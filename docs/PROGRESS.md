@@ -14,7 +14,14 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
-- 2026-11-21: not deployed, shown to Phesto first.
+- 2026-11-21 11:17: deployed a5aece7 (planned status, spending by kind,
+  uploads in restore-into-dev, upload-keep guards) to prod. Full live
+  readonly on dev first: 25/25. Backup dira_20261121_111707.dump +
+  uploads tar first; both services active; /health ok; prod .env 600
+  (logs/deploy-20261121d.log). Then the approved status change (2 events
+  active → planned, dry run then apply). Prod golden readonly 25/25, no
+  rows changed (logs/golden-prod-readonly-20261121d.log).
+- 2026-11-21: (deployed 11:17, see the entry above)
   - restore-into-dev also restores the uploads archive of the same backup:
     checked against its checksum and manifest before dev is touched (a bad
     archive stops it), folder 700 / files 600, dev's previous uploads kept,
@@ -38,8 +45,8 @@ plan. One item per commit, family golden test before each commit.
   - Golden: vision-planned-by-status (25 cases), vision-revisit checks the
     kinds, upload-keep-gate; fixture seeds a project like the one-off, the
     fence as a planned event, a building and an EUR payment.
-  - Prod data waiting for Phesto: the 2 planned events from the one-off
-    are "active" (dry run: active → planned); applied on dev's copy only.
+  - The 2 planned events from the one-off: active → planned, approved by
+    Phesto, applied on prod after the deploy (and on dev's copy).
   - npm test 105/105; golden fixture 25/25 + reset gate + upload-keep gate;
     live readonly 24/25, then the changed case 2/2 after updating its check
     (logs/golden-status-*-20261121-1055.log).
@@ -762,6 +769,8 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
+- Next (Phesto, 2026-11-21): spending kind as a field Phesto can correct
+  on each record (the cost sheet may be building).
 Phesto (2026-11-18): before token logging, the backup + restore test and
 the dev/prod key split must be done. Re-checked 2026-11-18 evening after
 Phesto said both were applied: still not on this host, token logging held.
