@@ -11,7 +11,7 @@ import "dotenv/config";
 import { randomUUID } from "crypto";
 import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { CASES, SEED_MESSAGES, SELF_NAME } from "./cases.js";
+import { CASES, SEED_MESSAGES, SEED_VISIONS, SELF_NAME } from "./cases.js";
 
 const DEV = { port: "4801", db: "dira_dev" };
 const PROD = { port: "4800", db: "dira" };
@@ -119,6 +119,8 @@ async function fixture() {
       const steps = await seed(message);
       console.log(`- ${message.slice(0, 70)}${message.length > 70 ? "…" : ""}\n    ${steps.join(" → ")}`);
     }
+    for (const vision of SEED_VISIONS) await prisma.vision.create({ data: { userId: id, ...vision } });
+    console.log(`- ${SEED_VISIONS.length} visions created`);
     await settle(id);
     const code = await ask(id, false);
     const resetCode = !args.only || args.only.has("reset-gate") ? await resetGate(id) : 0;

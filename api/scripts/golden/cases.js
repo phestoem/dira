@@ -14,7 +14,29 @@ export const SEED_MESSAGES = [
   "I have land in Ntabha, Mbeya, and a house in Kisarawe. Tuliza Nafsi is our place in Zanzibar.",
   "I own two cars, a Toyota Prado and a Suzuki Jimny, both kept in Dar es Salaam.",
   "Trip to Tanzania: I fly to Dar es Salaam on 10 December 2026.",
+  "We started building the second house at Tuliza Nafsi in Zanzibar in May 2023.",
+  "Fruit trees for Tuliza Nafsi cost 392,000 TSH.",
 ];
+
+// Fixture mode creates these directly (visions come from journal entries, which the seed can't confirm).
+export const SEED_VISIONS = [
+  { title: "Tuliza Nafsi Eco Living Vision", summary: "A self-sustaining eco-living place with organic farming and animal husbandry.", status: "seed", connectedEntities: [{ name: "Zanzibar", role: "location" }] },
+  { title: "Uzio wa Nafsi Jambiani", summary: "A low-cost fence around Tuliza Nafsi Jambiani.", status: "seed", connectedEntities: [{ name: "Tuliza Nafsi Jambiani", role: "location" }] },
+];
+const GENERIC_OFFERS = /\b(funding|fundraising|partners?(hip)?s?|investors?|grants?|donors?|sponsors?|crowdfund\w*)\b/i;
+
+// A progress statement after a vision question: a card that echoes it, links it to the vision, offers the stage.
+function progressCard({ turn, eventsCreated, answer }) {
+  const failures = eventsCreated ? [`${eventsCreated} new event(s) created before confirming`] : [];
+  const result = turn.response.result || {};
+  if (result.type !== "vision_progress_preview") return [...failures, `no vision progress card (got ${result.type})`];
+  for (const fact of ["house 1 complete", "house 2 ~70%"]) if (!answer.includes(fact)) failures.push(`does not echo "${fact}"`);
+  const items = (result.content?.edges || []).map((item) => item.line);
+  if (!items.some((line) => /linked to “Tuliza Nafsi Eco Living Vision”/.test(line))) failures.push("no item linking it to the Tuliza Nafsi vision");
+  const stage = items.find((line) => /^Move /.test(line));
+  if (stage && !/ to active$/.test(stage)) failures.push(`stage item does not move to active: "${stage}"`);
+  return failures;
+}
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const LONG = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
@@ -247,6 +269,35 @@ export const CASES = [
       if (eventsCreated) failures.push(`${eventsCreated} new event(s) created`);
       return failures;
     },
+  },
+  {
+    // "Revisit X vision": the vision plus the events tied to it by name, done/spent/planned/not recorded, no offers.
+    id: "vision-revisit",
+    turns: ["revisit Tuliza Nafsi vision"],
+    check: ({ answer, turn }) => {
+      const failures = [...answered(turn), ...has("Tuliza Nafsi Eco Living Vision")(answer)];
+      if (!/Stage: /.test(answer)) failures.push("does not give the stage");
+      if (!/Done: [^\n]*second house/i.test(answer)) failures.push("Done does not include the second house");
+      if (!/Spent: [^\n]*392,000 TSH/.test(answer)) failures.push("Spent does not include 392,000 TSH");
+      if (!/Not recorded: /.test(answer)) failures.push("does not say what is not recorded");
+      if (!/Related vision[^\n]*Uzio wa Nafsi Jambiani/.test(answer)) failures.push("does not name the related fence vision");
+      if (GENERIC_OFFERS.test(answer)) failures.push(`generic offer: "${answer.match(GENERIC_OFFERS)[0]}"`);
+      if (/\bon track\b/i.test(answer)) failures.push('says "on track"');
+      return failures;
+    },
+  },
+  {
+    id: "vision-progress-statement",
+    turns: ["revisit Tuliza Nafsi vision", "In terms of development, Tuliza Nafsi in Zanzibar has one house completed, and we are about 70% completion of the second house."],
+    countsEvents: true,
+    check: progressCard,
+  },
+  {
+    // The statement doesn't name the vision: the question just before it does.
+    id: "vision-progress-follow-up",
+    turns: ["revisit Tuliza Nafsi vision", "one house is complete and the second is about 70% done"],
+    countsEvents: true,
+    check: progressCard,
   },
   {
     id: "children-follow-up",

@@ -1,3 +1,4 @@
+import { answerVision } from "./visionReview.js";
 import { answerTimeline, isTimelineQuestion } from "./timeline.js";
 import { holdingsAnswer, isPropertyListQuestion, loadHoldings } from "./holdings.js";
 import OpenAI from "openai";
@@ -129,6 +130,9 @@ export async function chat(messages, userId) {
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
   }
   if (isFocusQuestion(latest)) return answerFocus(userId, history, latest);
+  // "Revisit the X vision": the vision and the events tied to it by link or name, by code; no generic offers.
+  const vision = await answerVision(userId, latest);
+  if (vision) return { reply: vision.reply, contextUsed: { eventsCount: vision.count, visionsCount: 1, entitiesCount: 0 } };
   // Timeline and progress questions: days left, what is recorded and what is not, by code; never "on track".
   if (isTimelineQuestion(latest)) {
     const timeline = await answerTimeline(userId, latest);

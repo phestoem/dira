@@ -14,6 +14,33 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-21: progress statements on a vision (real-use 2 of 2).
+  - A statement with progress ("one X complete, the second ~70%") that
+    names a vision, or follows a question about one, gives a card instead
+    of a plain save: it echoes the facts by code (visionReview.
+    progressFacts: "x 1 complete; x 2 ~70%") and offers (a) save it as a
+    progress update linked to the vision (connectedEvents) and (b) move the
+    stage seed/forming/held -> active. Only the confirm writes; no date is
+    invented. Works whatever the router calls the message (seen: intake,
+    correction, relationship_change); a progress statement is never a yes
+    to an earlier offer. Web: the card reuses the checkbox card.
+  - Golden: vision-progress-statement, vision-progress-follow-up (24).
+- 2026-11-21: vision questions answered from the vision and its records
+  (real-use 1 of 2).
+  - visionReview: a vision is named by the distinctive run of its title
+    (a tie asks which; a title starting with the phrase wins); its events
+    are the linked ones plus those that carry its name in title, text,
+    tags or refs. Answer by code: stage, summary, Done, Spent, Planned,
+    Also recorded, related visions, Not recorded. No offers. "revisit …
+    vision" was routed as a command: review wording with a named vision is
+    now a question.
+  - Read-only check on prod (asked): 2 visions, both with 0 linked events
+    and no relationship edges; 6 events mention the name, none linked; the
+    links were by name only, and no entity holds the name.
+  - Golden: vision-revisit; fixture seeds 2 events and creates 2 visions.
+  - test/vision-review.test.js. npm test 100/100; golden fixture 24/24 +
+    reset gate; live readonly 24/24, no rows changed
+    (logs/golden-vision-*-20261121-0649.log). Not deployed: shown first.
 - 2026-11-21: dev has its own model keys. Phesto added new Groq and
   OpenAI keys to dev's .env; fingerprints of JWT_SECRET, GROQ_API_KEY and
   OPENAI_API_KEY now all differ from prod (compared, never printed); .env

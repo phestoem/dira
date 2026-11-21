@@ -61,7 +61,7 @@ function kindFrom(topics, records) {
 }
 
 
-function missing(kind, records, today) {
+export function missing(kind, records, today) {
   const text = records.map(textOf).join(" ");
   const out = [];
   for (const [label, pattern] of CHECKS[kind] || []) {

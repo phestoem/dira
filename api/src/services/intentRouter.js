@@ -3,6 +3,7 @@ import { prisma } from "../prisma.js";
 import { flagOn } from "./flags.js";
 import { isRelationshipStatement, namesPersonWithRole } from "./graph/familyStatement.js";
 import { isPeopleQuestion } from "./graph/peopleGrounding.js";
+import { isVisionReview, loadVisions, progressFacts } from "./visionReview.js";
 import { groqChatUrl, modelErrorKind, recordModelError, recordModelOk } from "./modelStatus.js";
 
 const OPENAI_MODEL = "gpt-4o-mini";
@@ -254,6 +255,8 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
   // A message that itself states a relationship ("X is the mother of my children") is new information, not a yes to
   // something offered before: it goes to the connection card, never to saving the earlier offer as an event.
   if (!fileAttached && isRelationshipStatement(text)) classified.followUp = { action: "none", fact: "" };
+  // Likewise a statement of progress ("the second cabin is 40% done") is new, not a yes to an earlier offer.
+  if (!fileAttached && progressFacts(text).length) classified.followUp = { action: "none", fact: "" };
   if (!fileAttached && rejectsCorrection(text) && classified.intent === "correction") {
     classified.intent = isPeopleQuestion(text) ? "graph_query" : "question";
     classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
@@ -264,6 +267,11 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
     classified.intent = "graph_query";
     classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
     classified.interpretation = "Answer from recorded family facts.";
+  }
+  if (!fileAttached && ["command", "unclear", "intake_text"].includes(classified.intent) && isVisionReview(text, await loadVisions(userId).catch(() => []))) {
+    classified.intent = "question";
+    classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
+    classified.interpretation = "Answer from the vision and its records.";
   }
   if (!fileAttached && isRelationshipStatement(text) && !isPeopleQuestion(text) && !["relationship_change", "correction", "graph_query", "command"].includes(classified.intent)) {
     if (classified.intent !== "relationship_add") {
