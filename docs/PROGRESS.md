@@ -1,6 +1,6 @@
 # personal — progress
 
-Last updated: 2026-11-19
+Last updated: 2026-11-21
 
 ## Current goal
 Now (Phesto, 2026-11-18, from real use): 1 follow-ups attach to the last
@@ -14,6 +14,11 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-21: dev has its own model keys. Phesto added new Groq and
+  OpenAI keys to dev's .env; fingerprints of JWT_SECRET, GROQ_API_KEY and
+  OPENAI_API_KEY now all differ from prod (compared, never printed); .env
+  600; both keys answer 200; cron, bridge and email still off in dev. Live
+  readonly golden 21/21 on the new keys. Prod .env untouched.
 - 2026-11-20: singular/plural in counts (real-use 3 of 3).
   - peopleGrounding.countOf: "1 son", "2 sons", "1 child"; used by the
     children, sibling and chain counts ("Your mother has 1 son"), list
@@ -655,8 +660,8 @@ Phesto said both were applied: still not on this host, token logging held.
   /etc/qusaz/, no restic, no dira cron line. The only backup cron is the old
   /opt/qusaz/shared/postgres/backup.sh (02:00), and its dumps in
   /opt/qusaz/backups/ contain no dira database. No restore-test result.
-- Keys: dira-dev/api/.env and dira/api/.env (prod EnvironmentFile) still
-  share the OpenAI and the Groq fingerprints; both files unchanged since
+- Keys: split on 2026-11-21 (see Done). Before that, dira-dev/api/.env and dira/api/.env (prod EnvironmentFile)
+  shared the OpenAI and the Groq fingerprints; both files unchanged since
   Oct 15/16; dira-api running since Nov 14.
 Checked 2026-11-18 (read-only, earlier):
 - Backup: NOT installed. No /opt/qusaz/shared/backup/dira/, no
