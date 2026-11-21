@@ -618,7 +618,7 @@ function ResponseBody({
   onOption: (intent: string) => void;
 }) {
   const { result } = response;
-  if (result.type === "relationship_preview") {
+  if (result.type === "relationship_preview" || result.type === "vision_progress_preview") {
     const content = result.content as { edges?: Array<{ id: string; line: string }> };
     return (
       <RelationshipCard
@@ -1158,7 +1158,7 @@ function failureMessage(err: unknown) {
 
 function isSilentAnswer(response: HomeResponse) {
   const { type, content, confirmationText } = response.result;
-  if (type === "relationship_preview" || type === "understanding" || type === "clarification" || type === "command_preview" || type === "correction_preview" || type === "journal_saved") {
+  if (type === "relationship_preview" || type === "vision_progress_preview" || type === "understanding" || type === "clarification" || type === "command_preview" || type === "correction_preview" || type === "journal_saved") {
     return false;
   }
   const answer = asAnswer(content);

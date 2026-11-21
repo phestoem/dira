@@ -5,6 +5,7 @@ import { writeFile } from "fs/promises";
 import { prisma } from "../prisma.js";
 import { isReadonly, runReadonly, wantsReadonly } from "../readonly.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
+import { applyVisionProgress, visionProgress } from "../services/visionReview.js";
 import { attachToEvent, lastSavedFor, looksLikeContinuation, noteSaved } from "../services/followUp.js";
 import { savedSummary, summaryLine } from "../services/savedSummary.js";
 import { confirmCommand, interpretCommand } from "../services/commandInterpreter.js";
@@ -91,6 +92,7 @@ export default async function homeRoutes(fastify) {
       if (entry.kind === "journal") return await confirmJournal(request.userId, entry);
       if (entry.kind === "command") return await confirmStoredCommand(entry);
       if (entry.kind === "relationships") return await confirmRelationships(request.userId, entry, body);
+      if (entry.kind === "vision_progress") return await confirmVisionProgress(request.userId, entry, body);
       if (entry.kind === "dismiss") return await confirmDismiss(request.userId, entry);
       return reply.code(400).send({ error: "Nothing to confirm." });
     } catch (err) {
@@ -133,6 +135,13 @@ async function executeIntent(userId, routing, payload) {
   if (["relationship_add", "intake_text"].includes(routing.intent) && !payload.file) {
     const proposal = await proposeParentConnections(userId, payload.message);
     if (proposal) return proposedConnectionsCard(userId, routing, proposal, payload.message);
+  }
+  // Progress on a vision (named, or asked about just before): echo it and offer to link it and move its stage.
+  // The router may call such a statement a correction, a remark, even a connection that ended ("completed"); it is
+  // new progress either way. Journal entries, commands and stated relationships keep their own paths.
+  if (!["intake_file", "journal", "command", "relationship_add"].includes(routing.intent) && !payload.file) {
+    const progress = await visionProgress(userId, payload.message, previousUserTurn(payload.history, payload.lastAction));
+    if (progress) return visionProgressCard(userId, routing, progress, payload.message);
   }
   if (routing.intent === "intake_text") return runIntakeText(userId, routing, payload);
   if (routing.intent === "question") return runQuestion(userId, routing, payload);
@@ -803,6 +812,39 @@ async function proposedConnectionsCard(userId, routing, proposal, message) {
     },
     clarificationOptions: null,
   };
+}
+
+async function visionProgressCard(userId, routing, progress, message) {
+  const { vision, facts, toStage } = progress;
+  const items = [{ id: "save", line: `Save this as a progress update linked to “${vision.title}”` }];
+  if (toStage) items.push({ id: "stage", line: `Move “${vision.title}” from ${vision.status} to ${toStage}` });
+  const proposal = { visionId: vision.id, statement: message, facts, phrase: progress.phrase, fromStage: vision.status, toStage };
+  const sessionId = remember(userId, { kind: "vision_progress", proposal, itemIds: items.map((item) => item.id), routing });
+  return {
+    sessionId,
+    routing: publicRouting(routing),
+    action: "confirm",
+    result: {
+      type: "vision_progress_preview",
+      content: { edges: items, visionId: vision.id, facts },
+      confirmationRequired: true,
+      confirmationText: `Understood for “${vision.title}”: ${facts.join("; ")}.`,
+    },
+    clarificationOptions: null,
+  };
+}
+
+async function confirmVisionProgress(userId, entry, body) {
+  const selected = Array.isArray(body.selectedEdgeIds) ? body.selectedEdgeIds : entry.itemIds;
+  const { written } = await applyVisionProgress(userId, entry.proposal, new Set(selected));
+  return doneResponse(entry.routing, "saved", { message: written.length ? `Done: ${written.join("; ")}.` : "Nothing saved." }, null);
+}
+
+// The user's previous message, when DIRA answered it as a question.
+function previousUserTurn(history, lastAction) {
+  if (lastAction?.intent && lastAction.intent !== "question") return "";
+  const turns = (Array.isArray(history) ? history : []).filter((item) => item?.role === "user" && typeof item.content === "string");
+  return turns.at(-1)?.content || "";
 }
 
 async function confirmRelationships(userId, entry, body) {
