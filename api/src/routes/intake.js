@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { extname } from "path";
-import { writeFile } from "fs/promises";
+import { saveUpload } from "../services/uploadStore.js";
 import { prisma } from "../prisma.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
 import { extractAndLinkEntities } from "./entities.js";
@@ -12,7 +12,6 @@ import {
   understandText,
 } from "../services/contextEngine.js";
 
-const UPLOAD_DIR = "/tmp/dira-uploads";
 const EVENT_TYPES = new Set([
   "project_update",
   "financial",
@@ -49,8 +48,7 @@ export default async function intakeRoutes(fastify) {
 
       const mimeType = upload.mimetype || "application/octet-stream";
       const extension = safeExtension(filename);
-      const filePath = `${UPLOAD_DIR}/${randomUUID()}${extension}`;
-      await writeFile(filePath, buffer);
+      const filePath = await saveUpload(`${randomUUID()}${extension}`, buffer);
 
       const contentType = mimeType.startsWith("image/") ? "image" : "file";
       const queue = await prisma.inputQueue.create({

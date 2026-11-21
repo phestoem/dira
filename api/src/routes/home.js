@@ -1,11 +1,11 @@
 import { randomUUID } from "crypto";
 import { linkConfirmedPeople } from "../services/peopleLinks.js";
 import { extname } from "path";
-import { writeFile } from "fs/promises";
 import { prisma } from "../prisma.js";
 import { isReadonly, runReadonly, wantsReadonly } from "../readonly.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
 import { applyVisionProgress, visionProgress } from "../services/visionReview.js";
+import { saveUpload } from "../services/uploadStore.js";
 import { attachToEvent, lastSavedFor, looksLikeContinuation, noteSaved } from "../services/followUp.js";
 import { savedSummary, summaryLine } from "../services/savedSummary.js";
 import { confirmCommand, interpretCommand } from "../services/commandInterpreter.js";
@@ -28,7 +28,6 @@ import { commitTriples, extractTriples, scheduleExtraction } from "../services/g
 import { getOrCreateSelf } from "../services/graph/entityResolver.js";
 import { findPaths, getFamilyTree, getMoneyFlows, getNeighbors, serializeForPrompt, getSubgraph } from "../services/graph/graphQuery.js";
 import { modelErrorKind } from "../services/modelStatus.js";
-const UPLOAD_DIR = "/tmp/dira-uploads";
 const PENDING_TTL_MS = 5 * 60 * 1000;
 const pending = new Map();
 const EVENT_TYPES = new Set([
@@ -983,8 +982,7 @@ async function readPayload(request) {
 
 async function storeUpload(file) {
   const extension = safeExtension(file.filename);
-  const filePath = `${UPLOAD_DIR}/${randomUUID()}${extension}`;
-  await writeFile(filePath, file.buffer);
+  const filePath = await saveUpload(`${randomUUID()}${extension}`, file.buffer);
   return { filePath, filename: file.filename, mimeType: file.mimeType };
 }
 

@@ -27,8 +27,10 @@ import { runScheduledDigests } from "./services/digestService.js";
 import { catchUpGraphExtractions } from "./services/graph/rebuild.js";
 import { flagStatus } from "./services/flags.js";
 import { modelStatus } from "./services/modelStatus.js";
+import { ensureUploadDir } from "./services/uploadStore.js";
 
-mkdirSync("/tmp/dira-uploads", { recursive: true });
+// Fails at start when the folder is unusable, instead of losing an upload later.
+console.log("[uploads]", ensureUploadDir());
 
 const port = Number(process.env.PORT) || 4800;
 

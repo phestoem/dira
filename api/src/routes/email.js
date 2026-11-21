@@ -1,12 +1,11 @@
-import { createHmac, timingSafeEqual } from "crypto";
+import { createHmac, randomUUID, timingSafeEqual } from "crypto";
 import { Readable } from "stream";
-import { mkdir, writeFile } from "fs/promises";
+import { saveUpload } from "../services/uploadStore.js";
 import { prisma } from "../prisma.js";
 import { isSignificantEvent, sendLifeEvent } from "../services/altimetrixBridge.js";
 import { attachAltimetrixContext, createEventFromUnderstanding, understandFile, understandText } from "../services/contextEngine.js";
 import { extractAndLinkEntities } from "./entities.js";
 
-const UPLOAD_DIR = "/tmp/dira-uploads";
 const MAX_ATTACHMENT = 10 * 1024 * 1024;
 const EMAIL_ADDRESS = /[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/i;
 
@@ -274,9 +273,7 @@ async function writeAttachment(buffer, filename) {
     console.log("[email-intake] skipping large attachment:", filename, buffer.length);
     return null;
   }
-  await mkdir(UPLOAD_DIR, { recursive: true });
-  const filePath = `${UPLOAD_DIR}/email-${Date.now()}-${safeFilename(filename)}`;
-  await writeFile(filePath, buffer);
+  const filePath = await saveUpload(`email-${Date.now()}-${randomUUID().slice(0, 8)}-${safeFilename(filename)}`, buffer);
   return filePath;
 }
 

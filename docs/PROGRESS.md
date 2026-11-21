@@ -14,6 +14,32 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-21: uploaded originals kept, and backed up.
+  - Found: uploads went to /tmp/dira-uploads, emptied on 14 Nov (folder
+    recreated 06:09). Prod references 13 files: all lost, nothing to copy;
+    of the documents behind them only summaries remain (one CV kept its
+    text). /opt/qusaz/dira-data/uploads made (700, qusaz).
+  - uploadStore: one place writes uploads (home, intake, email): a
+    persistent folder, never /tmp (refused at start), folder 700, files
+    600, never overwritten. Default is prod's folder (prod .env not
+    edited); dev sets DIRA_UPLOAD_DIR=/opt/qusaz/dira-dev/data/uploads
+    (data/ in .gitignore). Checked on dev: a real upload lands there, 600.
+  - Backup: each run also writes uploads_<stamp>.tar with MANIFEST.sha256
+    inside, same retention, NUC mirror, restic when R2 is set up. Restore
+    test unpacks it and checks every file (a changed file fails, tested).
+    Installed; real run: 0 files, restore test PASS.
+  - test/upload-store.test.js.
+- 2026-11-21: one-off on prod, approved (backup dira_20261121_101730.dump,
+  dry run, Phesto's yes): a project record linked to the eco-living
+  vision; 10 events linked to it (8 existing, 2 new planned events from a
+  dismissed note and from the fence vision's text, kept in full); one
+  payment's date corrected (stored year misread; the message said
+  "yesterday"); the fence vision archived, nothing deleted. Checked
+  read-only after.
+- 2026-11-21 10:20: deployed a6e85a1 (recorded spending, fixed people
+  order) to prod; backup dira_20261121_102006.dump first; both services
+  active, /health ok (logs/deploy-20261121b.log). Prod golden after the
+  uploads change.
 - 2026-11-21: vision answers say "Recorded spending" and name every
   record behind the total ("2 records: A (x TSH, date); B (…)"); events
   linked to a record the vision links to (its project) count as the
@@ -22,9 +48,6 @@ plan. One item per commit, family golden test before each commit.
   the stated-connections case fixed (see the deploy entry). npm test
   100/100; golden fixture 24/24 + reset gate; live readonly 24/24
   (logs/golden-order-*-20261121-0944.log). Not deployed.
-- 2026-11-21: one-off project record proposed on prod (dry run only,
-  read-only): create the project, link it to the eco-living vision, link 8
-  events. Waiting for Phesto's choice; details in chat.
 - 2026-11-21 09:26: deployed 2fcea8a (pronoun follow-ups, gender
   filters, singular/plural, vision answers, vision progress card) to prod.
   main fast-forwarded 4477cd1..2fcea8a, pushed; prod merged it as f874483.
