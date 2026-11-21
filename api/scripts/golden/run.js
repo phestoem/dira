@@ -9,9 +9,10 @@
 // Options: --only wife,parents   --base http://127.0.0.1:4801
 import "dotenv/config";
 import { randomUUID } from "crypto";
+import { existsSync, unlinkSync } from "fs";
 import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { CASES, SEED_MESSAGES, SEED_VISIONS, SELF_NAME } from "./cases.js";
+import { CASES, SEED_MESSAGES, SEED_PLANNED, SEED_PROJECT, SEED_VISIONS, SELF_NAME } from "./cases.js";
 
 const DEV = { port: "4801", db: "dira_dev" };
 const PROD = { port: "4800", db: "dira" };
@@ -122,9 +123,11 @@ async function fixture() {
     for (const vision of SEED_VISIONS) await prisma.vision.create({ data: { userId: id, ...vision } });
     console.log(`- ${SEED_VISIONS.length} visions created`);
     await settle(id);
+    console.log(`- ${await seedProject(id)}`);
     const code = await ask(id, false);
     const resetCode = !args.only || args.only.has("reset-gate") ? await resetGate(id) : 0;
-    return code || resetCode;
+    const keepCode = !args.only || args.only.has("upload-keep-gate") ? await uploadKeepGate(id) : 0;
+    return code || resetCode || keepCode;
   } finally {
     await settle(id).catch(() => {});
     await prisma.user.delete({ where: { id } });
@@ -189,6 +192,52 @@ async function resetGate(userId) {
   console.log(`  Q: /graph/reset  ⇢  full introduction  ⇢  ${doc}`);
   console.log(indent(`family: ${introSteps.join(" → ")}; ${familyEdges.length} confirmed family edge(s), ${restored}/12 expected, Zelda–Enock ${zeldaEnock}, Careen–Zelda ${careenZelda}\ndocument: ${docSteps.join(" → ")}; ${edgesAdded} edge(s), ${entitiesAdded} entities, graphExtractedAt ${event?.graphExtractedAt ? "set" : "null"}`));
   for (const failure of failures) console.log(`  ✗ ${failure}`);
+  return failures.length ? 1 : 0;
+}
+
+// The project record, its links and the planned events, written directly like the approved one-off on prod.
+async function seedProject(userId) {
+  const project = await prisma.entity.create({ data: { userId, entityType: "project", name: SEED_PROJECT.name, normalizedName: SEED_PROJECT.name.toLowerCase(), description: `Place: ${SEED_PROJECT.place}`, attributes: { place: SEED_PROJECT.place } } });
+  const ref = { entityId: project.id, name: SEED_PROJECT.name, role: "project" };
+  const vision = await prisma.vision.findFirst({ where: { userId, title: SEED_PROJECT.vision } });
+  await prisma.vision.update({ where: { id: vision.id }, data: { connectedEntities: [...vision.connectedEntities, ref] } });
+  let linked = 0;
+  for (const event of await prisma.event.findMany({ where: { userId, status: { not: "archived" } } })) {
+    if (!SEED_PROJECT.links.test([event.title, event.rawInput].join(" "))) continue;
+    await prisma.event.update({ where: { id: event.id }, data: { people: [...(Array.isArray(event.people) ? event.people : []), ref] } });
+    linked += 1;
+  }
+  for (const planned of SEED_PLANNED) await prisma.event.create({ data: { userId, ...planned, eventType: "project_update", status: "planned", source: "manual", people: [ref] } });
+  return `project created, ${linked} events linked, ${SEED_PLANNED.length} planned event(s)`;
+}
+
+// Dismissing an uploaded file keeps the file and its path: only Phesto deletes files.
+async function uploadKeepGate(userId) {
+  const failures = [];
+  const startedAt = new Date().toISOString();
+  const body = new FormData();
+  body.append("message", "");
+  body.append("conversationHistory", "[]");
+  body.append("file", new Blob(["item,amount,currency\nseeds,120,EUR\nwater tank,300,EUR\n"], { type: "text/csv" }), "garden-costs.csv");
+  const res = await fetch(`${base}/home/input`, { method: "POST", headers: { authorization: `Bearer ${token}` }, body });
+  const response = await res.json().catch(() => ({}));
+  const queue = await prisma.inputQueue.findFirst({ where: { userId, rawContent: { contains: "garden-costs.csv" } }, orderBy: { createdAt: "desc" } });
+  if (!res.ok) failures.push(`upload ${res.status}: ${response.error || "no body"}`);
+  if (!queue?.filePath) failures.push("no queue row with a file path");
+  else if (!existsSync(queue.filePath)) failures.push("file missing right after upload");
+  if (response.sessionId) await post("/home/confirm", { sessionId: response.sessionId, confirmed: false });
+  else failures.push(`no card to dismiss (got ${response.result?.type})`);
+  const after = queue ? await prisma.inputQueue.findUnique({ where: { id: queue.id } }) : null;
+  if (after && after.processingStatus !== "dismissed") failures.push(`queue row is ${after.processingStatus}, not dismissed`);
+  if (after && after.filePath !== queue.filePath) failures.push("dismissing changed the file path");
+  const kept = Boolean(queue?.filePath && existsSync(queue.filePath));
+  if (queue?.filePath && !kept) failures.push("dismissing removed the file");
+  if (queue?.filePath && /^\/tmp\//.test(queue.filePath)) failures.push(`stored under /tmp: ${queue.filePath}`);
+  console.log(`\n${failures.length ? "FAIL" : "PASS"}  upload-keep-gate  [upload ⇢ dismiss]  ${startedAt}`);
+  console.log(indent(`${response.result?.type || "?"} → dismissed; ${queue?.filePath || "no path"}: ${kept ? "kept" : "gone"}`));
+  for (const failure of failures) console.log(`  ✗ ${failure}`);
+  // The fixture's own test file: the harness tidies up after itself, DIRA never does.
+  if (kept) unlinkSync(queue.filePath);
   return failures.length ? 1 : 0;
 }
 

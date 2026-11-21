@@ -1540,6 +1540,8 @@ function statusFor(model, value) {
     done: "completed",
     finished: "completed",
     active: "active",
+    plan: "planned",
+    planned: "planned",
     cancel: "cancelled",
     cancelled: "cancelled",
     canceled: "cancelled",
@@ -1555,8 +1557,9 @@ function statusFor(model, value) {
   let status = aliases[String(value || "").toLowerCase()] || String(value || "").toLowerCase();
   if (model === "vision" && status === "completed") status = "active";
   if (model === "entity" && (status === "completed" || status === "cancelled")) status = "dormant";
+  if (model === "entity" && status === "planned") status = "active";
   const allowed = {
-    event: ["active", "completed", "cancelled", "dormant", "archived"],
+    event: ["active", "planned", "completed", "cancelled", "dormant", "archived"],
     vision: ["seed", "forming", "held", "active", "released", "archived"],
     entity: ["active", "dormant", "archived"],
   };

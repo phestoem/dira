@@ -16,6 +16,15 @@ export const SEED_MESSAGES = [
   "Trip to Tanzania: I fly to Dar es Salaam on 10 December 2026.",
   "We started building the second house at Tuliza Nafsi in Zanzibar in May 2023.",
   "Fruit trees for Tuliza Nafsi cost 392,000 TSH.",
+  "Cement and timber for the second house at Tuliza Nafsi cost 450,000 TSH.",
+  "A water tank for Tuliza Nafsi cost 300 EUR.",
+];
+
+// Fixture mode mirrors the 2026-11-21 one-off: a project record linked to the eco-living vision and to the events that
+// name Tuliza Nafsi or Jambiani, and the fence plan as a planned event (its own text, in Swahili).
+export const SEED_PROJECT = { name: "Tuliza Nafsi", place: "Jambiani, Zanzibar", vision: "Tuliza Nafsi Eco Living Vision", links: /Tuliza Nafsi|Jambiani/i };
+export const SEED_PLANNED = [
+  { title: "Tuliza Nafsi fence (Uzio wa Nafsi Jambiani)", rawInput: "Tuliza Nafsi Jambiani, inahitaji kuwekewa uzio, eneo lote. Na mzunguko mzima una wastani wa mita 500. Natafuta taarifa kufahamu ni mfumo gani wa uzio niutumie, ambao utakuwa na gharama nafuu, lakini wenye tija." },
 ];
 
 // Fixture mode creates these directly (visions come from journal entries, which the seed can't confirm).
@@ -23,6 +32,33 @@ export const SEED_VISIONS = [
   { title: "Tuliza Nafsi Eco Living Vision", summary: "A self-sustaining eco-living place with organic farming and animal husbandry.", status: "seed", connectedEntities: [{ name: "Zanzibar", role: "location" }] },
   { title: "Uzio wa Nafsi Jambiani", summary: "A low-cost fence around Tuliza Nafsi Jambiani.", status: "seed", connectedEntities: [{ name: "Tuliza Nafsi Jambiani", role: "location" }] },
 ];
+// "Recorded spending, by kind": land / building / other lines, each naming as many records as it counts, never a
+// sum across currencies; the land purchase is land, the materials payment is building, the 392,000 TSH record listed.
+function spendingByKind(answer) {
+  const failures = [];
+  const rows = answer.split("\n");
+  const head = rows.findIndex((row) => /^- Recorded spending, by kind \(\d+ records?\):$/.test(row));
+  if (head < 0) return ['no "Recorded spending, by kind" heading'];
+  const kinds = [];
+  for (const row of rows.slice(head + 1)) {
+    const match = row.match(/^ {2}- (Land|Building|Other): (.+?), from (\d+) records?: (.+)\.$/);
+    if (!match) break;
+    const [, kind, sum, count, list] = match;
+    kinds.push(kind);
+    const listed = (list.match(/\((?:-?[\d,.]+) [A-Z]{3}/g) || []).length;
+    if (Number(count) !== listed) failures.push(`${kind}: says ${count} records, lists ${listed}`);
+    const currencies = new Set((sum.match(/[\d,.]+ [A-Z]{3}/g) || []).map((part) => part.split(" ")[1]));
+    if (currencies.size > 1 && !/not added/.test(sum)) failures.push(`${kind}: currencies combined without saying so`);
+    if (/\+/.test(sum)) failures.push(`${kind}: a "+" sum`);
+  }
+  if (!kinds.length) failures.push("no kind lines under the heading");
+  const row = (kind) => rows.find((line) => line.startsWith(`  - ${kind}: `)) || "";
+  if (!/2,000,000 TSH/.test(row("Land"))) failures.push("Land does not hold the 2,000,000 TSH purchase");
+  if (!/material|cement|timber/i.test(row("Building"))) failures.push("Building does not list the materials payment");
+  if (!rows.some((line) => /^ {2}- (Land|Building|Other): .*\(392,000 TSH/.test(line))) failures.push("the 392,000 TSH record is not listed");
+  return failures;
+}
+
 const GENERIC_OFFERS = /\b(funding|fundraising|partners?(hip)?s?|investors?|grants?|donors?|sponsors?|crowdfund\w*)\b/i;
 
 // A progress statement after a vision question: a card that echoes it, links it to the vision, offers the stage.
@@ -277,18 +313,26 @@ export const CASES = [
     check: ({ answer, turn }) => {
       const failures = [...answered(turn), ...has("Tuliza Nafsi Eco Living Vision")(answer)];
       if (!/Stage: /.test(answer)) failures.push("does not give the stage");
-      if (!/Done: [^\n]*second house/i.test(answer)) failures.push("Done does not include the second house");
-      const spending = answer.split("\n").find((line) => /^- Recorded spending: /.test(line)) || "";
-      if (!spending) failures.push('no "Recorded spending" line');
-      if (!/[\p{L}][^;:]* \(392,000 TSH/u.test(spending)) failures.push("Recorded spending does not list the 392,000 TSH record");
-      // A total names the records behind it: as many listed amounts as the count says.
-      const count = Number((spending.match(/from (\d+) records?:/) || [])[1] || 0);
-      if (spending && count !== (spending.split(":").slice(2).join(":").match(/\([\d,.]+ [A-Z]{3}/g) || []).length) failures.push("the total does not list each record behind it");
+      // Active and undated (building under way): in progress until its status says completed.
+      if (!/^- (Done|In progress or undated): [^\n]*second house/im.test(answer)) failures.push("the second house is neither done nor in progress");
+      failures.push(...spendingByKind(answer));
       if (!/Not recorded: /.test(answer)) failures.push("does not say what is not recorded");
       // The fence: a related vision, or (since 2026-11-21, when that vision became a planned event) one of its records.
       if (!/(Related vision|Planned|Also recorded)[^\n]*Uzio wa Nafsi Jambiani/.test(answer)) failures.push("does not name the fence (vision or record)");
       if (GENERIC_OFFERS.test(answer)) failures.push(`generic offer: "${answer.match(GENERIC_OFFERS)[0]}"`);
       if (/\bon track\b/i.test(answer)) failures.push('says "on track"');
+      return failures;
+    },
+  },
+  {
+    // Planned comes from the status field: the fence plan is planned although its text (Swahili) has no plan word.
+    id: "vision-planned-by-status",
+    turns: ["revisit Tuliza Nafsi vision"],
+    check: ({ answer }) => {
+      const failures = [];
+      const row = (label) => answer.split("\n").find((line) => line.startsWith(`- ${label}: `)) || "";
+      if (!/Uzio wa Nafsi Jambiani/.test(row("Planned"))) failures.push("the fence plan is not under Planned");
+      for (const label of ["Done", "In progress or undated"]) if (/Uzio wa Nafsi Jambiani/.test(row(label))) failures.push(`the fence plan is under ${label}`);
       return failures;
     },
   },

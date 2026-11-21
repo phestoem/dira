@@ -95,39 +95,65 @@ export function visionEvents(vision, keys, events) {
   return events.filter((event) => linked.has(event.id) || viaRecord(event) || keys.some((key) => phraseIn(key, eventText(event))));
 }
 
-const PLANNED = /\b(plan(?:s|ning|ned)?|will|intend(?:s|ing)?|going to|next (?:month|year|week)|to be (?:done|built|finished))\b/i;
-const DONE = /\b(complete[ds]?|completion|finished|done|started|began|broke ground|built|installed|signed|paid|bought|purchased|delivered|planted|fixed|\d{1,3}\s*%)/i;
-
-// { done, planned, other, spent } for a vision's events, by recorded dates and wording only.
+// { done, planned, other, paused, cancelled, spent } for a vision's events, from the status field and recorded dates
+// only, never from wording (a plan written in any language is planned when its status says so):
+// planned → Planned; completed → Done; dormant → Paused; cancelled → Cancelled; active: a date ahead → Planned, a
+// date passed → Done, no date → In progress or undated.
 export function sortRecords(records, now = new Date()) {
   const today = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
   const monthStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
-  const ahead = (event) => [event.occurredAt && [event.occurredAt, event.datePrecision], event.dueAt && [event.dueAt, null], event.endsAt && [event.endsAt, null]]
-    .filter(Boolean)
-    .some(([at, precision]) => new Date(at) >= (precision === "month" ? monthStart : today));
+  const dates = (event) => [event.occurredAt && [event.occurredAt, event.datePrecision], event.dueAt && [event.dueAt, null], event.endsAt && [event.endsAt, null]].filter(Boolean);
+  const ahead = (event) => dates(event).some(([at, precision]) => new Date(at) >= (precision === "month" ? monthStart : today));
   const spent = records.filter((event) => amountText(event.financials) && event.financials?.direction !== "income");
-  const done = [];
-  const planned = [];
-  const other = [];
+  const out = { done: [], planned: [], other: [], paused: [], cancelled: [] };
   for (const event of records) {
-    // A payment is listed under Spent, unless it is still ahead.
-    if (spent.includes(event) && !ahead(event)) continue;
-    const text = [event.title, event.rawInput, event.understoodMeaning].filter(Boolean).join(" ");
-    if (ahead(event) || (!event.occurredAt && PLANNED.test(text) && !DONE.test(text))) planned.push(event);
-    else if (DONE.test(text) || (event.occurredAt && new Date(event.occurredAt) < today)) done.push(event);
-    else other.push(event);
+    const status = event.status || "active";
+    // A payment is listed under Recorded spending, unless it is still ahead.
+    if (spent.includes(event) && status !== "planned" && !ahead(event)) continue;
+    if (status === "planned") out.planned.push(event);
+    else if (status === "completed") out.done.push(event);
+    else if (status === "dormant") out.paused.push(event);
+    else if (status === "cancelled") out.cancelled.push(event);
+    else if (ahead(event)) out.planned.push(event);
+    else if (dates(event).length) out.done.push(event);
+    else out.other.push(event);
   }
-  return { done, planned, other, spent, today };
+  return { ...out, spent, today };
 }
 
-function totals(events) {
+// Spending kinds, read from the record's title, text and item descriptions (Swahili words included).
+const LAND = /\b(land|plots?|kiwanja|viwanja|shamba|mashamba|ardhi|acres?|ekari|hekta|hectares?|title deed|hati)\b/i;
+const BUILDING = /\b(materials?|cement|saruji|bricks?|tofali|matofali|blocks?|timber|mbao|roof\w*|bati|mabati|construction|building|build|house|nyumba|labou?r|fundi|mafundi|builder|contractor|electrical|umeme|wir(?:e|es|ing)|plumbing|tiles?|fence|uzio|paint|rangi|sand|mchanga|kokoto|nondo|iron sheets?|windows?|doors?|milango)\b/i;
+export function spendingKind(event) {
+  const items = (Array.isArray(event.financials?.items) ? event.financials.items : []).map((item) => item?.description);
+  const text = [event.title, event.rawInput, ...items].filter(Boolean).join(" ");
+  if (LAND.test(text)) return "land";
+  if (BUILDING.test(text)) return "building";
+  return "other";
+}
+
+// "2,000,000 TSH" or "392,000 TSH and 300 EUR": one sum per currency, never added across currencies.
+export function byCurrency(events) {
   const sums = new Map();
   for (const event of events) {
-    const amount = Number(event.financials?.amount);
-    const currency = event.financials?.currency || "";
-    sums.set(currency, (sums.get(currency) || 0) + amount);
+    const currency = String(event.financials?.currency || "").trim() || "(no currency)";
+    sums.set(currency, (sums.get(currency) || 0) + Number(event.financials?.amount));
   }
-  return [...sums].map(([currency, amount]) => `${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency}`.trim()).join(" + ");
+  const parts = [...sums].map(([currency, amount]) => `${amount.toLocaleString("en-US", { maximumFractionDigits: 2 })} ${currency}`);
+  return parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)} (different currencies, not added)`;
+}
+
+const KINDS = [["land", "Land"], ["building", "Building"], ["other", "Other"]];
+function spendingLines(spent) {
+  if (!spent.length) return ["- Recorded spending: none recorded."];
+  const lines = [`- Recorded spending, by kind (${spent.length} record${spent.length === 1 ? "" : "s"}):`];
+  for (const [kind, label] of KINDS) {
+    const list = spent.filter((event) => spendingKind(event) === kind);
+    if (!list.length) continue;
+    const records = list.map((event) => `${event.title} (${amountText(event.financials)}${event.occurredAt ? `, ${formatDay(event.occurredAt, event.datePrecision)}` : ""})`);
+    lines.push(`  - ${label}: ${byCurrency(list)}, from ${list.length} record${list.length === 1 ? "" : "s"}: ${records.join("; ")}.`);
+  }
+  return lines;
 }
 
 function when(event) {
@@ -145,7 +171,7 @@ function line(event) {
 const STAGE = { seed: "seed (an idea)", forming: "forming", held: "held", active: "active (under way)", released: "released", archived: "archived" };
 
 export function visionAnswer(vision, records, related = [], now = new Date()) {
-  const { done, planned, other, spent, today } = sortRecords(records, now);
+  const { done, planned, other, paused, cancelled, spent, today } = sortRecords(records, now);
   const lines = [`${vision.title}`];
   lines.push(`- Stage: ${STAGE[vision.status] || vision.status}; saved ${formatDay(vision.createdAt)}${vision.lastTouchedAt && formatDay(vision.lastTouchedAt) !== formatDay(vision.createdAt) ? `, last touched ${formatDay(vision.lastTouchedAt)}` : ""}.`);
   if (vision.summary) lines.push(`- Vision: ${vision.summary}`);
@@ -153,12 +179,12 @@ export function visionAnswer(vision, records, related = [], now = new Date()) {
     lines.push("- No events recorded for it yet.");
   } else {
     lines.push(done.length ? `- Done: ${done.map(line).join("; ")}.` : "- Done: nothing recorded.");
-    // Only what the records hold, so the total is labelled as such and every record behind it is named.
-    lines.push(spent.length
-      ? `- Recorded spending: ${totals(spent)}, from ${spent.length} record${spent.length === 1 ? "" : "s"}: ${spent.map((event) => `${event.title} (${amountText(event.financials)}${event.occurredAt ? `, ${formatDay(event.occurredAt, event.datePrecision)}` : ""})`).join("; ")}.`
-      : "- Recorded spending: none recorded.");
+    if (other.length) lines.push(`- In progress or undated: ${other.map(line).join("; ")}.`);
+    // Only what the records hold: labelled as recorded, split by kind, every record behind a sum named.
+    lines.push(...spendingLines(spent));
     lines.push(planned.length ? `- Planned: ${planned.map(line).join("; ")}.` : "- Planned: nothing recorded.");
-    if (other.length) lines.push(`- Also recorded: ${other.map(line).join("; ")}.`);
+    if (paused.length) lines.push(`- Paused: ${paused.map(line).join("; ")}.`);
+    if (cancelled.length) lines.push(`- Cancelled: ${cancelled.map(line).join("; ")}.`);
   }
   if (related.length) lines.push(`- Related vision${related.length === 1 ? "" : "s"}: ${related.map((item) => `${item.title} (${item.status})`).join("; ")}.`);
   const gaps = missing("work", records, today);
@@ -167,7 +193,7 @@ export function visionAnswer(vision, records, related = [], now = new Date()) {
 }
 
 const VISION_SELECT = { id: true, title: true, summary: true, status: true, connectedEvents: true, connectedEntities: true, createdAt: true, lastTouchedAt: true };
-const EVENT_SELECT = { id: true, title: true, rawInput: true, understoodMeaning: true, occurredAt: true, datePrecision: true, endsAt: true, dueAt: true, financials: true, places: true, people: true, tags: true };
+const EVENT_SELECT = { id: true, title: true, status: true, rawInput: true, understoodMeaning: true, occurredAt: true, datePrecision: true, endsAt: true, dueAt: true, financials: true, places: true, people: true, tags: true };
 
 export async function loadVisions(userId) {
   return prisma.vision.findMany({ where: { userId, status: { not: "archived" } }, select: VISION_SELECT, orderBy: { createdAt: "asc" } });

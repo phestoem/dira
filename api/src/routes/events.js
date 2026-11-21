@@ -2,7 +2,7 @@ import { prisma } from "../prisma.js";
 import { retireEdges } from "../services/graph/relationshipExtractor.js";
 
 const SPACES = new Set(["personal", "family", "professional", "vision"]);
-const STATUSES = new Set(["active", "completed", "cancelled", "dormant", "archived"]);
+const STATUSES = new Set(["active", "planned", "completed", "cancelled", "dormant", "archived"]);
 const PAGE_SIZE = 50;
 
 export default async function eventRoutes(fastify) {

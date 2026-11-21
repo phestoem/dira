@@ -14,6 +14,35 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-21: not deployed, shown to Phesto first.
+  - restore-into-dev also restores the uploads archive of the same backup:
+    checked against its checksum and manifest before dev is touched (a bad
+    archive stops it), folder 700 / files 600, dev's previous uploads kept,
+    paths in dira_dev rewritten to dev's folder, every referenced file
+    checked. Run on the 10:34 prod backup (0 files) and on a synthetic
+    backup with one file (644 → 600, path rewritten; tampered: stopped
+    before any change). The monthly restore test now also checks that every
+    upload the restored database references is in the archive (prod: PASS).
+  - Events have a "planned" status (API, commands, focus). Vision answers
+    sort by status and dates, never wording: planned, completed (Done),
+    dormant (Paused), cancelled; active with a date ahead/behind → Planned
+    /Done, without a date → "In progress or undated".
+  - Recorded spending splits by kind (land / building / other, from title,
+    text and item descriptions, Swahili words included); one sum per
+    currency, never added ("… and 300 EUR (different currencies, not
+    added)"); income is not spending.
+  - Dismissing an upload keeps the file and its path (it already did; now
+    guarded): a test fails on any file-removing call in api/src, a test
+    dismisses a queued upload, and a fixture gate uploads a file through
+    /home and dismisses it.
+  - Golden: vision-planned-by-status (25 cases), vision-revisit checks the
+    kinds, upload-keep-gate; fixture seeds a project like the one-off, the
+    fence as a planned event, a building and an EUR payment.
+  - Prod data waiting for Phesto: the 2 planned events from the one-off
+    are "active" (dry run: active → planned); applied on dev's copy only.
+  - npm test 105/105; golden fixture 25/25 + reset gate + upload-keep gate;
+    live readonly 24/25, then the changed case 2/2 after updating its check
+    (logs/golden-status-*-20261121-1055.log).
 - 2026-11-21 10:34: deployed d3dd005 (uploads in a persistent folder,
   uploads in the backup) to prod; backup dira_20261121_103410.dump plus
   uploads_20261121_103410.tar (0 files) first; prod logs the new folder at

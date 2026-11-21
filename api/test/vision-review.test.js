@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { isVisionQuestion, isVisionReview, namedVision, nameKeys, progressFacts, sortRecords, visionAnswer, visionEvents } from "../src/services/visionReview.js";
+import { byCurrency, isVisionQuestion, isVisionReview, namedVision, nameKeys, progressFacts, sortRecords, spendingKind, visionAnswer, visionEvents } from "../src/services/visionReview.js";
 
 // Synthetic visions and records only. Vision questions are answered by code from the vision and the events tied to
 // it by link or name; progress statements are echoed and offered as a card, written only on confirm.
@@ -53,7 +53,7 @@ test("events belong to a vision by link or by its name; the answer sorts them an
   const tagged = [...EVENTS, { id: "e5", title: "Well dug", rawInput: "The well is dug.", people: [{ entityId: "p1", role: "project" }], financials: { amount: 80, currency: "EUR" } }];
   const all = visionEvents(withProject, nameKeys(withProject, "revisit Quiet Harbour Garden vision", tagged), tagged);
   assert.deepEqual(all.map((event) => event.id), ["e1", "e2", "e3", "e5"]);
-  assert.match(visionAnswer(withProject, all, [], NOW), /Recorded spending: 200 EUR, from 2 records: Seeds bought \(120 EUR\); Well dug \(80 EUR\)\./);
+  assert.match(visionAnswer(withProject, all, [], NOW), /  - Other: 200 EUR, from 2 records: Seeds bought \(120 EUR\); Well dug \(80 EUR\)\./);
   const sorted = sortRecords(records, NOW);
   assert.deepEqual(sorted.done.map((event) => event.id), ["e1"]);
   assert.deepEqual(sorted.planned.map((event) => event.id), ["e3"]);
@@ -61,13 +61,60 @@ test("events belong to a vision by link or by its name; the answer sorts them an
   const answer = visionAnswer(vision, records, [VISIONS[1]], NOW);
   assert.match(answer, /Stage: seed/);
   assert.match(answer, /Done: First cabin at Quiet Harbour \(cabin 1 started\)/);
-  assert.match(answer, /Recorded spending: 120 EUR, from 1 record: Seeds bought \(120 EUR\)\./);
+  assert.match(answer, /- Recorded spending, by kind \(1 record\):\n  - Other: 120 EUR, from 1 record: Seeds bought \(120 EUR\)\./);
   assert.doesNotMatch(answer, /- Spent:/);
   assert.match(answer, /Planned: Autumn planting \(Oct 2025\)/);
   assert.match(answer, /Related vision: Stone Wall for Quiet Harbour \(seed\)/);
   assert.match(answer, /Not recorded: /);
   assert.doesNotMatch(answer, /\b(funding|partner|investor|grant|on track)\b/i);
   assert.doesNotMatch(answer, /Lunch/);
+});
+
+test("planned and done come from the status field, not from the wording", () => {
+  const records = [
+    // Planned by status, written in another language with no English plan words, and even "done" in its text.
+    { id: "p1", title: "Ua wa bustani", status: "planned", rawInput: "Tunahitaji uzio wa waya kuzunguka bustani yote; the old one was done badly.", financials: {} },
+    { id: "p2", title: "Shed roof", status: "completed", rawInput: "Roof.", financials: {} },
+    { id: "p3", title: "Pond", status: "active", rawInput: "We will plan the pond later.", financials: {} },
+    { id: "p4", title: "Kiln", status: "dormant", rawInput: "Paused.", financials: {} },
+    { id: "p5", title: "Old barn", status: "cancelled", rawInput: "Not going ahead.", financials: {} },
+    { id: "p6", title: "Harvest fair", status: "active", occurredAt: new Date("2025-09-01"), financials: {} },
+    { id: "p7", title: "Spring sowing", status: "active", occurredAt: new Date("2025-03-01"), financials: {} },
+  ];
+  const sorted = sortRecords(records, NOW);
+  assert.deepEqual(sorted.planned.map((event) => event.id), ["p1", "p6"]);
+  assert.deepEqual(sorted.done.map((event) => event.id), ["p2", "p7"]);
+  assert.deepEqual(sorted.other.map((event) => event.id), ["p3"], "active, no date: wording does not make it planned");
+  assert.deepEqual(sorted.paused.map((event) => event.id), ["p4"]);
+  assert.deepEqual(sorted.cancelled.map((event) => event.id), ["p5"]);
+  const answer = visionAnswer(VISIONS[0], records, [], NOW);
+  assert.match(answer, /- Planned: Ua wa bustani[^;\n]*; Harvest fair \(1 Sept? 2025\)\./);
+  assert.match(answer, /- In progress or undated: Pond\./);
+  assert.match(answer, /- Paused: Kiln\./);
+  assert.match(answer, /- Cancelled: Old barn\./);
+});
+
+test("recorded spending splits by kind and never adds different currencies", () => {
+  const money = (amount, currency) => ({ amount, currency, direction: "expense" });
+  const records = [
+    { id: "s1", title: "Plot purchase", status: "completed", occurredAt: new Date("2021-05-31"), financials: money(2000000, "TSH") },
+    { id: "s2", title: "Kiwanja cha pili", status: "completed", financials: money(500, "EUR") },
+    { id: "s3", title: "Payment", rawInput: "Paid for cement and timber", status: "active", financials: money(450000, "TSH") },
+    { id: "s4", title: "Cost sheet", rawInput: "costs.xlsx", status: "active", financials: { ...money(392000, "TSH"), items: [{ description: "fruit trees" }] } },
+    { id: "s5", title: "Water tank", status: "active", financials: money(300, "EUR") },
+    { id: "s6", title: "Sale of a plot", status: "completed", financials: { amount: 900, currency: "EUR", direction: "income" } },
+  ];
+  assert.deepEqual(records.map(spendingKind), ["land", "land", "building", "other", "other", "land"]);
+  assert.equal(byCurrency([records[0], records[1]]), "2,000,000 TSH and 500 EUR (different currencies, not added)");
+  assert.equal(byCurrency([records[0]]), "2,000,000 TSH");
+  const answer = visionAnswer(VISIONS[0], records, [], NOW);
+  assert.match(answer, /- Recorded spending, by kind \(5 records\):/);
+  assert.match(answer, /  - Land: 2,000,000 TSH and 500 EUR \(different currencies, not added\), from 2 records: Plot purchase \(2,000,000 TSH, 31 May 2021\); Kiwanja cha pili \(500 EUR\)\./);
+  assert.match(answer, /  - Building: 450,000 TSH, from 1 record: Payment \(450,000 TSH\)\./);
+  assert.match(answer, /  - Other: 392,000 TSH and 300 EUR \(different currencies, not added\), from 2 records: Cost sheet \(392,000 TSH\); Water tank \(300 EUR\)\./);
+  const spending = answer.split("\n").filter((row) => /Recorded spending|^  - /.test(row)).join("\n");
+  assert.doesNotMatch(spending, /Sale of a plot/, "income is not spending");
+  assert.doesNotMatch(answer, /\d \+ \d|2,000,500|2,450,000|692,000|2,842,000/, "no sums across currencies or kinds");
 });
 
 test("confirm writes only what was chosen: the linked update, the stage", async (t) => {

@@ -8,7 +8,7 @@ import { dateRange, formatDay, summaryLine } from "./savedSummary.js";
 const DAY_MS = 24 * 60 * 60 * 1000;
 const AHEAD_DAYS = 60;
 const RECENT_DAYS = 14;
-const OPEN = ["active", "dormant"];
+const OPEN = ["active", "planned", "dormant"];
 
 export const FOCUS_QUESTION = /\b(focus (?:on|this|today|now|first)|should i focus|to focus|prioriti[sz]e|priorit(?:y|ies)|what should i (?:do|work on|tackle|start)|what(?:'s| is) (?:next|coming up|ahead)|coming up|upcoming|next (?:actions?|steps?)|plan (?:my|the) (?:week|day|month)|nifanye nini|kipaumbele)\b/i;
 

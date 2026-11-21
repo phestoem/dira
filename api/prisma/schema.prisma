@@ -111,7 +111,7 @@ model Event {
   // milestone | setback | social | health
   eventType           String
   space               String    @default("personal")
-  // active | completed | cancelled | dormant
+  // active | planned | completed | cancelled | dormant | archived (planned: decided or intended, not done yet)
   status              String    @default("active")
   urgency             Float     @default(0.5)
   emotionalWeight     Float     @default(0.5)
