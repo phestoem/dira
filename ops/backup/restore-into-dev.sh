@@ -3,6 +3,9 @@
 #   1. stops the dev API (port 4801, cwd /opt/qusaz/dira-dev/api only)
 #   2. dumps dira_dev first (BACKUP_DIR)
 #   3. drops and recreates dira_dev (owner dira_user) and restores the dump, timed
+#   3b. restores the uploads archive of the same backup (uploads_<stamp>.tar next to the dump) into dev's uploads
+#       folder: checksum and every file checked against MANIFEST.sha256, folder 700, files 600; dev's previous uploads
+#       kept in BACKUP_DIR; paths in dira_dev rewritten from prod's folder to dev's, and every referenced file checked
 #   4. clears refresh_tokens (prod sessions must not work on dev)
 #   5. checks dev's JWT_SECRET differs from prod's by fingerprint (never printed); if it matches, writes a new one
 #   6. makes sure DIRA_DISABLE_CRON=true and DIRA_BRIDGE=off in dev .env, and that dev has no Resend key or bridge
@@ -19,6 +22,7 @@ PROD_ENV=${PROD_ENV:-/opt/qusaz/dira/api/.env}
 PG_CONTAINER=${PG_CONTAINER:-qusaz-postgres}
 PG_USER=${PG_USER:-postgres}
 BACKUP_DIR=${BACKUP_DIR:-/opt/qusaz/backups/dira_dev}
+PROD_UPLOADS=${PROD_UPLOADS:-/opt/qusaz/dira-data/uploads}
 DEV_PORT=4801
 STAMP=$(date +%Y%m%d_%H%M%S)
 
@@ -30,7 +34,21 @@ fingerprint() { printf '%s' "$1" | sha256sum | cut -c1-16; }
 
 [ -f "$DUMP" ] || fail "no dump at $DUMP"
 [ -f "$DEV_ENV" ] || fail "no dev env at $DEV_ENV"
+DEV_UPLOADS=$(env_value "$DEV_ENV" DIRA_UPLOAD_DIR || true)
+case "$DEV_UPLOADS" in "$DEV_DIR"/*) ;; *) fail "dev .env DIRA_UPLOAD_DIR must be inside $DEV_DIR (is '${DEV_UPLOADS}')" ;; esac
+UTAR="$(dirname "$DUMP")/uploads_$(basename "$DUMP" .dump | sed 's/^[^_]*_//').tar"
+[ -f "$UTAR" ] || fail "no uploads archive next to the dump ($UTAR)"
 mkdir -p "$BACKUP_DIR" && chmod 700 "$BACKUP_DIR"
+
+# 0. Check the uploads archive file by file before anything in dev changes; a bad archive stops here.
+UWORK="$DEV_DIR/data/.restore-$STAMP"
+trap 'rm -rf "$UWORK"' EXIT
+[ "$(sha256sum "$UTAR" | awk '{print $1}')" = "$(cat "$UTAR.sha256" 2>/dev/null)" ] || fail "checksum mismatch for $(basename "$UTAR")"
+( umask 077; mkdir -p "$UWORK" ) && tar -xf "$UTAR" -C "$UWORK" || fail "could not unpack $(basename "$UTAR")"
+[ -f "$UWORK/MANIFEST.sha256" ] || fail "no MANIFEST.sha256 in $(basename "$UTAR")"
+[ ! -s "$UWORK/MANIFEST.sha256" ] || ( cd "$UWORK" && sha256sum --quiet -c MANIFEST.sha256 ) || fail "uploads do not match their manifest"
+ufiles=$(wc -l < "$UWORK/MANIFEST.sha256"); rm -f "$UWORK/MANIFEST.sha256"
+say "uploads archive $(basename "$UTAR"): $ufiles file(s), all match the manifest"
 
 # 1. Stop the dev API.
 pid=$(ss -ltnp 2>/dev/null | grep ":$DEV_PORT " | grep -oP 'pid=\K[0-9]+' || true)
@@ -55,6 +73,28 @@ psql_db postgres "CREATE DATABASE dira_dev OWNER dira_user"
 docker exec -i "$PG_CONTAINER" pg_restore -U "$PG_USER" --exit-on-error -d dira_dev < "$DUMP" || fail "pg_restore failed (dira_dev was saved to $pre)"
 end=$(date +%s.%N)
 say "restored $(basename "$DUMP") in $(python3 -c "print(round($end-$start,2))") s"
+
+# 3b. The checked uploads replace dev's, then the paths dira_dev holds point at dev's folder.
+if [ -d "$DEV_UPLOADS" ] && [ -n "$(ls -A "$DEV_UPLOADS")" ]; then
+  mv "$DEV_UPLOADS" "$BACKUP_DIR/dev-uploads-pre-restore-$STAMP" && say "dev's previous uploads kept in $BACKUP_DIR/dev-uploads-pre-restore-$STAMP"
+else
+  rm -rf "$DEV_UPLOADS"
+fi
+mkdir -p "$(dirname "$DEV_UPLOADS")" && mv "$UWORK" "$DEV_UPLOADS"
+find "$DEV_UPLOADS" -type d -exec chmod 700 {} + && find "$DEV_UPLOADS" -type f -exec chmod 600 {} +
+from=$PROD_UPLOADS to=$DEV_UPLOADS
+psql_db dira_dev "UPDATE input_queue SET \"filePath\" = replace(\"filePath\", '$from/', '$to/') WHERE \"filePath\" LIKE '$from/%'" >/dev/null
+psql_db dira_dev "UPDATE events SET \"sourceFile\" = replace(\"sourceFile\", '$from/', '$to/') WHERE \"sourceFile\" LIKE '$from/%'" >/dev/null
+psql_db dira_dev "UPDATE events SET attachments = replace(attachments::text, '$from/', '$to/')::jsonb WHERE attachments::text LIKE '%$from/%'" >/dev/null
+psql_db dira_dev "UPDATE visions SET inspirations = replace(inspirations::text, '$from/', '$to/')::jsonb WHERE inspirations::text LIKE '%$from/%'" >/dev/null
+left=$(psql_db dira_dev "SELECT (SELECT count(*) FROM input_queue WHERE \"filePath\" LIKE '$from/%') + (SELECT count(*) FROM events WHERE attachments::text LIKE '%$from/%' OR \"sourceFile\" LIKE '$from/%')")
+[ "$left" = 0 ] || fail "$left row(s) still point at prod's uploads folder"
+refs=$(psql_db dira_dev "SELECT \"filePath\" FROM input_queue WHERE \"filePath\" LIKE '$to/%' UNION SELECT a->>'path' FROM events, jsonb_array_elements(CASE WHEN jsonb_typeof(attachments)='array' THEN attachments ELSE '[]'::jsonb END) a WHERE a->>'path' LIKE '$to/%'")
+present=0; missing=0
+for path in $refs; do if [ -f "$path" ]; then present=$((present + 1)); else missing=$((missing + 1)); say "  referenced, not in the archive: $path"; fi; done
+lost=$(psql_db dira_dev "SELECT count(*) FROM input_queue WHERE \"filePath\" LIKE '/tmp/%'")
+say "uploads: $ufiles file(s) from $(basename "$UTAR") verified into $DEV_UPLOADS (700/600); referenced $((present + missing)), present $present, missing $missing; $lost older reference(s) to /tmp (lost before the folder existed)"
+[ "$missing" = 0 ] || fail "$missing referenced upload(s) missing from the archive"
 
 # 4. Prod sessions do not carry over.
 psql_db dira_dev "DELETE FROM refresh_tokens" >/dev/null

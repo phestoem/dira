@@ -92,6 +92,12 @@ if [ -n "$UPLOAD_DIR" ]; then
   [ ! -s "$WORK/uploads/MANIFEST.sha256" ] || ( cd "$WORK/uploads" && sha256sum --quiet -c MANIFEST.sha256 ) || fail "uploads in $(basename "$UTAR") do not match their manifest"
   ufiles=$(wc -l < "$WORK/uploads/MANIFEST.sha256")
   ulive=$(find "$UPLOAD_DIR" -type f 2>/dev/null | wc -l)
+  # Every upload the restored database points at is in the archive (references to /tmp were lost before 14 Nov).
+  refs=$(psql_db "$SCRATCH" "SELECT \"filePath\" FROM input_queue WHERE \"filePath\" LIKE '$UPLOAD_DIR/%' UNION SELECT a->>'path' FROM events, jsonb_array_elements(CASE WHEN jsonb_typeof(attachments)='array' THEN attachments ELSE '[]'::jsonb END) a WHERE a->>'path' LIKE '$UPLOAD_DIR/%'") || fail "could not list referenced uploads"
+  umissing=0; urefs=0
+  for path in $refs; do urefs=$((urefs + 1)); [ -f "$WORK/uploads/${path#"$UPLOAD_DIR"/}" ] || { umissing=$((umissing + 1)); log "  referenced, not in the archive: $path"; }; done
+  [ "$umissing" = 0 ] || fail "$umissing referenced upload(s) missing from $(basename "$UTAR")"
+  log "  uploads referenced by the restored database: $urefs, all in the archive"
   log "  uploads: $(basename "$UTAR") restores $ufiles files, all match; live folder has $ulive"
 fi
 
