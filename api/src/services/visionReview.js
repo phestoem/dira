@@ -89,7 +89,10 @@ export function eventText(event) {
 
 export function visionEvents(vision, keys, events) {
   const linked = new Set((Array.isArray(vision.connectedEvents) ? vision.connectedEvents : []).map((link) => link?.eventId).filter(Boolean));
-  return events.filter((event) => linked.has(event.id) || keys.some((key) => phraseIn(key, eventText(event))));
+  // Records linked to the vision (a project, a place) bring their events: those whose people/places refs carry them.
+  const records = new Set((Array.isArray(vision.connectedEntities) ? vision.connectedEntities : []).map((link) => link?.entityId).filter(Boolean));
+  const viaRecord = (event) => [...(Array.isArray(event.people) ? event.people : []), ...(Array.isArray(event.places) ? event.places : [])].some((ref) => ref?.entityId && records.has(ref.entityId));
+  return events.filter((event) => linked.has(event.id) || viaRecord(event) || keys.some((key) => phraseIn(key, eventText(event))));
 }
 
 const PLANNED = /\b(plan(?:s|ning|ned)?|will|intend(?:s|ing)?|going to|next (?:month|year|week)|to be (?:done|built|finished))\b/i;
@@ -150,7 +153,10 @@ export function visionAnswer(vision, records, related = [], now = new Date()) {
     lines.push("- No events recorded for it yet.");
   } else {
     lines.push(done.length ? `- Done: ${done.map(line).join("; ")}.` : "- Done: nothing recorded.");
-    lines.push(spent.length ? `- Spent: ${totals(spent)} (${spent.map((event) => `${event.title}: ${amountText(event.financials)}`).join("; ")}).` : "- Spent: no amounts recorded.");
+    // Only what the records hold, so the total is labelled as such and every record behind it is named.
+    lines.push(spent.length
+      ? `- Recorded spending: ${totals(spent)}, from ${spent.length} record${spent.length === 1 ? "" : "s"}: ${spent.map((event) => `${event.title} (${amountText(event.financials)}${event.occurredAt ? `, ${formatDay(event.occurredAt, event.datePrecision)}` : ""})`).join("; ")}.`
+      : "- Recorded spending: none recorded.");
     lines.push(planned.length ? `- Planned: ${planned.map(line).join("; ")}.` : "- Planned: nothing recorded.");
     if (other.length) lines.push(`- Also recorded: ${other.map(line).join("; ")}.`);
   }

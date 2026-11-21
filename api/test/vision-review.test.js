@@ -48,6 +48,12 @@ test("events belong to a vision by link or by its name; the answer sorts them an
   const records = visionEvents(vision, keys, EVENTS);
   assert.deepEqual(records.map((event) => event.id), ["e1", "e2", "e3"]);
   assert.deepEqual(visionEvents(VISIONS[2], nameKeys(VISIONS[2], "revisit mountain hut", EVENTS), EVENTS).map((event) => event.id), ["e9"]);
+  // An event linked to a record the vision links to (its project) belongs to the vision even without the name.
+  const withProject = { ...vision, connectedEntities: [...vision.connectedEntities, { entityId: "p1", role: "project" }] };
+  const tagged = [...EVENTS, { id: "e5", title: "Well dug", rawInput: "The well is dug.", people: [{ entityId: "p1", role: "project" }], financials: { amount: 80, currency: "EUR" } }];
+  const all = visionEvents(withProject, nameKeys(withProject, "revisit Quiet Harbour Garden vision", tagged), tagged);
+  assert.deepEqual(all.map((event) => event.id), ["e1", "e2", "e3", "e5"]);
+  assert.match(visionAnswer(withProject, all, [], NOW), /Recorded spending: 200 EUR, from 2 records: Seeds bought \(120 EUR\); Well dug \(80 EUR\)\./);
   const sorted = sortRecords(records, NOW);
   assert.deepEqual(sorted.done.map((event) => event.id), ["e1"]);
   assert.deepEqual(sorted.planned.map((event) => event.id), ["e3"]);
@@ -55,7 +61,8 @@ test("events belong to a vision by link or by its name; the answer sorts them an
   const answer = visionAnswer(vision, records, [VISIONS[1]], NOW);
   assert.match(answer, /Stage: seed/);
   assert.match(answer, /Done: First cabin at Quiet Harbour \(cabin 1 started\)/);
-  assert.match(answer, /Spent: 120 EUR/);
+  assert.match(answer, /Recorded spending: 120 EUR, from 1 record: Seeds bought \(120 EUR\)\./);
+  assert.doesNotMatch(answer, /- Spent:/);
   assert.match(answer, /Planned: Autumn planting \(Oct 2025\)/);
   assert.match(answer, /Related vision: Stone Wall for Quiet Harbour \(seed\)/);
   assert.match(answer, /Not recorded: /);

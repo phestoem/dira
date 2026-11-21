@@ -238,7 +238,7 @@ export const CASES = [
       const result = turn.response.result || {};
       const text = result.type === "relationship_preview"
         ? (result.content?.edges || []).map((edge) => edge.line).join("\n")
-        : /Already recorded/.test(answer) ? answer : "";
+        : /Already recorded/.test(answer) ? answer.replace(/Left out, as you said:[^.]*\./, "") : "";
       if (!text) failures.push(`no connection card (got ${result.type})`);
       for (const name of ["Patrick", "Presley", "Powell", "Prisha"]) if (text && !new RegExp(`\\b${name}\\b`).test(text)) failures.push(`${name} missing`);
       if (/\bCareen\b/.test(text)) failures.push("Careen included despite the exception");
@@ -278,7 +278,12 @@ export const CASES = [
       const failures = [...answered(turn), ...has("Tuliza Nafsi Eco Living Vision")(answer)];
       if (!/Stage: /.test(answer)) failures.push("does not give the stage");
       if (!/Done: [^\n]*second house/i.test(answer)) failures.push("Done does not include the second house");
-      if (!/Spent: [^\n]*392,000 TSH/.test(answer)) failures.push("Spent does not include 392,000 TSH");
+      const spending = answer.split("\n").find((line) => /^- Recorded spending: /.test(line)) || "";
+      if (!spending) failures.push('no "Recorded spending" line');
+      if (!/[\p{L}][^;:]* \(392,000 TSH/u.test(spending)) failures.push("Recorded spending does not list the 392,000 TSH record");
+      // A total names the records behind it: as many listed amounts as the count says.
+      const count = Number((spending.match(/from (\d+) records?:/) || [])[1] || 0);
+      if (spending && count !== (spending.split(":").slice(2).join(":").match(/\([\d,.]+ [A-Z]{3}/g) || []).length) failures.push("the total does not list each record behind it");
       if (!/Not recorded: /.test(answer)) failures.push("does not say what is not recorded");
       if (!/Related vision[^\n]*Uzio wa Nafsi Jambiani/.test(answer)) failures.push("does not name the related fence vision");
       if (GENERIC_OFFERS.test(answer)) failures.push(`generic offer: "${answer.match(GENERIC_OFFERS)[0]}"`);

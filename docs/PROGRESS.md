@@ -14,6 +14,27 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-21: vision answers say "Recorded spending" and name every
+  record behind the total ("2 records: A (x TSH, date); B (…)"); events
+  linked to a record the vision links to (its project) count as the
+  vision's. Chain answers list people in a fixed order (you, then birth
+  date, then name): a unit test failed on database order. Golden check for
+  the stated-connections case fixed (see the deploy entry). npm test
+  100/100; golden fixture 24/24 + reset gate; live readonly 24/24
+  (logs/golden-order-*-20261121-0944.log). Not deployed.
+- 2026-11-21: one-off project record proposed on prod (dry run only,
+  read-only): create the project, link it to the eco-living vision, link 8
+  events. Waiting for Phesto's choice; details in chat.
+- 2026-11-21 09:26: deployed 2fcea8a (pronoun follow-ups, gender
+  filters, singular/plural, vision answers, vision progress card) to prod.
+  main fast-forwarded 4477cd1..2fcea8a, pushed; prod merged it as f874483.
+  Backup first (dira_20261121_092611.dump); no migration; both services
+  active; /health ok; prod .env 600. Prod golden readonly 23/24, no rows
+  changed (logs/deploy-20261121a.log, logs/golden-prod-readonly-20261121a.log).
+  The one failure was the check, not the answer: after the confirmed card
+  the statement answers "Already recorded … Left out, as you said: <the
+  exception>", and the check read the exception's name in that sentence.
+  Check fixed on dev (it now ignores the "Left out" sentence).
 - 2026-11-21: progress statements on a vision (real-use 2 of 2).
   - A statement with progress ("one X complete, the second ~70%") that
     names a vision, or follows a question about one, gives a card instead
