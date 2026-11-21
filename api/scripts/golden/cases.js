@@ -285,7 +285,8 @@ export const CASES = [
       const count = Number((spending.match(/from (\d+) records?:/) || [])[1] || 0);
       if (spending && count !== (spending.split(":").slice(2).join(":").match(/\([\d,.]+ [A-Z]{3}/g) || []).length) failures.push("the total does not list each record behind it");
       if (!/Not recorded: /.test(answer)) failures.push("does not say what is not recorded");
-      if (!/Related vision[^\n]*Uzio wa Nafsi Jambiani/.test(answer)) failures.push("does not name the related fence vision");
+      // The fence: a related vision, or (since 2026-11-21, when that vision became a planned event) one of its records.
+      if (!/(Related vision|Planned|Also recorded)[^\n]*Uzio wa Nafsi Jambiani/.test(answer)) failures.push("does not name the fence (vision or record)");
       if (GENERIC_OFFERS.test(answer)) failures.push(`generic offer: "${answer.match(GENERIC_OFFERS)[0]}"`);
       if (/\bon track\b/i.test(answer)) failures.push('says "on track"');
       return failures;

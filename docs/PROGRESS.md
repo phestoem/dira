@@ -14,6 +14,16 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-21 10:34: deployed d3dd005 (uploads in a persistent folder,
+  uploads in the backup) to prod; backup dira_20261121_103410.dump plus
+  uploads_20261121_103410.tar (0 files) first; prod logs the new folder at
+  start; both services active; /health ok (logs/deploy-20261121c.log).
+  Prod golden readonly 23/24, no rows changed
+  (logs/golden-prod-readonly-20261121c.log): the vision case expected the
+  fence as a related vision, which the approved one-off archived; it is now
+  a record of the project. Check updated: fixture and prod both pass that
+  case. The vision answer on prod lists 3 records behind the recorded
+  spending total.
 - 2026-11-21: uploaded originals kept, and backed up.
   - Found: uploads went to /tmp/dira-uploads, emptied on 14 Nov (folder
     recreated 06:09). Prod references 13 files: all lost, nothing to copy;
