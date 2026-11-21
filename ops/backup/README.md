@@ -53,6 +53,14 @@ kept. The NUC and R2 steps are untested here: no access from this session.
    Alternate the monthly `SOURCE` (r2 / nuc) if both copies should be proven; r2 is the one that survives the
    house.
 
+## Uploaded originals (2026-11-21)
+DIRA keeps uploaded files in `/opt/qusaz/dira-data/uploads` (folder 700, files 600; dev: `DIRA_UPLOAD_DIR` in its
+.env, `/opt/qusaz/dira-dev/data/uploads`). They used to go to `/tmp/dira-uploads`, which was emptied on 14 Nov: every
+original saved before then is lost. Each backup run also writes `uploads_<stamp>.tar` (with `MANIFEST.sha256`
+inside) next to the dump: same retention, mirrored to the NUC with the daily/weekly folders, and added to the restic
+snapshot once R2 is set up. The restore test unpacks the newest archive and checks every file against the manifest.
+To restore: `tar -xf uploads_<stamp>.tar -C /opt/qusaz/dira-data/uploads` (then `rm MANIFEST.sha256` there).
+
 ## Restoring prod for real
 
 1. Stop writes: `sudo systemctl stop dira-api`.
