@@ -370,7 +370,10 @@ export function chainedPeopleAnswer(question, context) {
     label.push(last ? word : `${word}${/s$/.test(step.word) ? "'" : "'s"}`);
     nodes = next;
   }
-  const names = nodes.map((person) => (person.id === self.id ? `${person.name} (you)` : person.name));
+  // A fixed order, not the database's: you first, then by recorded birth date, then by name.
+  const rank = (person) => [person.id === self.id ? 0 : 1, birthOf(person)?.iso || "9999", person.name.toLowerCase()];
+  const ordered = [...nodes].sort((a, b) => { const x = rank(a); const y = rank(b); return x[0] - y[0] || x[1].localeCompare(y[1]) || x[2].localeCompare(y[2]); });
+  const names = ordered.map((person) => (person.id === self.id ? `${person.name} (you)` : person.name));
   const whose = label.slice(0, -1).join(" ");
   const asked = label.at(-1);
   if (/\bhow many\b/i.test(question)) {
