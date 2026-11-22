@@ -14,6 +14,11 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22 09:28: deployed d95ac67 (plain-feeling guard + missing-links
+  card) to prod, after Phesto's yes to fast-forward main. Backup
+  dira_20261122_092747.dump + uploads tar first; both services active;
+  /health ok; prod .env 600 (logs/deploy-20261122.log). Prod golden
+  readonly 26/26, no rows changed (logs/golden-prod-readonly-20261122.log).
 - 2026-11-22: plain first-person feeling with no fact (no number, money,
   date, event verb, clause or question) goes to the journal whatever the
   classifier says (isPlainFeeling in intentRouter). npm test 111/111;
@@ -24,8 +29,7 @@ plan. One item per commit, family golden test before each commit.
   (place Kisarawe, Tanzania) created, 5 events linked (purchase, payment
   plan, cost estimation, renovation plans, the December trip); nothing
   else changed. Checked read-only after.
-- 2026-11-22: missing-links question by code (not deployed; shown to
-  Phesto first). Records (events, visions) that name a project, place or
+- 2026-11-22: missing-links question by code (deployed 09:28). Records (events, visions) that name a project, place or
   person (or a project's place) and are not tied to it: no entity ref, no
   relationship row of any status, no vision holding both. Own name masks a
   parent's name inside it; a name word shared by several records is not a
