@@ -324,35 +324,95 @@ function nextDate(event, today) {
   return options[0] || null;
 }
 
-// "Coming up": open records dated in the next 30 days, soonest first, with days left and what is not on record yet
-// (for a trip or building work: the record itself, records of the same project, and for a trip, trip records near it).
+// "Coming up": open records dated in the next 30 days, grouped. Records of the same project form one group, and a
+// trip takes in every record dated within its dates (a month-only date counts when its month overlaps them). A
+// group leads with its trip (or, without one, its project's name); inside it, dated records come before month-only
+// ones. What is not on record yet is said once per group, checked against the group's records, the records of its
+// projects and, for a trip, trip records near it.
 export function comingUpFrom(events, today) {
   const open = events.filter((event) => !CLOSED.has(event.status));
-  const out = [];
+  const items = [];
   for (const event of open) {
     const next = nextDate(event, today);
     if (!next) continue;
     const title = String(event.title || "");
     const kind = TRIP.test(title) ? "trip" : WORK.test(title) ? "work" : null;
-    let notRecorded = [];
-    if (kind) {
-      const projects = new Set(projectIds(event));
-      const at = new Date(next.value).getTime();
-      const related = open.filter((other) => other.id === event.id
-        || projectIds(other).some((id) => projects.has(id))
-        || (kind === "trip" && TRIP.test(String(other.title || "")) && other.occurredAt && Math.abs(new Date(other.occurredAt).getTime() - at) <= 30 * DAY_MS));
-      notRecorded = missing(kind, related, utcDay(today));
-    }
     const day = calendarDay(next.value);
-    out.push({
-      title,
-      date: next.precision === "month" ? `${monthName(day.month)} ${day.year}` : formatMonthDay(day.month, day.day),
-      daysAway: next.daysAway,
-      monthOnly: next.precision === "month",
-      notRecorded,
+    const monthOnly = next.precision === "month";
+    const start = monthOnly ? Date.UTC(day.year, day.month - 1, 1) : Date.UTC(day.year, day.month - 1, day.day);
+    const ownEnd = monthOnly ? Date.UTC(day.year, day.month, 0) : start;
+    const endsDay = kind === "trip" && event.endsAt ? calendarDay(event.endsAt) : null;
+    const endsAt = endsDay ? Date.UTC(endsDay.year, endsDay.month - 1, endsDay.day) : null;
+    items.push({
+      event, kind, monthOnly, start, end: Math.max(ownEnd, endsAt && endsAt > start ? endsAt : ownEnd),
+      line: {
+        title,
+        date: monthOnly ? `${monthName(day.month)} ${day.year}` : formatMonthDay(day.month, day.day),
+        daysAway: next.daysAway,
+        monthOnly,
+        until: endsDay && endsAt > start ? `${formatMonthDay(endsDay.month, endsDay.day)}${endsDay.year !== day.year ? ` ${endsDay.year}` : ""}` : null,
+      },
     });
   }
-  return out.sort((left, right) => left.daysAway - right.daysAway || left.title.localeCompare(right.title));
+  // Groups: union of records that share a project, and of a trip with what is dated within it.
+  const parent = items.map((_, index) => index);
+  const find = (index) => (parent[index] === index ? index : (parent[index] = find(parent[index])));
+  const join = (left, right) => { parent[find(left)] = find(right); };
+  items.forEach((left, i) => items.forEach((right, j) => {
+    if (j <= i) return;
+    const shared = projectIds(left.event).some((id) => projectIds(right.event).includes(id));
+    const overlap = left.start <= right.end && right.start <= left.end;
+    if (shared || ((left.kind === "trip" || right.kind === "trip") && overlap)) join(i, j);
+  }));
+  const byRoot = new Map();
+  items.forEach((item, index) => byRoot.set(find(index), [...(byRoot.get(find(index)) || []), item]));
+  const order = (left, right) => Number(left.monthOnly) - Number(right.monthOnly) || left.line.daysAway - right.line.daysAway || left.line.title.localeCompare(right.line.title);
+  const groups = [...byRoot.values()].map((members) => {
+    members.sort(order);
+    // The trip that leads is the one with its dates on record (a ticket is a trip record too), then the soonest.
+    const trips = members.filter((item) => item.kind === "trip");
+    const head = trips.find((item) => item.line.until) || trips[0] || (members.length === 1 ? members[0] : null);
+    // Each check looks at its own records, so one project's payments never count as a trip's budget. A trip: the
+    // group's trip records and trip records near it. Building work: the group's work records and the records of
+    // their projects.
+    const trip = head?.kind === "trip" ? head : null;
+    const isTripRecord = (event) => TRIP.test(String(event.title || ""));
+    const workProjects = new Set(members.filter((item) => item.kind === "work").flatMap((item) => projectIds(item.event)));
+    const relatedFor = {
+      trip: () => open.filter((other) => isTripRecord(other) && (members.some((item) => item.event.id === other.id)
+        || (other.occurredAt && Math.abs(new Date(other.occurredAt).getTime() - trip.start) <= 30 * DAY_MS))),
+      work: () => open.filter((other) => members.some((item) => item.kind === "work" && item.event.id === other.id)
+        || projectIds(other).some((id) => workProjects.has(id))),
+    };
+    const notRecorded = [];
+    for (const kind of ["trip", "work"]) {
+      if (kind === "trip" ? !trip : !members.some((item) => item.kind === "work")) continue;
+      for (const label of missing(kind, relatedFor[kind](), utcDay(today))) if (!notRecorded.includes(label)) notRecorded.push(label);
+    }
+    return {
+      ...(head ? head.line : { title: projectName(members), date: null, daysAway: members[0].line.daysAway, monthOnly: members[0].monthOnly, until: null }),
+      project: !head,
+      items: members.filter((item) => item !== head).map((item) => item.line),
+      notRecorded,
+      sortKey: [Number(members[0].monthOnly), members[0].line.daysAway],
+    };
+  });
+  return groups
+    .sort((left, right) => left.sortKey[0] - right.sortKey[0] || left.sortKey[1] - right.sortKey[1] || left.title.localeCompare(right.title))
+    .map(({ sortKey, ...group }) => group);
+}
+
+// The name of the project a group's records share (the one most of them name).
+function projectName(members) {
+  const counts = new Map();
+  for (const item of members) {
+    for (const ref of (Array.isArray(item.event.people) ? item.event.people : []).filter((value) => value?.role === "project" && value.entityId)) {
+      const entry = counts.get(ref.entityId) || { name: ref.name, count: 0 };
+      entry.count += 1;
+      counts.set(ref.entityId, entry);
+    }
+  }
+  return [...counts.values()].sort((left, right) => right.count - left.count)[0]?.name || members[0].line.title;
 }
 
 // Open payments this month: records with an amount to pay (not income) that are due this month, or planned or
@@ -548,12 +608,18 @@ function section(label, lines) {
   </div>`;
 }
 
-function comingUpLine(item) {
-  const when = item.monthOnly
-    ? `${escapeHtml(item.date)} (no day recorded)`
-    : `${escapeHtml(item.date)}, ${item.daysAway === 0 ? "today" : item.daysAway === 1 ? "tomorrow" : `${item.daysAway} days left`}`;
-  const gaps = item.notRecorded?.length ? `<br><span style="color:#6B6963;font-size:13px;">Not recorded yet: ${escapeHtml(item.notRecorded.join(", "))}</span>` : "";
-  return `${escapeHtml(item.title)}: ${when}${gaps}`;
+function comingUpWhen(item) {
+  if (item.monthOnly) return `${escapeHtml(item.date)} (no day recorded)`;
+  const span = item.until ? `${escapeHtml(item.date)} to ${escapeHtml(item.until)}` : escapeHtml(item.date);
+  return `${span}, ${item.daysAway === 0 ? "today" : item.daysAway === 1 ? "tomorrow" : `${item.daysAway} days left`}`;
+}
+
+// A group: its lead line, then its other records indented, then once what is not on record yet.
+function comingUpLine(group) {
+  const lead = group.project ? `<strong>${escapeHtml(group.title)}</strong>` : `${escapeHtml(group.title)}: ${comingUpWhen(group)}`;
+  const rows = (group.items || []).map((item) => `<br><span style="padding-left:16px;">· ${escapeHtml(item.title)}: ${comingUpWhen(item)}</span>`).join("");
+  const gaps = group.notRecorded?.length ? `<br><span style="color:#6B6963;font-size:13px;">Not recorded yet: ${escapeHtml(group.notRecorded.join(", "))}</span>` : "";
+  return `${lead}${rows}${gaps}`;
 }
 
 function birthdayLine(item) {

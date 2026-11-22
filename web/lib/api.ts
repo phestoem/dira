@@ -16,7 +16,16 @@ export type DiraUser = {
 };
 
 export type DigestPreview = {
-  comingUp: Array<{ title: string; date: string; daysAway: number; monthOnly: boolean; notRecorded: string[] }>;
+  comingUp: Array<{
+    title: string;
+    date: string | null;
+    until: string | null;
+    daysAway: number;
+    monthOnly: boolean;
+    project: boolean;
+    items: Array<{ title: string; date: string; until: string | null; daysAway: number; monthOnly: boolean }>;
+    notRecorded: string[];
+  }>;
   openPayments: Array<{ title: string; amount: string; date: string; daysAway: number }>;
   upcomingBirthdays: Array<{ name: string; date: string; daysAway: number }>;
   upcomingEvents: Array<{ title: string; date: string; daysAway: number }>;

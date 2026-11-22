@@ -10,28 +10,61 @@ const TODAY = { year: 2025, month: 6, day: 10, hour: 7, weekday: "Tuesday" };
 const day = (iso) => new Date(`${iso}T00:00:00Z`);
 const EVENT = (id, title, extra = {}) => ({ id, title, status: "active", eventType: "personal", people: [], financials: {}, createdAt: day("2025-05-01"), ...extra });
 
-test("coming up: open dated records within 30 days, soonest first, with what is not recorded", () => {
+test("coming up: open dated records within 30 days, grouped by trip and project, what is not recorded said once", () => {
   const project = [{ entityId: "p1", name: "Harbour Cabins", role: "project" }];
   const events = [
     EVENT("t1", "Trip to Corrin", { occurredAt: day("2025-06-28"), endsAt: day("2025-07-05") }),
     EVENT("t2", "Flight tickets to Corrin", { occurredAt: day("2025-06-28"), financials: { amount: 400, currency: "EUR", direction: "expense" } }),
     EVENT("w1", "Cabin roof repair", { occurredAt: day("2025-07-01"), datePrecision: "month", people: project }),
     EVENT("w2", "Roof quotation from the fundi", { people: project }),
+    EVENT("w3", "Cabin fence repair", { occurredAt: day("2025-07-03"), people: project }),
     EVENT("x1", "Dentist", { occurredAt: day("2025-06-11") }),
     EVENT("x2", "Done already", { occurredAt: day("2025-06-12"), status: "completed" }),
     EVENT("x3", "Too far", { occurredAt: day("2025-07-20") }),
     EVENT("x4", "In the past", { occurredAt: day("2025-06-01") }),
   ];
-  const items = comingUpFrom(events, TODAY);
-  assert.deepEqual(items.map((item) => [item.title, item.daysAway]), [["Dentist", 1], ["Flight tickets to Corrin", 18], ["Trip to Corrin", 18], ["Cabin roof repair", 21]]);
-  const trip = items.find((item) => item.title === "Trip to Corrin");
+  const groups = comingUpFrom(events, TODAY);
+  assert.deepEqual(groups.map((group) => [group.title, group.daysAway, group.items.map((item) => item.title)]), [
+    ["Dentist", 1, []],
+    // Within the trip's dates: the ticket and the fence (dated) come before the roof (month only); the fence joins
+    // through its project too.
+    ["Trip to Corrin", 18, ["Flight tickets to Corrin", "Cabin fence repair", "Cabin roof repair"]],
+  ]);
+  const trip = groups[1];
   assert.equal(trip.date, "28 June");
-  assert.deepEqual(trip.notRecorded, ["accommodation", "local transport"], "the ticket record covers flights and budget; the end date covers the return");
-  const roof = items.find((item) => item.title === "Cabin roof repair");
-  assert.equal(roof.monthOnly, true);
-  assert.equal(roof.date, "July 2025");
-  assert.ok(roof.notRecorded.includes("payments") && !roof.notRecorded.includes("contractor") && !roof.notRecorded.includes("cost estimate"));
-  assert.deepEqual(items.find((item) => item.title === "Dentist").notRecorded, []);
+  assert.equal(trip.until, "5 July");
+  assert.equal(trip.items[2].monthOnly, true);
+  assert.equal(trip.items[2].date, "July 2025");
+  // The ticket covers flights and budget, the end date the return; the roof quotation covers contractor and cost.
+  assert.deepEqual(trip.notRecorded, ["accommodation", "local transport", "payments", "materials"]);
+  assert.equal(new Set(trip.notRecorded).size, trip.notRecorded.length);
+  assert.deepEqual(groups[0].notRecorded, []);
+});
+
+test("coming up: records of one project without a trip sit under the project's name", () => {
+  const project = [{ entityId: "p1", name: "Harbour Cabins", role: "project" }];
+  const events = [
+    EVENT("w1", "Cabin roof repair", { occurredAt: day("2025-07-01"), datePrecision: "month", people: project }),
+    EVENT("w3", "Cabin fence repair", { occurredAt: day("2025-06-20"), people: project }),
+    EVENT("x1", "Dentist", { occurredAt: day("2025-06-11") }),
+  ];
+  const groups = comingUpFrom(events, TODAY);
+  assert.deepEqual(groups.map((group) => [group.title, group.project, group.items.map((item) => item.title)]), [
+    ["Dentist", false, []],
+    ["Harbour Cabins", true, ["Cabin fence repair", "Cabin roof repair"]],
+  ]);
+});
+
+test("coming up: a project's payments never count as a trip's budget", () => {
+  const project = [{ entityId: "p2", name: "Quiet Harbour", role: "project" }];
+  const events = [
+    EVENT("t1", "Trip to Corrin", { occurredAt: day("2025-06-28"), endsAt: day("2025-07-05") }),
+    EVENT("u1", "Travel and harbour update", { occurredAt: day("2025-07-01"), datePrecision: "month", people: project }),
+    EVENT("u2", "Harbour deposit paid", { people: project, financials: { amount: 900, currency: "EUR", direction: "expense" } }),
+  ];
+  const [group] = comingUpFrom(events, TODAY);
+  assert.equal(group.title, "Trip to Corrin");
+  assert.ok(group.notRecorded.includes("budget"), group.notRecorded.join(", "));
 });
 
 test("open payments: amounts due this month, not paid, not income", () => {
@@ -69,14 +102,16 @@ test("yesterday keeps only records saved from what the person sent", () => {
 
 test("the rendered digest: coming up first, payments said even when none, never a count of days for a vision", () => {
   const html = renderDigest({
-    comingUp: [{ title: "Trip to Corrin", date: "28 June", daysAway: 18, monthOnly: false, notRecorded: ["accommodation"] }],
+    comingUp: [{ title: "Trip to Corrin", date: "28 June", until: "5 July", daysAway: 18, monthOnly: false, project: false, items: [{ title: "Cabin roof repair", date: "July 2025", daysAway: 21, monthOnly: true }], notRecorded: ["accommodation"] }],
     openPayments: [], upcomingBirthdays: [], upcomingEvents: [], memorials: [], pendingQueue: 0,
     dormantVisions: [{ title: "Quiet", daysSinceTouch: 29, quietFor: "4 weeks" }],
     yesterday: [{ title: "Sent by them", kind: "event" }],
   }, TODAY);
   const order = ["Coming up", "Payments in June", "Visions", "Yesterday"].map((label) => html.indexOf(`>${label}<`));
   assert.ok(order.every((index, i) => index > 0 && (i === 0 || index > order[i - 1])), `sections out of order: ${order}`);
-  assert.match(html, /Trip to Corrin: 28 June, 18 days left/);
+  assert.match(html, /Trip to Corrin: 28 June to 5 July, 18 days left/);
+  assert.match(html, /· Cabin roof repair: July 2025 \(no day recorded\)/);
+  assert.equal(html.match(/Not recorded yet/g).length, 1);
   assert.match(html, /Not recorded yet: accommodation/);
   assert.match(html, /No open payments on record\./);
   assert.match(html, /Nothing new on “Quiet” for 4 weeks\./);

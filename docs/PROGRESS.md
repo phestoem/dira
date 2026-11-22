@@ -14,6 +14,20 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22: digest follow-up (not deployed; sample shown first). "Coming
+  up" is grouped: records sharing a project form one group, and a trip
+  takes in every record dated within its dates (a month-only date counts
+  when its month overlaps). A group leads with its trip (the one with an
+  end date, so a ticket record never leads), or else the project's name;
+  dated records before month-only ones. "Not recorded yet" once per group;
+  trip gaps judged from trip records only (a project's payments are not a
+  trip budget), work gaps from work records and their projects' records.
+  Sample: logs/digest-sample/digest-dev-20261122-grouped.html.
+- 2026-11-22 12:04: prod deploy of f0447fd (spending kind) + 1b2401d
+  (digest). Backup dira_20261122_120418.dump first; deploy.sh OK (prod
+  HEAD 071d228, its own merge commit); /health ok; prod readonly golden
+  27/27, no rows changed (logs/golden-prod-20261122-1205.log, deploy log
+  logs/deploy-20261122-1204.log).
 - 2026-11-22: digest (not deployed; sample shown to Phesto first).
   "Coming up" first: open records dated in the next 30 days (start or
   due; month-only dates without a day), days left, and what is not
@@ -773,6 +787,11 @@ plan. One item per commit, family golden test before each commit.
   (02:30 daily, 04:00 on the 1st). Steps in ops/backup/README.md.
 
 ## Latest scores
+2026-11-22 17:29, `personal` + grouped "Coming up": npm test 119/119
+(concurrency 2); fixture golden 27/27 + reset and upload gates
+(logs/golden-digestgroup-fixture-1725.log); live readonly 27/27, no rows
+changed (logs/golden-digestgroup-live-1725.log).
+Prod 2026-11-22 12:05 (f0447fd + 1b2401d): readonly golden 27/27.
 Prod 2026-11-18 23:07 (main 8698d0e): readonly golden 12/12.
 
 First measurement (2026-11-18, dev, both golden runs = 37 /home/input
@@ -824,8 +843,10 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
-- Waiting for Phesto: deploy of spending kind (f0447fd) + digest, after
-  review of the dev sample.
+- Waiting for Phesto: review of the grouped "Coming up" sample, then deploy.
+- Note: Postgres on this host is shared (max_connections 100, ~90 in use);
+  the full npm test can run out of slots. Run it as
+  `node --test --test-concurrency=2 test/` when that happens.
 - Deploy order (Phesto, 2026-11-22): plain-feeling fix first, live suite
   passing reliably (at least 3 runs), then deploy it with missing-links,
   fresh backup, prod golden.
