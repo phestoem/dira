@@ -820,6 +820,10 @@ plan. One item per commit, family golden test before each commit.
   (02:30 daily, 04:00 on the 1st). Steps in ops/backup/README.md.
 
 ## Latest scores
+Prod 2026-11-22 19:29, after Phesto applied connection_limit=5 +
+max_idle_connection_lifetime=300: readonly golden 27/27, no rows changed;
+prod API at most 5 connections over 315 one-second samples. Postgres total
+52 (dira 5, dira_dev 4 incl. the counting query), no orphaned engines.
 2026-11-22 17:29, `personal` + grouped "Coming up": npm test 119/119
 (concurrency 2); fixture golden 27/27 + reset and upload gates
 (logs/golden-digestgroup-fixture-1725.log); live readonly 27/27, no rows
@@ -876,7 +880,9 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
-- Waiting for Phesto: decision on the Postgres connection proposal
+- Waiting for Phesto: deploy of f3bf18f (library engine) with 36a5b71
+  (shutdown + dev restart script). Done meanwhile: the Postgres cleanup
+  below. Earlier note: decision on the Postgres connection proposal
   (read-only survey 2026-11-22: 8 orphaned dira-dev Prisma query engines,
   parent systemd, hold ~33 connections incl. 8 to dira; a psql in the
   postgres container idle since 2026-10-15 holds 1). Nothing changed.
