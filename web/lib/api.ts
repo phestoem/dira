@@ -278,7 +278,17 @@ export type LifeEvent = {
   createdAt: string;
   location: string | null;
   altimetrixEventType?: string | null;
+  // Detail only, for a record with an amount: its spending kind (set by hand or guessed) and what it is paid toward.
+  spending?: {
+    kind: SpendingKind;
+    kindSet: boolean;
+    guessed: SpendingKind;
+    partOf: { eventId: string; title: string } | null;
+    candidates: Array<{ id: string; title: string; amount: string }>;
+  } | null;
 };
+
+export type SpendingKind = "land" | "building" | "other";
 
 export async function listEvents(
   space?: IntakeSpace | "",
@@ -312,6 +322,8 @@ export async function updateEvent(
     space?: IntakeSpace;
     status?: string;
     altimetrixEventType?: string | null;
+    spendingKind?: SpendingKind | null;
+    partOf?: string | null;
   },
 ): Promise<LifeEvent> {
   const res = await apiFetch(`/events/${id}`, {

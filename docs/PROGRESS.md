@@ -14,6 +14,20 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22: spending kind correctable per record (not deployed; shown
+  to Phesto first). Event page: "Kind" (guessed, or land / building /
+  other set by hand) and "Paid toward" (another record with an amount);
+  kept in financials.spendingKind / financials.partOf, no migration.
+  PATCH checks: known kind, a target with an amount, no chains (a target
+  paid toward something, or a record others pay toward, is refused).
+  Vision answers: a set kind wins over the guess; a record paid toward
+  another listed one is shown once ("Paid toward a record above, not
+  added again") and is in no total. Golden case spending-corrections
+  (from the rows; fixture sets the water tank to building and adds a
+  purchase + instalments). npm test 112/112; fixture 27/27 + gates
+  (logs/golden-spending-fixture-20261122.log); live readonly 27/27, no
+  rows changed (logs/golden-spending-live-20261122.log). PATCH path tried
+  on dira_dev and undone.
 - 2026-11-22 09:28: deployed d95ac67 (plain-feeling guard + missing-links
   card) to prod, after Phesto's yes to fast-forward main. Backup
   dira_20261122_092747.dump + uploads tar first; both services active;
@@ -797,10 +811,12 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
-- Next (Phesto, 2026-11-21): spending kind as a field Phesto can correct
-  on each record (the cost sheet may be building). Phesto, 2026-11-22: the
-  Kisarawe payment plan (4,000 EUR) is instalments toward the 5,000 EUR
-  purchase, not extra spending: totals must count the purchase once.
+- Next (Phesto, 2026-11-22): the digest. Stale-vision nudge only after
+  14+ days without activity, worded naturally, never "0 days".
+  "Yesterday" only Phesto's own activity (one-offs/backfills excluded).
+  "Coming up" first: dated events in the next 30 days with days left and
+  what's not recorded; open payments this month. Rendered sample from
+  dev before deploying.
 - Deploy order (Phesto, 2026-11-22): plain-feeling fix first, live suite
   passing reliably (at least 3 runs), then deploy it with missing-links,
   fresh backup, prod golden.

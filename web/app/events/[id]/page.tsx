@@ -14,7 +14,10 @@ import {
   type EntityType,
   type IntakeSpace,
   type LifeEvent,
+  type SpendingKind,
 } from "@/lib/api";
+
+const KIND_LABEL: Record<SpendingKind, string> = { land: "Land", building: "Building", other: "Other" };
 
 const SPACES: Array<{ id: IntakeSpace; label: string }> = [
   { id: "personal", label: "Personal" },
@@ -160,6 +163,15 @@ export default function EventDetailPage() {
     }
   }
 
+  async function changeSpending(patch: { spendingKind?: SpendingKind | null; partOf?: string | null }) {
+    if (!event) return;
+    try {
+      setEvent(await updateEvent(event.id, patch));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Could not save the spending kind.");
+    }
+  }
+
   async function archive() {
     if (!event) return;
     try {
@@ -273,6 +285,46 @@ export default function EventDetailPage() {
                       ))}
                     </tbody>
                   </table>
+                ) : null}
+                {event.spending ? (
+                  <dl className="mt-4 space-y-2 text-sm text-[#6B6963]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <dt>Kind ·</dt>
+                      <dd>
+                        <select
+                          aria-label="Spending kind"
+                          value={event.spending.kindSet ? event.spending.kind : ""}
+                          onChange={(change) => void changeSpending({ spendingKind: (change.target.value || null) as SpendingKind | null })}
+                          className="bg-transparent text-[#F5F3EE]"
+                        >
+                          <option value="">Guessed: {KIND_LABEL[event.spending.guessed]}</option>
+                          {(Object.keys(KIND_LABEL) as SpendingKind[]).map((kind) => (
+                            <option key={kind} value={kind}>{KIND_LABEL[kind]}</option>
+                          ))}
+                        </select>
+                      </dd>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <dt>Paid toward ·</dt>
+                      <dd className="min-w-0 max-w-full">
+                        <select
+                          aria-label="Paid toward another record"
+                          value={event.spending.partOf?.eventId ?? ""}
+                          onChange={(change) => void changeSpending({ partOf: change.target.value || null })}
+                          className="max-w-full bg-transparent text-[#F5F3EE]"
+                        >
+                          <option value="">Nothing: its own spending</option>
+                          {event.spending.partOf && !event.spending.candidates.some((option) => option.id === event.spending?.partOf?.eventId) ? (
+                            <option value={event.spending.partOf.eventId}>{event.spending.partOf.title}</option>
+                          ) : null}
+                          {event.spending.candidates.map((option) => (
+                            <option key={option.id} value={option.id}>{option.title} ({option.amount})</option>
+                          ))}
+                        </select>
+                      </dd>
+                    </div>
+                    {event.spending.partOf ? <p>Counted once: totals count “{event.spending.partOf.title}”, not this record again.</p> : null}
+                  </dl>
                 ) : null}
               </section>
             ) : null}

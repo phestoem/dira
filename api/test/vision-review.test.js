@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { byCurrency, isVisionQuestion, isVisionReview, namedVision, nameKeys, progressFacts, sortRecords, spendingKind, visionAnswer, visionEvents } from "../src/services/visionReview.js";
+import { byCurrency, countOnce, guessedSpendingKind, isVisionQuestion, isVisionReview, namedVision, nameKeys, progressFacts, sortRecords, spendingKind, visionAnswer, visionEvents } from "../src/services/visionReview.js";
 
 // Synthetic visions and records only. Vision questions are answered by code from the vision and the events tied to
 // it by link or name; progress statements are echoed and offered as a card, written only on confirm.
@@ -115,6 +115,29 @@ test("recorded spending splits by kind and never adds different currencies", () 
   const spending = answer.split("\n").filter((row) => /Recorded spending|^  - /.test(row)).join("\n");
   assert.doesNotMatch(spending, /Sale of a plot/, "income is not spending");
   assert.doesNotMatch(answer, /\d \+ \d|2,000,500|2,450,000|692,000|2,842,000/, "no sums across currencies or kinds");
+});
+
+test("a kind set on the record wins over the guess; instalments toward a purchase count once", () => {
+  const money = (amount, currency, extra = {}) => ({ amount, currency, direction: "expense", ...extra });
+  const sheet = { id: "k1", title: "Cost sheet", rawInput: "costs.xlsx", status: "active", financials: money(392000, "TSH", { spendingKind: "building" }) };
+  assert.equal(guessedSpendingKind(sheet), "other");
+  assert.equal(spendingKind(sheet), "building");
+  assert.equal(spendingKind({ ...sheet, financials: money(1, "TSH", { spendingKind: "boats" }) }), "other", "an unknown kind falls back to the guess");
+  const records = [
+    sheet,
+    { id: "k2", title: "Cabin purchase", status: "completed", occurredAt: new Date("2025-03-13"), financials: money(5000, "EUR") },
+    { id: "k3", title: "Cabin payment plan", rawInput: "Paid in instalments, 4000 so far", status: "active", financials: money(4000, "EUR", { partOf: { eventId: "k2", title: "Cabin purchase" } }) },
+    // Paid toward a record that is not among these: then it is counted.
+    { id: "k4", title: "Boat instalment", status: "active", financials: money(100, "EUR", { partOf: { eventId: "elsewhere", title: "Boat" } }) },
+  ];
+  const { counted, paidToward } = countOnce(records);
+  assert.deepEqual(counted.map((event) => event.id), ["k1", "k2", "k4"]);
+  assert.deepEqual(paidToward.map(({ event, target }) => [event.id, target.id]), [["k3", "k2"]]);
+  const answer = visionAnswer(VISIONS[0], records, [], NOW);
+  assert.match(answer, /- Recorded spending, by kind \(3 records\):/);
+  assert.match(answer, /  - Building: 392,000 TSH, from 1 record: Cost sheet \(392,000 TSH\)\./);
+  assert.match(answer, /\n- Paid toward a record above, not added again: Cabin payment plan \(4,000 EUR toward Cabin purchase\)\./);
+  assert.doesNotMatch(answer, /9,000 EUR|9,100 EUR/, "the purchase is counted once");
 });
 
 test("confirm writes only what was chosen: the linked update, the stage", async (t) => {

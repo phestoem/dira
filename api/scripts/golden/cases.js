@@ -29,6 +29,14 @@ export const SEED_PLANNED = [
   { title: "Tuliza Nafsi fence (Uzio wa Nafsi Jambiani)", rawInput: "Tuliza Nafsi Jambiani, inahitaji kuwekewa uzio, eneo lote. Na mzunguko mzima una wastani wa mita 500. Natafuta taarifa kufahamu ni mfumo gani wa uzio niutumie, ambao utakuwa na gharama nafuu, lakini wenye tija." },
 ];
 
+// Fixture mode mirrors corrections made on the event page: a kind set by hand (the water tank is building), and an
+// instalment record paid toward its purchase (counted once). Created directly, linked to the project.
+export const SEED_SPENDING = {
+  kinds: [{ match: /water tank/i, spendingKind: "building" }],
+  purchase: { title: "Solar system purchase for Tuliza Nafsi", rawInput: "Bought the solar system for Tuliza Nafsi for 1,200 EUR.", financials: { amount: 1200, currency: "EUR", direction: "expense" } },
+  instalment: { title: "Solar system instalments", rawInput: "Paid 800 EUR so far in instalments for the solar system.", financials: { amount: 800, currency: "EUR", direction: "expense" } },
+};
+
 // Fixture mode creates these directly (visions come from journal entries, which the seed can't confirm).
 export const SEED_VISIONS = [
   { title: "Tuliza Nafsi Eco Living Vision", summary: "A self-sustaining eco-living place with organic farming and animal husbandry.", status: "seed", connectedEntities: [{ name: "Zanzibar", role: "location" }] },
@@ -350,6 +358,28 @@ export const CASES = [
     turns: ["revisit Tuliza Nafsi vision", "one house is complete and the second is about 70% done"],
     countsEvents: true,
     check: progressCard,
+  },
+  {
+    // Kinds set on the record and "paid toward" corrections, read from the rows: a set kind puts the record under that
+    // kind; a record paid toward another listed one is named once as such and is in no kind's total.
+    id: "spending-corrections",
+    turns: ["revisit Tuliza Nafsi vision"],
+    check: async ({ answer, db }) => {
+      const failures = [];
+      const rows = answer.split("\n");
+      const kindRow = (kind) => rows.find((line) => line.startsWith(`  - ${kind}: `)) || "";
+      const paidRow = rows.find((line) => line.startsWith("- Paid toward a record above, not added again: ")) || "";
+      const label = { land: "Land", building: "Building", other: "Other" };
+      for (const record of await db.spendingCorrections(SEED_PROJECT.name)) {
+        if (record.kind && !kindRow(label[record.kind]).includes(`${record.title} (`)) failures.push(`${record.title}: set to ${record.kind}, not listed under ${label[record.kind]}`);
+        if (record.partOfTitle && record.partOfListed) {
+          if (!paidRow.includes(`${record.title} (`) || !paidRow.includes(`toward ${record.partOfTitle}`)) failures.push(`${record.title}: not shown as paid toward ${record.partOfTitle}`);
+          for (const kind of Object.values(label)) if (kindRow(kind).includes(`${record.title} (`)) failures.push(`${record.title}: paid toward ${record.partOfTitle} but also counted under ${kind}`);
+        }
+      }
+      if (/\b2,000 EUR\b/.test(answer)) failures.push("purchase and its instalments added together (2,000 EUR)");
+      return failures;
+    },
   },
   {
     // Answered by code: unlinked records that name a project, place or person, as a card to tick; never an existing

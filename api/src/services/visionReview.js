@@ -124,7 +124,14 @@ export function sortRecords(records, now = new Date()) {
 // Spending kinds, read from the record's title, text and item descriptions (Swahili words included).
 const LAND = /\b(land|plots?|kiwanja|viwanja|shamba|mashamba|ardhi|acres?|ekari|hekta|hectares?|title deed|hati)\b/i;
 const BUILDING = /\b(materials?|cement|saruji|bricks?|tofali|matofali|blocks?|timber|mbao|roof\w*|bati|mabati|construction|building|build|house|nyumba|labou?r|fundi|mafundi|builder|contractor|electrical|umeme|wir(?:e|es|ing)|plumbing|tiles?|fence|uzio|paint|rangi|sand|mchanga|kokoto|nondo|iron sheets?|windows?|doors?|milango)\b/i;
+export const SPENDING_KINDS = ["land", "building", "other"];
+// The kind set by hand on the record (financials.spendingKind) wins; otherwise it is guessed from the words.
 export function spendingKind(event) {
+  const set = event.financials?.spendingKind;
+  return SPENDING_KINDS.includes(set) ? set : guessedSpendingKind(event);
+}
+
+export function guessedSpendingKind(event) {
   const items = (Array.isArray(event.financials?.items) ? event.financials.items : []).map((item) => item?.description);
   const text = [event.title, event.rawInput, ...items].filter(Boolean).join(" ");
   if (LAND.test(text)) return "land";
@@ -143,15 +150,30 @@ export function byCurrency(events) {
   return parts.length <= 1 ? parts.join("") : `${parts.slice(0, -1).join(", ")} and ${parts.at(-1)} (different currencies, not added)`;
 }
 
+// A record paid toward another one (instalments toward a purchase: financials.partOf) is not spending of its own:
+// when the record it pays toward is among these, only that one is counted.
+export function countOnce(spent) {
+  const ids = new Set(spent.map((event) => event.id));
+  const toward = (event) => event.financials?.partOf?.eventId;
+  return {
+    counted: spent.filter((event) => !ids.has(toward(event))),
+    paidToward: spent.filter((event) => ids.has(toward(event))).map((event) => ({ event, target: spent.find((other) => other.id === toward(event)) })),
+  };
+}
+
 const KINDS = [["land", "Land"], ["building", "Building"], ["other", "Other"]];
-function spendingLines(spent) {
-  if (!spent.length) return ["- Recorded spending: none recorded."];
+function spendingLines(all) {
+  if (!all.length) return ["- Recorded spending: none recorded."];
+  const { counted: spent, paidToward } = countOnce(all);
   const lines = [`- Recorded spending, by kind (${spent.length} record${spent.length === 1 ? "" : "s"}):`];
   for (const [kind, label] of KINDS) {
     const list = spent.filter((event) => spendingKind(event) === kind);
     if (!list.length) continue;
     const records = list.map((event) => `${event.title} (${amountText(event.financials)}${event.occurredAt ? `, ${formatDay(event.occurredAt, event.datePrecision)}` : ""})`);
     lines.push(`  - ${label}: ${byCurrency(list)}, from ${list.length} record${list.length === 1 ? "" : "s"}: ${records.join("; ")}.`);
+  }
+  if (paidToward.length) {
+    lines.push(`- Paid toward a record above, not added again: ${paidToward.map(({ event, target }) => `${event.title} (${amountText(event.financials)} toward ${target.title})`).join("; ")}.`);
   }
   return lines;
 }

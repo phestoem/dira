@@ -1,5 +1,7 @@
 import { prisma } from "../prisma.js";
 import { retireEdges } from "../services/graph/relationshipExtractor.js";
+import { amountText } from "../services/savedSummary.js";
+import { guessedSpendingKind, SPENDING_KINDS, spendingKind } from "../services/visionReview.js";
 
 const SPACES = new Set(["personal", "family", "professional", "vision"]);
 const STATUSES = new Set(["active", "planned", "completed", "cancelled", "dormant", "archived"]);
@@ -66,7 +68,7 @@ export default async function eventRoutes(fastify) {
     if (!event || event.status === "archived") {
       return reply.code(404).send({ error: "Event not found" });
     }
-    return presentEvent(event, { detail: true });
+    return { ...presentEvent(event, { detail: true }), spending: await spendingFor(event) };
   });
 
   fastify.patch("/events/:id", { preHandler: [fastify.authenticate] }, async (request, reply) => {
@@ -110,12 +112,37 @@ export default async function eventRoutes(fastify) {
       }
     }
 
+    // Spending kind (land / building / other; null goes back to the guess) and "paid toward" another record
+    // (instalments toward a purchase, counted once): corrections made by hand, kept inside financials.
+    if (body.spendingKind !== undefined || body.partOf !== undefined) {
+      if (!amountText(existing.financials)) return reply.code(400).send({ error: "This record has no amount" });
+      const financials = { ...(existing.financials || {}) };
+      if (body.spendingKind !== undefined) {
+        if (body.spendingKind === null || body.spendingKind === "") delete financials.spendingKind;
+        else if (SPENDING_KINDS.includes(body.spendingKind)) financials.spendingKind = body.spendingKind;
+        else return reply.code(400).send({ error: "Unknown spending kind" });
+      }
+      if (body.partOf !== undefined) {
+        if (body.partOf === null || body.partOf === "") delete financials.partOf;
+        else {
+          const target = typeof body.partOf === "string" ? await prisma.event.findFirst({ where: { id: body.partOf, userId: request.userId, status: { not: "archived" } } }) : null;
+          if (!target || target.id === existing.id) return reply.code(400).send({ error: "Pick another record with an amount" });
+          if (!amountText(target.financials)) return reply.code(400).send({ error: "That record has no amount" });
+          if (target.financials?.partOf) return reply.code(400).send({ error: "That record is itself paid toward another one" });
+          const paidToThis = await prisma.event.count({ where: { userId: request.userId, status: { not: "archived" }, financials: { path: ["partOf", "eventId"], equals: existing.id } } });
+          if (paidToThis) return reply.code(400).send({ error: "Other records are paid toward this one" });
+          financials.partOf = { eventId: target.id, title: target.title };
+        }
+      }
+      data.financials = financials;
+    }
+
     const updated = await prisma.event.update({
       where: { id: existing.id },
       data,
     });
     if (data.status === "archived") await retireEdges(request.userId, "event", existing.id);
-    return presentEvent(updated, { detail: true });
+    return { ...presentEvent(updated, { detail: true }), spending: await spendingFor(updated) };
   });
 
   fastify.delete("/events/:id", { preHandler: [fastify.authenticate] }, async (request, reply) => {
@@ -141,6 +168,27 @@ export default async function eventRoutes(fastify) {
     }
     return { success: true, queueId: queue?.id || null };
   });
+}
+
+// For a record with an amount: its kind (set or guessed), what it is paid toward, and the records it could be paid
+// toward (other amounts, not themselves paid toward something).
+async function spendingFor(event) {
+  if (!amountText(event.financials) || event.financials?.direction === "income") return null;
+  const others = await prisma.event.findMany({
+    where: { userId: event.userId, status: { not: "archived" }, id: { not: event.id } },
+    select: { id: true, title: true, financials: true, occurredAt: true },
+    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+  });
+  const candidates = others
+    .filter((other) => amountText(other.financials) && other.financials?.direction !== "income" && !other.financials?.partOf)
+    .map((other) => ({ id: other.id, title: other.title, amount: amountText(other.financials) }));
+  return {
+    kind: spendingKind(event),
+    kindSet: SPENDING_KINDS.includes(event.financials?.spendingKind),
+    guessed: guessedSpendingKind(event),
+    partOf: event.financials?.partOf || null,
+    candidates,
+  };
 }
 
 function presentEvent(event, { detail = false } = {}) {

@@ -12,7 +12,7 @@ import { randomUUID } from "crypto";
 import { existsSync, unlinkSync } from "fs";
 import jwt from "jsonwebtoken";
 import { Prisma, PrismaClient } from "@prisma/client";
-import { CASES, SEED_MESSAGES, SEED_PLANNED, SEED_PROJECT, SEED_VISIONS, SELF_NAME } from "./cases.js";
+import { CASES, SEED_MESSAGES, SEED_PLANNED, SEED_PROJECT, SEED_SPENDING, SEED_VISIONS, SELF_NAME } from "./cases.js";
 
 const DEV = { port: "4801", db: "dira_dev" };
 const PROD = { port: "4800", db: "dira" };
@@ -209,7 +209,19 @@ async function seedProject(userId) {
     linked += 1;
   }
   for (const planned of SEED_PLANNED) await prisma.event.create({ data: { userId, ...planned, eventType: "project_update", status: "planned", source: "manual", people: [ref] } });
-  return `project created, ${linked} events linked, ${SEED_PLANNED.length} planned event(s)`;
+  // Corrections as the event page makes them: a kind set by hand, an instalment record paid toward its purchase.
+  let kinds = 0;
+  for (const { match, spendingKind } of SEED_SPENDING.kinds) {
+    for (const event of await prisma.event.findMany({ where: { userId, status: { not: "archived" } } })) {
+      if (!match.test(event.title) || !Number(event.financials?.amount)) continue;
+      await prisma.event.update({ where: { id: event.id }, data: { financials: { ...event.financials, spendingKind } } });
+      kinds += 1;
+    }
+  }
+  const base = { userId, eventType: "financial", status: "completed", source: "manual", people: [ref] };
+  const purchase = await prisma.event.create({ data: { ...base, ...SEED_SPENDING.purchase } });
+  await prisma.event.create({ data: { ...base, ...SEED_SPENDING.instalment, financials: { ...SEED_SPENDING.instalment.financials, partOf: { eventId: purchase.id, title: purchase.title } } } });
+  return `project created, ${linked} events linked, ${SEED_PLANNED.length} planned event(s), ${kinds} kind(s) set, 1 instalment record`;
 }
 
 // Dismissing an uploaded file keeps the file and its path: only Phesto deletes files.
@@ -398,6 +410,23 @@ function graphReader(userId) {
   return {
     // From the rows, apart from DIRA's own code: which suggested links already exist (a ref on the event, a
     // relationship of any status, or a vision holding both), and which records name the project without a link.
+    // Records tied to the project (by ref) that carry a hand-set kind or a "paid toward"; partOfListed says whether the
+    // record paid toward is tied to the project too (only then is it counted once in the project's answer).
+    async spendingCorrections(projectName) {
+      const project = await prisma.entity.findFirst({ where: { userId, entityType: "project", name: projectName, status: { not: "archived" } } });
+      if (!project) return [];
+      const events = await prisma.event.findMany({ where: { userId, status: { not: "archived" } }, select: { id: true, title: true, people: true, financials: true } });
+      const tied = events.filter((event) => (Array.isArray(event.people) ? event.people : []).some((ref) => ref?.entityId === project.id) && Number(event.financials?.amount) > 0 && event.financials?.direction !== "income");
+      const ids = new Set(tied.map((event) => event.id));
+      return tied
+        .filter((event) => event.financials?.spendingKind || event.financials?.partOf)
+        .map((event) => ({
+          title: event.title,
+          kind: event.financials.partOf && ids.has(event.financials.partOf.eventId) ? null : event.financials.spendingKind || null,
+          partOfTitle: event.financials.partOf ? tied.find((other) => other.id === event.financials.partOf.eventId)?.title || event.financials.partOf.title : null,
+          partOfListed: Boolean(event.financials.partOf && ids.has(event.financials.partOf.eventId)),
+        }));
+    },
     async linkCheck(ids, projectName) {
       const [entities, events, visions, relationships] = await Promise.all([
         prisma.entity.findMany({ where: { userId }, select: { id: true, name: true, entityType: true, status: true } }),
