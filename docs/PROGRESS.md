@@ -14,6 +14,10 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22 17:53: prod deploy of 72ed847 (grouped "Coming up"). Backup
+  dira_20261122_175343.dump first; deploy.sh OK (prod HEAD 6f5019d);
+  /health ok; prod readonly golden 27/27, no rows changed
+  (logs/golden-prod-20261122-1754.log).
 - 2026-11-22: digest follow-up (not deployed; sample shown first). "Coming
   up" is grouped: records sharing a project form one group, and a trip
   takes in every record dated within its dates (a month-only date counts
@@ -843,7 +847,10 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
-- Waiting for Phesto: review of the grouped "Coming up" sample, then deploy.
+- Waiting for Phesto: decision on the Postgres connection proposal
+  (read-only survey 2026-11-22: 8 orphaned dira-dev Prisma query engines,
+  parent systemd, hold ~33 connections incl. 8 to dira; a psql in the
+  postgres container idle since 2026-10-15 holds 1). Nothing changed.
 - Note: Postgres on this host is shared (max_connections 100, ~90 in use);
   the full npm test can run out of slots. Run it as
   `node --test --test-concurrency=2 test/` when that happens.
