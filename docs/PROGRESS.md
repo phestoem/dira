@@ -14,6 +14,22 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22 19:0x: Postgres cleanup (Phesto's OK). Killed 8 orphaned
+  dira-dev Prisma query engines (PPID 1; not children of either API) and
+  ended the 2026-10-15 psql session's backend (pg_terminate_backend; the
+  root psql client in the container is left, it holds no connection).
+  Connections 90 -> 56. Dev .env: DATABASE_URL gets
+  ?connection_limit=3&max_idle_connection_lifetime=300; dira_dev gets
+  idle_session_timeout=15min (ALTER DATABASE). Tested: a server-closed
+  idle connection fails the next Prisma query once (P1017); with the
+  client idle lifetime below the server timeout it never happens. Prod
+  .env change (connection_limit=5 + idle lifetime 300) written for Phesto
+  to apply; not applied.
+- API shutdown on SIGTERM/SIGINT (app.close + prisma.$disconnect) and
+  api/scripts/dev-restart.sh (dev API as its own process group, pgid in
+  logs/api-dev.pgid; stops the group). Golden: fixture 27/27 + gates,
+  live 27/27 no rows changed (logs/golden-shutdown-*-1912.log); npm test
+  119/119.
 - 2026-11-22 17:53: prod deploy of 72ed847 (grouped "Coming up"). Backup
   dira_20261122_175343.dump first; deploy.sh OK (prod HEAD 6f5019d);
   /health ok; prod readonly golden 27/27, no rows changed

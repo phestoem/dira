@@ -28,6 +28,7 @@ import { catchUpGraphExtractions } from "./services/graph/rebuild.js";
 import { flagStatus } from "./services/flags.js";
 import { modelStatus } from "./services/modelStatus.js";
 import { ensureUploadDir } from "./services/uploadStore.js";
+import { prisma } from "./prisma.js";
 
 // Fails at start when the folder is unusable, instead of losing an upload later.
 console.log("[uploads]", ensureUploadDir());
@@ -106,4 +107,22 @@ try {
 } catch (err) {
   app.log.error(err);
   process.exit(1);
+}
+
+// On stop, finish open requests and close the database pool, so no connection outlives the process.
+let stopping = false;
+for (const signal of ["SIGTERM", "SIGINT"]) {
+  process.on(signal, async () => {
+    if (stopping) return;
+    stopping = true;
+    app.log.info(`${signal}: shutting down`);
+    const timer = setTimeout(() => process.exit(1), 10000);
+    try {
+      await app.close();
+      await prisma.$disconnect();
+    } finally {
+      clearTimeout(timer);
+      process.exit(0);
+    }
+  });
 }
