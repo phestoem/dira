@@ -258,6 +258,16 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
   if (!fileAttached && isRelationshipStatement(text)) classified.followUp = { action: "none", fact: "" };
   // Likewise a statement of progress ("the second cabin is 40% done") is new, not a yes to an earlier offer.
   if (!fileAttached && progressFacts(text).length) classified.followUp = { action: "none", fact: "" };
+  // A plain first-person feeling with no fact in it ("I felt grateful for my family") is a reflection: it goes to the
+  // journal whatever the classifier made of it, never to a save-this-fact card.
+  if (!fileAttached && isPlainFeeling(text) && ["intake_text", "unclear", "correction", "relationship_add", "question"].includes(classified.intent)) {
+    classified.intent = "journal";
+    classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
+    classified.interpretation = "Keep this as a reflection.";
+    classified.alternatives = (classified.alternatives || []).filter((item) => item?.intent !== "journal");
+    classified.followUp = { action: "none", fact: "" };
+    if (classified.extractedData) classified.extractedData.isCorrecting = false;
+  }
   if (!fileAttached && rejectsCorrection(text) && classified.intent === "correction") {
     classified.intent = isPeopleQuestion(text) ? "graph_query" : "question";
     classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
@@ -643,6 +653,23 @@ function isConversationCorrection(text) {
 const QUESTION_WORD = /^(what|who|when|where|how|which|why|je|nani|lini|wapi|vipi)\b/i;
 const CORRECTION_WORD = /\b(no|not|wrong|actually|i meant)\b/i;
 const FOLLOW_UP_REFERENCE = /\b(their names|who are they|what are they called|and (?:his|her|their) family)\b/i;
+
+const FEELINGS = "grateful|thankful|happy|glad|sad|down|low|anxious|nervous|tired|exhausted|blessed|proud|calm|peaceful|worried|lonely|stressed|hopeful|content|overwhelmed|excited|joyful|angry|frustrated|upset|relieved|homesick|loved";
+const PLAIN_FEELING = new RegExp(`^(?:(?:today|tonight|this (?:morning|afternoon|evening|week)|lately|right now|these days),?\\s+)?i\\s*(?:feel|felt|am feeling|was feeling|'m feeling|am|was|'m)\\s+(?:(?:so|very|really|truly|deeply|quite|a bit|a little|kind of|incredibly)\\s+)?(?:${FEELINGS})\\b([^?]*)$`, "i");
+// Things that make it a record, not only a feeling: a number, money, a date, or something that happened.
+const FACT_IN_FEELING = /\d|\b(tsh|eur|usd|shillings?|euros?|dollars?|paid|bought|sold|spent|cost|born|died|married|moved|started|finished|completed|signed|met|visited|travel\w*|flew|arrived|got|received|hired|built|planted|because|since|after|when|that)\b|\b(january|february|march|april|may|june|july|august|september|october|november|december|monday|tuesday|wednesday|thursday|friday|saturday|sunday|yesterday|tomorrow)\b/i;
+
+// "Today I felt grateful for my family": first person, a feeling word, a short rest ("for my family") with no fact.
+export function isPlainFeeling(text) {
+  const value = String(text || "").trim();
+  const match = value.match(PLAIN_FEELING);
+  if (!match) return false;
+  const rest = match[1].replace(/[.!…\s]+$/u, "").trim();
+  if (FACT_IN_FEELING.test(rest)) return false;
+  // "happy to report …", "glad the roof is done": a clause carries news, not only the feeling.
+  if (/^to\b|\b(is|are|was|were|has|have|had|will|did|done)\b/i.test(rest)) return false;
+  return rest.split(/\s+/).filter(Boolean).length <= 8;
+}
 
 export function rejectsCorrection(text) {
   const value = String(text || "").trim();

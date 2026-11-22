@@ -14,6 +14,16 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22: plain first-person feeling with no fact (no number, money,
+  date, event verb, clause or question) goes to the journal whatever the
+  classifier says (isPlainFeeling in intentRouter). npm test 111/111;
+  fixture 26/26 + gates; live readonly 26/26 three times, no rows changed;
+  grateful-family 7/7 (logs/golden-feeling-*-20261122*.log).
+- 2026-11-22 08:57: Kisarawe one-off applied on prod (Phesto's yes):
+  backup dira_20261122_085738.dump first; project "Kisarawe house"
+  (place Kisarawe, Tanzania) created, 5 events linked (purchase, payment
+  plan, cost estimation, renovation plans, the December trip); nothing
+  else changed. Checked read-only after.
 - 2026-11-22: missing-links question by code (not deployed; shown to
   Phesto first). Records (events, visions) that name a project, place or
   person (or a project's place) and are not tied to it: no entity ref, no
@@ -725,9 +735,7 @@ plan. One item per commit, family golden test before each commit.
   (dira-b4), `f341992` PERSONAL_SCOPE.md + decisions.
 
 ## In progress
-- Nothing running. Kisarawe one-off: dry run shown, backup
-  dira_20261122_080105.dump taken, waiting for Phesto's yes
-  (script in the session scratchpad, kisarawe-project.mjs). Web deps installed in dev (web/node_modules, for tsc).
+- Nothing running. Web deps installed in dev (web/node_modules, for tsc).
 - Backup proposal written (ops/backup/), waiting for Phesto to apply it on
   the host: scripts to /opt/qusaz/shared/backup/dira/, /etc/qusaz/dira-backup.env,
   NUC ssh key, R2 bucket + token, restic install + init, two cron lines
@@ -785,12 +793,13 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
-- grateful-family is unsteady (2026-11-22: the classifier sometimes calls
-  "today I felt grateful…" intake_text; about 1 run in 5 with the seeds
-  as they are, more with one extra seed record). Proposed: a code guard,
-  a pure first-person feeling with no fact becomes journal.
 - Next (Phesto, 2026-11-21): spending kind as a field Phesto can correct
-  on each record (the cost sheet may be building).
+  on each record (the cost sheet may be building). Phesto, 2026-11-22: the
+  Kisarawe payment plan (4,000 EUR) is instalments toward the 5,000 EUR
+  purchase, not extra spending: totals must count the purchase once.
+- Deploy order (Phesto, 2026-11-22): plain-feeling fix first, live suite
+  passing reliably (at least 3 runs), then deploy it with missing-links,
+  fresh backup, prod golden.
 Phesto (2026-11-18): before token logging, the backup + restore test and
 the dev/prod key split must be done. Re-checked 2026-11-18 evening after
 Phesto said both were applied: still not on this host, token logging held.
