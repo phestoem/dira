@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Restart the dev API (port 4801) as its own process group, so stopping it also stops anything it started
-# (with the binary Prisma engine, the query-engine child). Dev only: refuses any other port.
+# (such as a binary Prisma query-engine child). Dev only: always port 4801.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 PORT=4801

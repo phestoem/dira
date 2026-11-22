@@ -14,6 +14,19 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22: Prisma engine "binary" -> default library on dev (not
+  deployed). No reason recorded for "binary": in the schema since the
+  foundation commit 0527e5b, same block as another app's schema. Library
+  runs inside node, so no query-engine child can be orphaned; one process
+  instead of node + ~22 MB engine. deploy.sh runs `prisma generate`, so a
+  deploy switches prod too. npm test 119/119; fixture golden 27/27 +
+  gates; live readonly 27/27, no rows changed (logs/golden-library-*-1924.log);
+  dev API held 3 connections (its limit), no child processes.
+- Prod golden env loading: the prod DATABASE_URL now has "&" in its query,
+  so `eval "$(grep ...)"` no longer works (the & backgrounds the
+  assignment; the guard refused, as it should). Load values literally:
+  envval() { grep -E "^$1=" /opt/qusaz/dira/api/.env | head -1 | cut -d= -f2- | sed -E "s/^[\"']//; s/[\"']\$//"; }
+  DATABASE_URL="$(envval DATABASE_URL)" JWT_SECRET="$(envval JWT_SECRET)" npm run golden -- --base http://127.0.0.1:4800 ...
 - 2026-11-22 19:0x: Postgres cleanup (Phesto's OK). Killed 8 orphaned
   dira-dev Prisma query engines (PPID 1; not children of either API) and
   ended the 2026-10-15 psql session's backend (pg_terminate_backend; the
