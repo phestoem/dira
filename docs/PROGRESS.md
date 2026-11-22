@@ -14,6 +14,20 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22: missing-links question by code (not deployed; shown to
+  Phesto first). Records (events, visions) that name a project, place or
+  person (or a project's place) and are not tied to it: no entity ref, no
+  relationship row of any status, no vision holding both. Own name masks a
+  parent's name inside it; a name word shared by several records is not a
+  key. Home: a card, every suggestion unticked; only ticked ones are
+  written (ref added, or a name-only ref gets the id). Advisor: the same
+  list as text, nothing written. None found: said plainly. Golden case
+  missing-connections (checks from the rows: no existing link suggested;
+  every unlinked record naming the project listed). npm test 109/109;
+  fixture 26/26 + gates (logs/golden-missing-links-fixture-20261122e.log);
+  live readonly 26/26, no rows changed
+  (logs/golden-missing-links-live-20261122b.log). Write path checked on
+  dira_dev and reverted.
 - 2026-11-21 11:17: deployed a5aece7 (planned status, spending by kind,
   uploads in restore-into-dev, upload-keep guards) to prod. Full live
   readonly on dev first: 25/25. Backup dira_20261121_111707.dump +
@@ -711,7 +725,9 @@ plan. One item per commit, family golden test before each commit.
   (dira-b4), `f341992` PERSONAL_SCOPE.md + decisions.
 
 ## In progress
-- Nothing running. Web deps installed in dev (web/node_modules, for tsc).
+- Nothing running. Kisarawe one-off: dry run shown, backup
+  dira_20261122_080105.dump taken, waiting for Phesto's yes
+  (script in the session scratchpad, kisarawe-project.mjs). Web deps installed in dev (web/node_modules, for tsc).
 - Backup proposal written (ops/backup/), waiting for Phesto to apply it on
   the host: scripts to /opt/qusaz/shared/backup/dira/, /etc/qusaz/dira-backup.env,
   NUC ssh key, R2 bucket + token, restic install + init, two cron lines
@@ -769,6 +785,10 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
+- grateful-family is unsteady (2026-11-22: the classifier sometimes calls
+  "today I felt grateful…" intake_text; about 1 run in 5 with the seeds
+  as they are, more with one extra seed record). Proposed: a code guard,
+  a pure first-person feeling with no fact becomes journal.
 - Next (Phesto, 2026-11-21): spending kind as a field Phesto can correct
   on each record (the cost sheet may be building).
 Phesto (2026-11-18): before token logging, the backup + restore test and

@@ -618,11 +618,12 @@ function ResponseBody({
   onOption: (intent: string) => void;
 }) {
   const { result } = response;
-  if (result.type === "relationship_preview" || result.type === "vision_progress_preview") {
+  if (result.type === "relationship_preview" || result.type === "vision_progress_preview" || result.type === "missing_links_preview") {
     const content = result.content as { edges?: Array<{ id: string; line: string }> };
     return (
       <RelationshipCard
         edges={content.edges || []}
+        startUnticked={result.type === "missing_links_preview"}
         prompt={result.confirmationText}
         resolved={resolved}
         busy={busy}
@@ -729,15 +730,18 @@ function RelationshipCard({
   busy,
   onConfirm,
   onDismiss,
+  startUnticked = false,
 }: {
   edges: Array<{ id: string; line: string }>;
+  startUnticked?: boolean;
   prompt: string | null;
   resolved: boolean;
   busy: boolean;
   onConfirm: (ids: string[]) => void;
   onDismiss: () => void;
 }) {
-  const [selected, setSelected] = useState(edges.map((edge) => edge.id));
+  // Suggested links start unticked: each one is saved only if it is ticked.
+  const [selected, setSelected] = useState(startUnticked ? [] : edges.map((edge) => edge.id));
   return (
     <div>
       {prompt ? <p className="text-sm text-[#F5F3EE]">{prompt}</p> : null}
@@ -1158,7 +1162,7 @@ function failureMessage(err: unknown) {
 
 function isSilentAnswer(response: HomeResponse) {
   const { type, content, confirmationText } = response.result;
-  if (type === "relationship_preview" || type === "vision_progress_preview" || type === "understanding" || type === "clarification" || type === "command_preview" || type === "correction_preview" || type === "journal_saved") {
+  if (type === "relationship_preview" || type === "vision_progress_preview" || type === "missing_links_preview" || type === "understanding" || type === "clarification" || type === "command_preview" || type === "correction_preview" || type === "journal_saved") {
     return false;
   }
   const answer = asAnswer(content);

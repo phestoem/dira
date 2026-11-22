@@ -4,6 +4,7 @@ import { flagOn } from "./flags.js";
 import { isRelationshipStatement, namesPersonWithRole } from "./graph/familyStatement.js";
 import { isPeopleQuestion } from "./graph/peopleGrounding.js";
 import { isVisionReview, loadVisions, progressFacts } from "./visionReview.js";
+import { isMissingConnectionsQuestion } from "./missingLinks.js";
 import { groqChatUrl, modelErrorKind, recordModelError, recordModelOk } from "./modelStatus.js";
 
 const OPENAI_MODEL = "gpt-4o-mini";
@@ -272,6 +273,14 @@ export async function routeIntent(input, userId, attachedFile, history, lastActi
     classified.intent = "question";
     classified.confidence = Math.max(Number(classified.confidence) || 0, 0.9);
     classified.interpretation = "Answer from the vision and its records.";
+  }
+  // "Which connections are missing?" is answered by code from the records, with a card to confirm; never the model.
+  if (!fileAttached && isMissingConnectionsQuestion(text)) {
+    classified.intent = "question";
+    classified.confidence = Math.max(Number(classified.confidence) || 0, 0.95);
+    classified.interpretation = "Find records not yet linked to the projects, places and people they name.";
+    classified.followUp = { action: "none", fact: "" };
+    return decide(classified);
   }
   if (!fileAttached && isRelationshipStatement(text) && !isPeopleQuestion(text) && !["relationship_change", "correction", "graph_query", "command"].includes(classified.intent)) {
     if (classified.intent !== "relationship_add") {

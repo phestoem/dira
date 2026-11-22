@@ -1,4 +1,5 @@
 import { answerVision } from "./visionReview.js";
+import { isMissingConnectionsQuestion, missingLinks, missingLinksText } from "./missingLinks.js";
 import { answerTimeline, isTimelineQuestion } from "./timeline.js";
 import { holdingsAnswer, isPropertyListQuestion, loadHoldings } from "./holdings.js";
 import OpenAI from "openai";
@@ -130,6 +131,13 @@ export async function chat(messages, userId) {
     return { reply: answered.reply, contextUsed: { eventsCount: 0, visionsCount: 0, entitiesCount: answered.sourceIds.length } };
   }
   if (isFocusQuestion(latest)) return answerFocus(userId, history, latest);
+  // "Which connections are missing?": unlinked records that name a project, place or person, by code. Linking them
+  // happens on Home, where each one is ticked and confirmed; nothing is written here.
+  if (isMissingConnectionsQuestion(latest)) {
+    const items = await missingLinks(userId);
+    const reply = items.length ? `${missingLinksText(items)}\n\nAsk this on Home to tick the ones to link; nothing is saved until you confirm.` : missingLinksText(items);
+    return { reply, contextUsed: { eventsCount: items.length, visionsCount: 0, entitiesCount: 0 } };
+  }
   // "Revisit the X vision": the vision and the events tied to it by link or name, by code; no generic offers.
   const vision = await answerVision(userId, latest);
   if (vision) return { reply: vision.reply, contextUsed: { eventsCount: vision.count, visionsCount: 1, entitiesCount: 0 } };
@@ -280,7 +288,7 @@ export async function suggest(userId) {
     focus ? `Help me plan the next phase of ${focus}` : "Help me plan the next phase of what I'm building",
     place ? `How am I tracking against my ${place} timeline?` : "How am I tracking against my plans?",
     events[0] ? `What does ${events[0].title} change for the rest of this month?` : "What changed for me this month?",
-    visions[1] ? `How does ${visions[1].title} connect to what I'm doing now?` : "What connections am I missing?",
+    visions[1] ? `How does ${visions[1].title} connect to what I'm doing now?` : "Which connections are missing?",
   ];
   const unique = [...new Set(pool)];
   const start = dayIndex(unique.length);

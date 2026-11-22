@@ -22,7 +22,9 @@ export const SEED_MESSAGES = [
 
 // Fixture mode mirrors the 2026-11-21 one-off: a project record linked to the eco-living vision and to the events that
 // name Tuliza Nafsi or Jambiani, and the fence plan as a planned event (its own text, in Swahili).
-export const SEED_PROJECT = { name: "Tuliza Nafsi", place: "Jambiani, Zanzibar", vision: "Tuliza Nafsi Eco Living Vision", links: /Tuliza Nafsi|Jambiani/i };
+// The water tank record is left unlinked, so a missing-links question has one to find. (No extra seed sentence: the
+// router's classifier sees the latest saved titles, and one more record made the reflection case unsteady.)
+export const SEED_PROJECT = { name: "Tuliza Nafsi", place: "Jambiani, Zanzibar", vision: "Tuliza Nafsi Eco Living Vision", links: /Tuliza Nafsi|Jambiani/i, unlinked: /water tank/i };
 export const SEED_PLANNED = [
   { title: "Tuliza Nafsi fence (Uzio wa Nafsi Jambiani)", rawInput: "Tuliza Nafsi Jambiani, inahitaji kuwekewa uzio, eneo lote. Na mzunguko mzima una wastani wa mita 500. Natafuta taarifa kufahamu ni mfumo gani wa uzio niutumie, ambao utakuwa na gharama nafuu, lakini wenye tija." },
 ];
@@ -348,6 +350,28 @@ export const CASES = [
     turns: ["revisit Tuliza Nafsi vision", "one house is complete and the second is about 70% done"],
     countsEvents: true,
     check: progressCard,
+  },
+  {
+    // Answered by code: unlinked records that name a project, place or person, as a card to tick; never an existing
+    // link, never generic filler; every unlinked record naming the project is on it. Asking writes nothing.
+    id: "missing-connections",
+    turns: ["Which links am I missing between my records?"],
+    countsEvents: true,
+    check: async ({ answer, turn, eventsCreated, db }) => {
+      // A card to tick (or a plain "none found"), so not answered(): that helper wants a plain answer.
+      const failures = ANSWER_INTENTS.has(turn.response.routing?.intent) ? [] : [`routed as ${turn.response.routing?.intent}, not a question`];
+      const type = turn.response.result?.type;
+      const edges = turn.response.result?.content?.edges || [];
+      if (type !== "missing_links_preview" && !/^I found no unlinked records/.test(answer)) failures.push(`not a link card or a plain "none found" (got ${type})`);
+      if (type === "missing_links_preview" && !edges.length) failures.push("a card with no links");
+      const { existing, missed } = await db.linkCheck(edges.map((edge) => edge.id), SEED_PROJECT.name);
+      for (const line of existing) failures.push(`suggests an existing link: ${line}`);
+      for (const title of missed) failures.push(`unlinked record naming ${SEED_PROJECT.name} not suggested: ${title}`);
+      if (GENERIC_OFFERS.test(answer)) failures.push(`generic offer: "${answer.match(GENERIC_OFFERS)[0]}"`);
+      if (/\bunconfirmed\b/i.test(answer)) failures.push("model-style suggestion text");
+      if (eventsCreated) failures.push(`${eventsCreated} new event(s) created`);
+      return failures;
+    },
   },
   {
     id: "children-follow-up",

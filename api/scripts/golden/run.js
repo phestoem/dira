@@ -203,7 +203,8 @@ async function seedProject(userId) {
   await prisma.vision.update({ where: { id: vision.id }, data: { connectedEntities: [...vision.connectedEntities, ref] } });
   let linked = 0;
   for (const event of await prisma.event.findMany({ where: { userId, status: { not: "archived" } } })) {
-    if (!SEED_PROJECT.links.test([event.title, event.rawInput].join(" "))) continue;
+    const text = [event.title, event.rawInput].join(" ");
+    if (!SEED_PROJECT.links.test(text) || SEED_PROJECT.unlinked.test(text)) continue;
     await prisma.event.update({ where: { id: event.id }, data: { people: [...(Array.isArray(event.people) ? event.people : []), ref] } });
     linked += 1;
   }
@@ -327,6 +328,8 @@ async function ask(userId, readonly) {
     console.log(`\n${failures.length ? "FAIL" : "PASS"}  ${item.id}  [${turn?.response.routing?.intent || "?"}/${turn?.response.result?.type || "?"}]  ${startedAt}`);
     console.log(`  Q: ${item.turns.join("  ⇢  ")}`);
     console.log(indent(answerText(turn?.response) || "(no answer)"));
+    const edges = turn?.response?.result?.content?.edges;
+    if (Array.isArray(edges) && edges.length) console.log(indent(edges.map((edge) => `[ ] ${edge.line}`).join("\n")));
     for (const failure of failures) console.log(`  ✗ ${failure}`);
   }
   console.log(`\n${cases.length - failed}/${cases.length} passed`);
@@ -393,6 +396,42 @@ function historyText(response) {
 
 function graphReader(userId) {
   return {
+    // From the rows, apart from DIRA's own code: which suggested links already exist (a ref on the event, a
+    // relationship of any status, or a vision holding both), and which records name the project without a link.
+    async linkCheck(ids, projectName) {
+      const [entities, events, visions, relationships] = await Promise.all([
+        prisma.entity.findMany({ where: { userId }, select: { id: true, name: true, entityType: true, status: true } }),
+        prisma.event.findMany({ where: { userId }, select: { id: true, title: true, rawInput: true, status: true, people: true, places: true } }),
+        prisma.vision.findMany({ where: { userId }, select: { id: true, title: true, connectedEntities: true, connectedEvents: true } }),
+        prisma.relationship.findMany({ where: { userId }, select: { fromId: true, toId: true } }),
+      ]);
+      const list = (value) => (Array.isArray(value) ? value : []);
+      const name = new Map(entities.map((entity) => [entity.id, entity.name]));
+      const pair = new Set(relationships.flatMap((row) => [`${row.fromId}|${row.toId}`, `${row.toId}|${row.fromId}`]));
+      const viaVision = (eventId, entityId) => visions.some((vision) => list(vision.connectedEvents).some((ref) => ref?.eventId === eventId) && list(vision.connectedEntities).some((ref) => ref?.entityId === entityId));
+      const linked = (kind, recordId, entityId) => {
+        if (pair.has(`${recordId}|${entityId}`)) return true;
+        if (kind === "vision") return list(visions.find((vision) => vision.id === recordId)?.connectedEntities).some((ref) => ref?.entityId === entityId);
+        const event = events.find((row) => row.id === recordId);
+        return [...list(event?.people), ...list(event?.places)].some((ref) => ref?.entityId === entityId) || viaVision(recordId, entityId);
+      };
+      const existing = [];
+      for (const id of ids) {
+        const [kind, recordId, entityId] = String(id).split(":");
+        const title = (kind === "vision" ? visions : events).find((row) => row.id === recordId)?.title || recordId;
+        if (linked(kind, recordId, entityId)) existing.push(`${title} → ${name.get(entityId) || entityId}`);
+      }
+      const project = entities.find((entity) => entity.entityType === "project" && entity.status !== "archived" && entity.name === projectName);
+      const missed = [];
+      if (project) {
+        const asked = new Set(ids.map(String));
+        for (const event of events) {
+          if (event.status === "archived" || !new RegExp(projectName, "i").test(`${event.title} ${event.rawInput || ""}`)) continue;
+          if (!linked("event", event.id, project.id) && !asked.has(`event:${event.id}:${project.id}`)) missed.push(event.title);
+        }
+      }
+      return { existing, missed };
+    },
     async treeProblems() {
       const [people, edges] = await Promise.all([
         prisma.entity.findMany({ where: { userId, entityType: "person", status: { not: "archived" } }, select: { id: true, name: true, isSelf: true, birthDate: true, deathDate: true } }),

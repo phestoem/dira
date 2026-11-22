@@ -22,6 +22,7 @@ import { chat } from "../services/lifeAdvisor.js";
 import { extractAndLinkEntities } from "./entities.js";
 import { describeRelationshipLine, parseFamilyStatement } from "../services/graph/familyStatement.js";
 import { applyStatedDates, recordedLine, statedDates, statedDatesLine } from "../services/graph/statedDates.js";
+import { applyMissingLinks, isMissingConnectionsQuestion, missingLinks, NOTHING_MISSING } from "../services/missingLinks.js";
 import { applyProposedConnections, proposalEdges, proposeParentConnections } from "../services/graph/statedConnections.js";
 import { isPeopleQuestion } from "../services/graph/peopleGrounding.js";
 import { commitTriples, extractTriples, scheduleExtraction } from "../services/graph/relationshipExtractor.js";
@@ -92,6 +93,7 @@ export default async function homeRoutes(fastify) {
       if (entry.kind === "command") return await confirmStoredCommand(entry);
       if (entry.kind === "relationships") return await confirmRelationships(request.userId, entry, body);
       if (entry.kind === "vision_progress") return await confirmVisionProgress(request.userId, entry, body);
+      if (entry.kind === "missing_links") return await confirmMissingLinks(request.userId, entry, body);
       if (entry.kind === "dismiss") return await confirmDismiss(request.userId, entry);
       return reply.code(400).send({ error: "Nothing to confirm." });
     } catch (err) {
@@ -130,6 +132,8 @@ async function takeInput(request, reply) {
 
 async function executeIntent(userId, routing, payload) {
   if (routing.intent === "intake_file") return runIntakeFile(userId, routing, payload);
+  // "Which connections are missing?": unlinked records that name a project, place or person, as a card to tick.
+  if (!payload.file && isMissingConnectionsQuestion(payload.message)) return missingLinksCard(userId, routing);
   // "X is the mother of my children, except Y": a card of the connections to add; written only on confirm.
   if (["relationship_add", "intake_text"].includes(routing.intent) && !payload.file) {
     const proposal = await proposeParentConnections(userId, payload.message);
@@ -831,6 +835,32 @@ async function visionProgressCard(userId, routing, progress, message) {
     },
     clarificationOptions: null,
   };
+}
+
+async function missingLinksCard(userId, routing) {
+  const items = await missingLinks(userId);
+  if (!items.length) return answerResponse(routing, NOTHING_MISSING, false);
+  const sessionId = remember(userId, { kind: "missing_links", items, itemIds: items.map((item) => item.id), routing });
+  return {
+    sessionId,
+    routing: publicRouting(routing),
+    action: "confirm",
+    result: {
+      type: "missing_links_preview",
+      content: { edges: items.map(({ id, line }) => ({ id, line })) },
+      confirmationRequired: true,
+      confirmationText: `${items.length} record${items.length === 1 ? "" : "s"} name one of your projects, places or people but ${items.length === 1 ? "is" : "are"} not linked to it. Tick the links to save; nothing is saved until you confirm.`,
+    },
+    clarificationOptions: null,
+  };
+}
+
+async function confirmMissingLinks(userId, entry, body) {
+  // Only what was ticked: an empty or missing selection saves nothing.
+  const selected = Array.isArray(body.selectedEdgeIds) ? body.selectedEdgeIds : [];
+  if (isReadonly()) return readonlySkip(entry.routing, `link ${selected.length} record(s)`);
+  const { written } = await applyMissingLinks(userId, entry.items, new Set(selected));
+  return doneResponse(entry.routing, "saved", { message: written.length ? `Linked: ${written.join("; ")}.` : "Nothing saved." }, null);
 }
 
 async function confirmVisionProgress(userId, entry, body) {
