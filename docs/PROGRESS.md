@@ -14,6 +14,12 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22 19:40: prod deploy of 36a5b71 (shutdown + dev restart) and
+  f3bf18f (library engine). Backup dira_20261122_194001.dump first;
+  deploy.sh OK (prod HEAD 5b25ad3); /health ok; prod API loads
+  libquery_engine, no child process. Prod readonly golden 27/27, no rows
+  changed (logs/golden-prod-20261122-1940.log); over 324 one-second
+  samples at most 5 connections, 0 child processes. Postgres total 52.
 - 2026-11-22: Prisma engine "binary" -> default library on dev (not
   deployed). No reason recorded for "binary": in the schema since the
   foundation commit 0527e5b, same block as another app's schema. Library
@@ -880,9 +886,8 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
-- Waiting for Phesto: deploy of f3bf18f (library engine) with 36a5b71
-  (shutdown + dev restart script). Done meanwhile: the Postgres cleanup
-  below. Earlier note: decision on the Postgres connection proposal
+- Postgres: other apps' pools untouched (Phesto: leave them for now).
+  Earlier note on the connection survey
   (read-only survey 2026-11-22: 8 orphaned dira-dev Prisma query engines,
   parent systemd, hold ~33 connections incl. 8 to dira; a psql in the
   postgres container idle since 2026-10-15 holds 1). Nothing changed.
