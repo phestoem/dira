@@ -16,10 +16,12 @@ export type DiraUser = {
 };
 
 export type DigestPreview = {
+  comingUp: Array<{ title: string; date: string; daysAway: number; monthOnly: boolean; notRecorded: string[] }>;
+  openPayments: Array<{ title: string; amount: string; date: string; daysAway: number }>;
   upcomingBirthdays: Array<{ name: string; date: string; daysAway: number }>;
   upcomingEvents: Array<{ title: string; date: string; daysAway: number }>;
   pendingQueue: number;
-  dormantVisions: Array<{ title: string; daysSinceTouch: number }>;
+  dormantVisions: Array<{ title: string; daysSinceTouch: number; quietFor: string }>;
   yesterday: Array<{ title: string; kind: "event" | "vision" }>;
   hasAnything: boolean;
 };

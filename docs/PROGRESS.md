@@ -14,6 +14,19 @@ personal data out of main's source into the database → the rest of the
 plan. One item per commit, family golden test before each commit.
 
 ## Done (with commit hashes)
+- 2026-11-22: digest (not deployed; sample shown to Phesto first).
+  "Coming up" first: open records dated in the next 30 days (start or
+  due; month-only dates without a day), days left, and what is not
+  recorded (trip/work checks from timeline.js over the record, its
+  project's records, and for a trip nearby trip records). "Payments in
+  <month>": open amounts due this month (or planned / commitment dated
+  this month), said even when none. Vision nudge only after 14+ quiet
+  days (touch, or a linked record saved), in weeks or months, never
+  days. "Yesterday": only records with an input row (what Phesto sent);
+  one-off and backfill records have none. Sample:
+  logs/digest-sample/digest-dev-20261122.html. npm test 117/117; fixture
+  27/27 + gates (logs/golden-digest-fixture-20261122.log); live readonly
+  27/27, no rows changed (logs/golden-digest-live-20261122.log).
 - 2026-11-22: spending kind correctable per record (not deployed; shown
   to Phesto first). Event page: "Kind" (guessed, or land / building /
   other set by hand) and "Paid toward" (another record with an amount);
@@ -811,12 +824,8 @@ missing after the introduction), the same without its last change.
   Details in docs/PERSONAL_SCOPE.md.
 
 ## Next steps
-- Next (Phesto, 2026-11-22): the digest. Stale-vision nudge only after
-  14+ days without activity, worded naturally, never "0 days".
-  "Yesterday" only Phesto's own activity (one-offs/backfills excluded).
-  "Coming up" first: dated events in the next 30 days with days left and
-  what's not recorded; open payments this month. Rendered sample from
-  dev before deploying.
+- Waiting for Phesto: deploy of spending kind (f0447fd) + digest, after
+  review of the dev sample.
 - Deploy order (Phesto, 2026-11-22): plain-feeling fix first, live suite
   passing reliably (at least 3 runs), then deploy it with missing-links,
   fresh backup, prod golden.

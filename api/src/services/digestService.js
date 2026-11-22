@@ -1,5 +1,7 @@
 import { Resend } from "resend";
 import { prisma } from "../prisma.js";
+import { amountText } from "./savedSummary.js";
+import { missing } from "./timeline.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const APP_URL = "https://dira.qusaz.com";
@@ -16,7 +18,7 @@ export async function generateDigest(userId) {
   const [events, pendingQueue, visions, yesterdayEvents, yesterdayVisions, people] = await Promise.all([
     prisma.event.findMany({
       where: { userId, status: { not: "archived" } },
-      select: { id: true, title: true, occurredAt: true, dueAt: true, people: true },
+      select: { id: true, title: true, status: true, eventType: true, rawInput: true, understoodMeaning: true, occurredAt: true, datePrecision: true, dueAt: true, endsAt: true, financials: true, people: true, createdAt: true },
     }),
     prisma.inputQueue.count({
       where: {
@@ -31,7 +33,7 @@ export async function generateDigest(userId) {
         status: { notIn: ["released", "archived"] },
         nudgeAfter: { lte: new Date() },
       },
-      select: { title: true, lastTouchedAt: true, createdAt: true },
+      select: { id: true, title: true, lastTouchedAt: true, createdAt: true, connectedEvents: true, connectedEntities: true },
     }),
     prisma.event.findMany({
       where: {
@@ -39,7 +41,7 @@ export async function generateDigest(userId) {
         status: { not: "archived" },
         createdAt: { gte: yesterdayStart, lt: todayStart },
       },
-      select: { title: true },
+      select: { id: true, title: true },
     }),
     prisma.vision.findMany({
       where: {
@@ -77,25 +79,22 @@ export async function generateDigest(userId) {
       mentions.birthdayIds.push(birthday.mark);
       continue;
     }
-    const upcoming = upcomingFrom(event, today, memory.eventIds);
-    if (upcoming) {
-      upcomingEvents.push(upcoming);
-      mentions.eventIds.push(upcoming.mark);
-    }
   }
+  const comingUp = comingUpFrom(events, today);
+  const openPayments = openPaymentsFrom(events, today);
 
   upcomingBirthdays.sort((left, right) => left.daysAway - right.daysAway);
   upcomingEvents.sort((left, right) => left.daysAway - right.daysAway);
 
-  const dormantVisions = visions
-    .map((vision) => ({
-      title: vision.title,
-      daysSinceTouch: daysBetween(vision.lastTouchedAt || vision.createdAt, new Date()),
-    }))
-    .sort((left, right) => right.daysSinceTouch - left.daysSinceTouch);
+  const dormantVisions = quietVisions(visions, events, new Date());
 
+  // Yesterday is the person's own activity: records saved from something they sent (an input row points at them).
+  // Records written by one-offs and backfills have no input row and are left out.
+  const sent = yesterdayEvents.length
+    ? await prisma.inputQueue.findMany({ where: { userId, resultEventId: { in: yesterdayEvents.map((event) => event.id) } }, select: { resultEventId: true } })
+    : [];
   const yesterdayActivity = [
-    ...yesterdayEvents.map((event) => ({ title: event.title, kind: "event" })),
+    ...ownRecords(yesterdayEvents, sent.map((row) => row.resultEventId)).map((event) => ({ title: event.title, kind: "event" })),
     ...yesterdayVisions.map((vision) => ({ title: vision.title, kind: "vision" })),
   ];
 
@@ -130,6 +129,8 @@ export async function generateDigest(userId) {
   }
 
   const digest = {
+    comingUp,
+    openPayments,
     upcomingBirthdays,
     upcomingEvents,
     memorials,
@@ -140,7 +141,9 @@ export async function generateDigest(userId) {
     mentions,
   };
   digest.hasAnything = Boolean(
-    digest.upcomingBirthdays.length
+    digest.comingUp.length
+    || digest.openPayments.length
+    || digest.upcomingBirthdays.length
     || digest.upcomingEvents.length
     || digest.pendingQueue
     || digest.dormantVisions.length
@@ -250,7 +253,8 @@ async function rememberDigest(user, digest) {
 
 function digestSections(digest) {
   const sections = [];
-  if (digest.upcomingBirthdays.length || digest.upcomingEvents.length) sections.push("upcoming");
+  if (digest.comingUp.length || digest.upcomingBirthdays.length || digest.upcomingEvents.length) sections.push("coming up");
+  if (digest.openPayments.length) sections.push("payments");
   if (digest.pendingQueue) sections.push("queue");
   if (digest.dormantVisions.length) sections.push("visions");
   if (digest.yesterday.length) sections.push("yesterday");
@@ -295,22 +299,106 @@ function birthdayFrom(event, today, mentioned) {
   };
 }
 
-function upcomingFrom(event, today, mentioned) {
-  const dated = [event.occurredAt, event.dueAt].find((value) => {
-    const daysAway = daysUntilDate(value, today);
-    return daysAway != null && daysAway >= 0 && daysAway <= 3;
-  });
-  if (!dated) return null;
-  const day = calendarDay(dated);
-  const daysAway = daysUntilDate(dated, today);
-  const stage = eventStage(daysAway, mentioned, event.id, day.year);
-  if (!stage) return null;
-  return {
-    title: event.title,
-    date: formatMonthDay(day.month, day.day),
-    daysAway,
-    mark: stage,
+const CLOSED = new Set(["completed", "cancelled", "archived"]);
+const TRIP = /\b(trip|travel|flight|journey|safari|visit)\b/i;
+const WORK = /\b(renovation|construction|building|build|fence|uzio|landscaping|works|repair|installation|house)\b/i;
+const projectIds = (event) => (Array.isArray(event.people) ? event.people : []).filter((ref) => ref?.role === "project" && ref.entityId).map((ref) => ref.entityId);
+const utcDay = (today) => new Date(Date.UTC(today.year, today.month - 1, today.day));
+
+// The next date of an open record within 30 days: its start, or its due date. A month-only date counts from the
+// first of the month and is shown without a day.
+function nextDate(event, today) {
+  const options = [[event.occurredAt, event.datePrecision], [event.dueAt, null]]
+    .map(([value, precision]) => {
+      if (!value) return null;
+      if (precision === "month") {
+        const day = calendarDay(value);
+        const sameOrLater = day && (day.year > today.year || (day.year === today.year && day.month >= today.month));
+        return sameOrLater ? { value, precision, daysAway: Math.max(0, daysUntilDate(value, today)) } : null;
+      }
+      const daysAway = daysUntilDate(value, today);
+      return daysAway != null && daysAway >= 0 ? { value, precision: null, daysAway } : null;
+    })
+    .filter((item) => item && item.daysAway <= 30)
+    .sort((left, right) => left.daysAway - right.daysAway);
+  return options[0] || null;
+}
+
+// "Coming up": open records dated in the next 30 days, soonest first, with days left and what is not on record yet
+// (for a trip or building work: the record itself, records of the same project, and for a trip, trip records near it).
+export function comingUpFrom(events, today) {
+  const open = events.filter((event) => !CLOSED.has(event.status));
+  const out = [];
+  for (const event of open) {
+    const next = nextDate(event, today);
+    if (!next) continue;
+    const title = String(event.title || "");
+    const kind = TRIP.test(title) ? "trip" : WORK.test(title) ? "work" : null;
+    let notRecorded = [];
+    if (kind) {
+      const projects = new Set(projectIds(event));
+      const at = new Date(next.value).getTime();
+      const related = open.filter((other) => other.id === event.id
+        || projectIds(other).some((id) => projects.has(id))
+        || (kind === "trip" && TRIP.test(String(other.title || "")) && other.occurredAt && Math.abs(new Date(other.occurredAt).getTime() - at) <= 30 * DAY_MS));
+      notRecorded = missing(kind, related, utcDay(today));
+    }
+    const day = calendarDay(next.value);
+    out.push({
+      title,
+      date: next.precision === "month" ? `${monthName(day.month)} ${day.year}` : formatMonthDay(day.month, day.day),
+      daysAway: next.daysAway,
+      monthOnly: next.precision === "month",
+      notRecorded,
+    });
+  }
+  return out.sort((left, right) => left.daysAway - right.daysAway || left.title.localeCompare(right.title));
+}
+
+// Open payments this month: records with an amount to pay (not income) that are due this month, or planned or
+// promised (a commitment) with a date this month, and are not completed or cancelled.
+export function openPaymentsFrom(events, today) {
+  const inMonth = (value) => {
+    const day = value ? calendarDay(value) : null;
+    return Boolean(day && day.year === today.year && day.month === today.month);
   };
+  return events
+    .filter((event) => !CLOSED.has(event.status) && amountText(event.financials) && event.financials?.direction !== "income")
+    .filter((event) => inMonth(event.dueAt) || ((event.status === "planned" || event.eventType === "commitment") && inMonth(event.occurredAt)))
+    .map((event) => {
+      const when = inMonth(event.dueAt) ? event.dueAt : event.occurredAt;
+      const day = calendarDay(when);
+      return { title: event.title, amount: amountText(event.financials), date: formatMonthDay(day.month, day.day), daysAway: daysUntilDate(when, today) };
+    })
+    .sort((left, right) => left.daysAway - right.daysAway);
+}
+
+// A vision is nudged only after 14 or more days with nothing new: no touch, and no record linked to it (directly
+// or through its project) saved in that time.
+export function quietVisions(visions, events, now) {
+  return visions
+    .map((vision) => {
+      const eventIds = new Set((Array.isArray(vision.connectedEvents) ? vision.connectedEvents : []).map((ref) => ref?.eventId).filter(Boolean));
+      const entityIds = new Set((Array.isArray(vision.connectedEntities) ? vision.connectedEntities : []).map((ref) => ref?.entityId).filter(Boolean));
+      const linked = events.filter((event) => eventIds.has(event.id) || projectIds(event).some((id) => entityIds.has(id)));
+      const times = [vision.lastTouchedAt, vision.createdAt, ...linked.map((event) => event.createdAt)].map((value) => (value ? new Date(value).getTime() : NaN)).filter(Number.isFinite);
+      const days = daysBetween(new Date(Math.max(...times)), now);
+      return { title: vision.title, daysSinceTouch: days, quietFor: quietFor(days) };
+    })
+    .filter((vision) => vision.daysSinceTouch >= 14)
+    .sort((left, right) => right.daysSinceTouch - left.daysSinceTouch);
+}
+
+// "2 weeks", "5 weeks", "2 months", "over a year": never a count of days.
+export function quietFor(days) {
+  if (days < 60) return `${Math.floor(days / 7)} weeks`;
+  if (days < 365) return `${Math.floor(days / 30)} months`;
+  return "over a year";
+}
+
+export function ownRecords(events, sentIds) {
+  const sent = new Set(sentIds);
+  return events.filter((event) => sent.has(event.id));
 }
 
 function birthdayStage(daysAway, mentioned, id, year) {
@@ -412,20 +500,26 @@ function formatMonthDay(month, day) {
   return `${day} ${monthName(month)}`;
 }
 
-function renderDigest(digest, when) {
+export function renderDigest(digest, when) {
   const blocks = [];
   const upcoming = [
+    ...(digest.comingUp || []).map((item) => comingUpLine(item)),
     ...digest.upcomingBirthdays.map((item) => birthdayLine(item)),
     ...(digest.memorials || []).map((item) => `Today marks ${item.years} years since ${escapeHtml(item.name)} passed`),
     ...digest.upcomingEvents.map((item) => `${escapeHtml(item.title)} ${away(item.daysAway)}`),
   ];
-  if (upcoming.length) blocks.push(section("Upcoming", upcoming));
+  if (upcoming.length) blocks.push(section("Coming up", upcoming));
+  // Said even when there are none, so "none open" is not mistaken for "not checked".
+  const payments = digest.openPayments || [];
+  blocks.push(section(`Payments in ${monthName(when.month)}`, payments.length
+    ? payments.map((item) => `${escapeHtml(item.title)}: ${escapeHtml(item.amount)}, ${item.daysAway < 0 ? `was due ${escapeHtml(item.date)}` : `due ${escapeHtml(item.date)} (${away(item.daysAway)})`}`)
+    : ["No open payments on record."]));
   if (digest.pendingQueue) {
     const label = digest.pendingQueue === 1 ? "1 item waiting for your review" : `${digest.pendingQueue} items waiting for your review`;
     blocks.push(section("Queue", [`${label}<br><a href="${APP_URL}/home" style="color:#7F77DD;text-decoration:none;">Open DIRA</a>`]));
   }
   if (digest.dormantVisions.length) {
-    blocks.push(section("Visions", digest.dormantVisions.map((vision) => `“${escapeHtml(vision.title)}” hasn't been touched in ${vision.daysSinceTouch} days`)));
+    blocks.push(section("Visions", digest.dormantVisions.map((vision) => `Nothing new on “${escapeHtml(vision.title)}” for ${escapeHtml(vision.quietFor)}. Anything to add?`)));
   }
   if (digest.yesterday.length) {
     blocks.push(section("Yesterday", digest.yesterday.map((item) => escapeHtml(item.title))));
@@ -452,6 +546,14 @@ function section(label, lines) {
     <div style="font-size:11px;letter-spacing:0.14em;text-transform:uppercase;color:#7F77DD;">${escapeHtml(label)}</div>
     ${items}
   </div>`;
+}
+
+function comingUpLine(item) {
+  const when = item.monthOnly
+    ? `${escapeHtml(item.date)} (no day recorded)`
+    : `${escapeHtml(item.date)}, ${item.daysAway === 0 ? "today" : item.daysAway === 1 ? "tomorrow" : `${item.daysAway} days left`}`;
+  const gaps = item.notRecorded?.length ? `<br><span style="color:#6B6963;font-size:13px;">Not recorded yet: ${escapeHtml(item.notRecorded.join(", "))}</span>` : "";
+  return `${escapeHtml(item.title)}: ${when}${gaps}`;
 }
 
 function birthdayLine(item) {
